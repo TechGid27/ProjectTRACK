@@ -51,43 +51,80 @@
 }
 
 /* Double class so this beats leaflet.css's `.leaflet-container{background:#ddd}`,
-   which is bundled after index.css and would otherwise win. */
+   which is bundled after index.css and would otherwise win. The background
+   doubles as the "water" fill — there is no basemap tile layer. */
 .leaflet-container.leaflet-container {
-  background: #0a0c10;
+  background: #2f4f4e;
   font-family: inherit;
   outline: none;
 }
 
-.island-mask {
-  fill: rgba(7, 9, 13, 0.52);
-  stroke: none;
+.land {
+  fill: #8cae90;
+  stroke: #2c3d36;
+  stroke-width: 1;
+  transition: fill 0.15s ease;
 }
 
-.island-area {
-  fill: color-mix(in srgb, var(--accent-a9) 18%, transparent);
-  stroke: color-mix(in srgb, var(--accent-a9) 85%, white);
-  stroke-width: 1.75;
-  filter: drop-shadow(
-    0 0 3px color-mix(in srgb, var(--accent-a9) 45%, transparent)
-  );
-  transition:
-    fill 0.18s ease,
-    stroke-width 0.18s ease;
+.land:hover {
+  fill: #9db99c;
 }
 
-.island-area:hover {
-  fill: color-mix(in srgb, var(--accent-a9) 34%, transparent);
-  stroke-width: 2.5;
+.pin {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #5d1b22;
+  border: 1.5px solid rgba(255, 244, 232, 0.85);
+  animation: pin-glow 2.8s ease-in-out infinite;
 }
-.leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.72) !important;
-  border-radius: 8px 0 0 0;
+
+.pin--amber {
+  background: #a85b1c;
+}
+
+@keyframes pin-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px rgba(255, 236, 214, 0.16),
+      0 0 10px 2px rgba(255, 228, 200, 0.4);
+  }
+  50% {
+    box-shadow:
+      0 0 0 7px rgba(255, 236, 214, 0.06),
+      0 0 14px 3px rgba(255, 228, 200, 0.55);
+  }
+}
+.muni-label {
+  display: none;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #22332b;
   font-size: 10px;
-  padding: 2px 6px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.55);
 }
 
-.leaflet-control-attribution a {
-  color: var(--accent-a11);
+.show-labels .muni-label {
+  display: block;
+}
+
+.leaflet-tooltip.pin-label {
+  background: rgba(12, 16, 20, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: none;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 8px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.leaflet-tooltip.pin-label::before {
+  border-top-color: rgba(12, 16, 20, 0.85);
 }

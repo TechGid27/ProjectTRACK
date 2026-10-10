@@ -1,7 +1,8 @@
 # Reyal Or Pake — Cebu Map
 
-An interactive satellite map of Cebu, Philippines. The province boundary is
-highlighted over a dark scrim so the island reads clearly against the imagery.
+An interactive map of Cebu, Philippines. No basemap tiles: the province is
+drawn as styled vector polygons over a flat "water" background, with glowing
+pins for project sites.
 
 ## Stack
 
@@ -22,16 +23,17 @@ npm run preview  # preview the build
 
 ## Map data
 
-`src/assets/cebuMask.json` is a GeoJSON `Polygon`:
+`src/assets/cebuMunicipalities.json` is a GeoJSON `FeatureCollection` of the
+53 LGUs of Cebu Province (44 municipalities + 9 component/HUC cities), clipped
+to the Cebu islands (mainland, Bantayan, Camotes, Mactan, Olango).
 
-- `coordinates[0]` — exterior ring (the scrim extent)
-- `coordinates[1..]` — one hole per Cebu island; the same holes are reused as
-  the highlight layer in `src/features/map/CebuMap.jsx`, so the scrim and the
-  outline can never drift apart
+- Source: [geoBoundaries](https://www.geoboundaries.org) `PHL/ADM3` (gbOpen,
+  simplified), from NAMRIA/PSA data — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- Original `cebuMask.json` (GADM 4.1 + OSM coastline scrim) was dropped when
+  the map moved off satellite tiles; it is still in git history
 
-Boundaries come from [GADM 4.1](https://gadm.org) and the coastline is refined
-with [OpenStreetMap](https://www.openstreetmap.org/copyright) `natural=coastline`
-data (including the SRP and Talisay reclamation edges).
+Pins live in `src/data/pins.js` — `{ id, name, position: [lat, lng], tone }`
+where `tone` is `default` (maroon) or `amber`.
 
 ## License
 

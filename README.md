@@ -125,6 +125,7 @@ Comprehensive architectural, technical, and operational documentation is maintai
 | [**04. Comprehensive Setup Guide**](docs/04-setup-guide.md) | Production provisioning, Neo4j Aura cloud configuration, and deployment topology. |
 | [**05. API Reference**](docs/05-api-reference.md) | Endpoint specifications, JSON request/response contracts, and SSE streaming schemas. |
 | [**06. Development Roadmap**](docs/06-roadmap.md) | Phased milestones, barangay polygon rendering, and community initiative integration. |
+| [**07. Security Architecture**](docs/07-security.md) | Threat modeling, 5-layer domain guardrails, digital forensics, and privacy protection. |
 
 ---
 
@@ -135,6 +136,7 @@ ProjectTrack/
 ├── README.md                            <-- Landing Page & Pitch (Current Document)
 ├── CONTRIBUTING.md                      <-- Contribution workflow and coding standards
 ├── CODE_OF_CONDUCT.md                   <-- Contributor Covenant community standards
+├── SECURITY.md                          <-- Vulnerability reporting and threat policy
 ├── LICENSE                              <-- MIT Open-Source License
 ├── .github/                             <-- GitHub issue and pull request templates
 ├── docs/                                <-- Central technical documentation
@@ -143,7 +145,8 @@ ProjectTrack/
 │   ├── 03-tech-stack.md
 │   ├── 04-setup-guide.md
 │   ├── 05-api-reference.md
-│   └── 06-roadmap.md
+│   ├── 06-roadmap.md
+│   └── 07-security.md
 ├── Website/                             <-- React 19 + Leaflet geospatial web platform
 ├── Mobile/                              <-- React Native Expo field auditor app
 └── backend/                             <-- FastAPI, Neo4j GraphRAG, and scraping pipeline
@@ -157,6 +160,7 @@ ProjectTrack is maintained under an open-source model to advance civic technolog
 
 * **Contributing**: Review [CONTRIBUTING.md](CONTRIBUTING.md) for pull request workflows and development guidelines.
 * **Code of Conduct**: Adherence to the [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) is expected across all project channels.
+* **Security & Responsible Disclosure**: Read [SECURITY.md](SECURITY.md) before reporting vulnerabilities.
 * **Issue Tracking**: Report technical defects or submit architectural proposals through our [GitHub Issue Templates](.github/ISSUE_TEMPLATE/).
 
 ---

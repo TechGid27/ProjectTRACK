@@ -15,11 +15,13 @@ from .guardrail_service import (
     CEBU_MUNICIPALITIES,
 )
 from .pipeline_service import pipeline_manager
+from .graph_synthesizer import synthesize_graph_response
 
 __all__ = [
     "neo4j_service",
     "format_currency",
     "llm_service",
+    "synthesize_graph_response",
     "check_guardrail",
     "clean_location",
     "clean_description",

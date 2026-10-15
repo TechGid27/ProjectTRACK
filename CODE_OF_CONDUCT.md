@@ -24,6 +24,13 @@ Examples of unacceptable behavior include:
 * Publishing others' private information, such as a physical or email address, without their explicit permission
 * Other conduct which could reasonably be considered inappropriate in a professional setting
 
+## Civic Tech and Non-Partisan Discourse
+
+ProjectTrack is dedicated to objective public infrastructure transparency and civic accountability:
+
+* **Evidence-Based Discussions**: Community discussions regarding DPWH projects, contractors, budgets, and public expenditures must be grounded in verified public data or verifiable on-site documentation.
+* **Civil and Non-Partisan Conduct**: We encourage rigorous civic oversight while prohibiting defamatory attacks, partisan harassment, or targeted hostility directed at individual civil servants, contractors, or community monitors.
+
 ## Enforcement Responsibilities
 
 Community leaders are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
@@ -36,9 +43,12 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project leaders responsible for enforcement. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported directly to the project leadership at:
 
-All community leaders are obligated to respect the privacy and security of the reporter of any incident.
+* **Primary Contact**: charliemangyao@gmail.com
+* **Project Maintainer**: Gideon P. Ayao and the ProjectTrack Core Team
+
+All complaints will be reviewed and investigated promptly, impartially, and with strict respect for the privacy and security of the reporter.
 
 ## Enforcement Guidelines
 

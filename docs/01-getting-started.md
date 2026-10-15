@@ -50,7 +50,8 @@ ProjectTrack/
 │   ├── 03-tech-stack.md           # Architectural justifications
 │   ├── 04-setup-guide.md          # Comprehensive setup and deployment
 │   ├── 05-api-reference.md        # REST and SSE endpoint specifications
-│   └── 06-roadmap.md             # Development priorities and milestones
+│   ├── 06-roadmap.md              # Development priorities and milestones
+│   └── 07-security.md             # Security architecture and threat defense
 ├── Website/                       # React 19 + Leaflet GIS Web Application
 ├── Mobile/                        # React Native Expo Geofenced Mobile Client
 └── backend/                       # FastAPI, Neo4j GraphRAG, and Scraping Pipeline
@@ -270,3 +271,4 @@ Continue exploring the technical architecture and implementation details:
 * [**04. Comprehensive Setup Guide**](04-setup-guide.md) — Production database provisioning, environment variables, and Docker deployment.
 * [**05. API Reference**](05-api-reference.md) — Comprehensive REST specifications and schema references.
 * [**06. Development Roadmap**](06-roadmap.md) — Implementation schedule and technical backlog.
+* [**07. Security Architecture**](07-security.md) — Defense-in-depth model, threat modeling, digital forensics, and citizen privacy.

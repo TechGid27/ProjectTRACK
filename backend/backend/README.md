@@ -4,19 +4,19 @@ High-performance, production-ready Python **FastAPI** backend for the DPWH Cebu 
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
-* **⚡ Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
-* **🛡️ 5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
-* **⚡ Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
-* **🌊 Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
-* **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
-* **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
-* **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and Ollama LLM availability with graceful degradation.
+* **Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
+* **5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
+* **Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
+* **Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
+* **Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
+* **Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
+* **Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation.
 
 ---
 
-## 📁 Backend Architecture
+## Backend Architecture
 
 ```text
 backend/
@@ -45,7 +45,7 @@ backend/
 │   ├── __init__.py
 │   ├── neo4j_service.py     # Connection pool & Cypher queries
 │   ├── guardrail_service.py # Pre-retrieval classifier & stream rail
-│   ├── llm_service.py       # Ollama & OpenAI streaming / token budgeting
+│   ├── llm_service.py       # LLM streaming & token budgeting
 │   └── pipeline_service.py  # Background job execution & state tracker
 └── tests/                   # Test suite (11 unit & integration tests)
     ├── __init__.py
@@ -54,7 +54,7 @@ backend/
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### 1. Install Dependencies
 
@@ -66,7 +66,7 @@ pip install -r backend/requirements.txt
 
 ### 2. Configure Environment Variables
 
-The backend automatically reads from your `.env` file in the project root:
+The backend automatically reads from your `.env` file in the project root or backend directory:
 
 ```env
 # Neo4j Database
@@ -74,11 +74,10 @@ NEO4J_URI="neo4j+s://your-instance.databases.neo4j.io"
 NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="your-password"
 
-# Xiaomi MiMo-V2-Flash Configuration (Free API / Unlimited Tokens)
-# Hugging Face: https://huggingface.co/XiaomiMiMo/MiMo-V2-Flash
+# Xiaomi MiMo-V2-Flash Configuration
 LLM_BASE_URL="https://router.huggingface.co/v1"
 LLM_MODEL="XiaomiMiMo/MiMo-V2-Flash"
-LLM_API_KEY="hf_your_free_token"  # Get free token from https://huggingface.co/settings/tokens
+LLM_API_KEY="hf_your_free_token"
 LLM_MAX_TOKENS=2048
 
 # Supabase & Apify (Optional: only needed for scraping and syncing)
@@ -96,7 +95,7 @@ Start the development server with auto-reload:
 python backend/run.py
 
 # Option B: Using Uvicorn directly
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn backend.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 Once running:
@@ -106,7 +105,7 @@ Once running:
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
 Run the test suite using Python's built-in `unittest` runner:
 
@@ -115,29 +114,29 @@ python backend/tests/test_api.py
 ```
 
 All 11 unit and integration tests validate:
-- Pre-retrieval guardrails (blocking off-topic prompts)
-- On-topic infrastructure questions
-- Exact project ID lookups
-- Analytics and dataset aggregations
-- Server-Sent Events (SSE) streaming responses
-- Background job tracking
-- Health diagnostics
+* Pre-retrieval guardrails (blocking off-topic prompts)
+* On-topic infrastructure questions
+* Exact project ID lookups
+* Analytics and dataset aggregations
+* Server-Sent Events (SSE) streaming responses
+* Background job tracking
+* Health diagnostics
 
 ---
 
-## 📡 API Reference & Endpoints
+## API Reference and Endpoints
 
-### 🩺 Health & Diagnostics
+### Health and Diagnostics
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/health` | Comprehensive system health across Neo4j and Ollama |
+| `GET` | `/api/health` | Comprehensive system health across Neo4j and LLM |
 | `GET` | `/api/health/neo4j` | Neo4j Aura ping and latency (ms) |
-| `GET` | `/api/health/llm` | Ollama model status and latency |
+| `GET` | `/api/health/llm` | LLM model status and latency |
 
 ---
 
-### 🏗️ Projects
+### Projects
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -156,14 +155,14 @@ Response:
   "location": "Bogo",
   "total_count": 87,
   "total_budget": 1425000000.0,
-  "total_budget_formatted": "₱ 1.43B",
+  "total_budget_formatted": "PHP 1.43B",
   "showing_count": 5,
   "projects": [
     {
       "entity": "24HD0012",
       "labels": ["Project"],
       "description": "Construction of Flood Mitigation Structure along Bogo River",
-      "budget": "₱ 49,000,000.00",
+      "budget": "PHP 49,000,000.00",
       "budget_num": 49000000.0,
       "status": "Ongoing"
     }
@@ -173,7 +172,7 @@ Response:
 
 ---
 
-### 📊 Analytics
+### Analytics
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -194,14 +193,14 @@ Response:
     "code": "7494",
     "project_count": 142,
     "total_budget": 5890000000.0,
-    "total_budget_formatted": "₱ 5.89B"
+    "total_budget_formatted": "PHP 5.89B"
   }
 ]
 ```
 
 ---
 
-### 💬 Chat & GraphRAG QA
+### Chat and GraphRAG QA
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -217,7 +216,7 @@ Response:
 }
 ```
 
-* `mode="ai"`: Graph retrieval + local Ollama / Cloud LLM summary.
+* `mode="ai"`: Graph retrieval + LLM summary.
 * `mode="instant"`: Instant Cypher lookup (`<10ms`, zero AI latency).
 
 #### Off-Domain Guardrail Example:
@@ -247,45 +246,7 @@ Response:
 
 ---
 
-### 🌊 Frontend SSE Streaming Example (JavaScript / TypeScript)
-
-You can consume `/api/chat/stream` in modern frontends (React / Next.js / Vue):
-
-```typescript
-async function askStream(question: string) {
-  const response = await fetch("http://localhost:8000/api/chat/stream", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: question, mode: "ai" }),
-  });
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value);
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (line.startsWith("event: token")) {
-        // Next line contains: data: {"token": "..."}
-      } else if (line.startsWith("data: ")) {
-        const data = JSON.parse(line.slice(6));
-        if (data.token) {
-          process.stdout.write(data.token);
-        }
-      }
-    }
-  }
-}
-```
-
----
-
-### ⚙️ Pipeline Administration
+### Pipeline Administration
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -296,6 +257,6 @@ async function askStream(question: string) {
 
 ---
 
-## 🛡️ License
+## License
 
 MIT License. Designed for DPWH civil engineering data transparency and infrastructure analytics.

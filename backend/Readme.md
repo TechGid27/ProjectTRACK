@@ -80,7 +80,7 @@ Before installing, ensure you have:
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/ThirdTempest/DPWHscrape.git
+git clone https://github.com/ThirdTempest/ProjectTRACK.git
 cd ProjectTRACK/backend
 ```
 

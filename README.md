@@ -11,14 +11,19 @@ Built with **Neo4j Aura (Knowledge Graph)**, **FastAPI (REST & SSE Streaming Bac
 ```text
 ProjectTRACK/
 ├── backend/                    # ⚡ Python FastAPI & GraphRAG Pipeline
-│   ├── backend/                # FastAPI application, services, and REST/SSE endpoints
+│   ├── backend/                # FastAPI application, services, models, and tests
 │   ├── pipeline/               # Knowledge graph sync, scraping & Cypher query engine
 │   ├── main.py                 # Master CLI runner, interactive console, and local AI setup
+│   ├── requirements.txt        # Python backend dependencies
 │   └── Readme.md               # Backend documentation & installation guide
 ├── Website/                    # 🌐 React 19 + Vite + Leaflet Web Application
-│   ├── src/                    # Interactive Cebu map, glowing project pins, filter panels
-│   └── package.json            # React + Vite dependencies
-└── mobile/                     # 📱 Mobile application
+│   ├── src/                    # Interactive Cebu vector map, glowing pins, statistics
+│   ├── package.json            # React 19 + Vite dependencies
+│   └── README.md               # Frontend documentation & development guide
+├── mobile/                     # 📱 Mobile application
+│   └── Readme.md               # Mobile client architecture & roadmap
+├── .gitignore                  # Monorepo git ignore rules (protecting .env & build caches)
+└── README.md                   # Monorepo master documentation
 ```
 
 ---
@@ -33,44 +38,110 @@ ProjectTRACK/
   * **Tier 2**: Deterministic Graph Synthesizer (<5ms) directly from Neo4j when rate limits (HTTP 429) or network disruptions occur.
 * **📦 1-Command Permission-Gated Local AI**: Run `python main.py --setup-local-ai` in `backend/` to configure local Ollama with explicit `[y/N]` confirmation.
 * **📍 Geospatial Intelligence**: Full batch geocoding (`python main.py --geocode`) attaching verified WGS84 coordinates to Neo4j project and location nodes.
-* **🗺️ Interactive Map GIS**: Real-time geospatial mapping of infrastructure works in Cebu with status color legends and project details.
+* **🗺️ Interactive Web GIS**: Real-time vector map of Cebu with zero tile server dependencies, rendering 53 LGU boundaries and glowing project pins.
 
 ---
 
-## 🚀 Getting Started
+## 📁 Repository Modules
 
-### Backend & AI Pipeline
-See the detailed setup and running guide in [`backend/Readme.md`](file:///C:/Users/User/VSCode_Programming/track/ProjectTRACK/backend/Readme.md).
+| Module | Stack | Documentation | Description |
+| :--- | :--- | :--- | :--- |
+| **`backend/`** | Python 3.10+, FastAPI, Neo4j Aura, Groq | [Backend README](backend/Readme.md) | GraphRAG pipeline, REST & SSE API, Guardrails, CLI runner |
+| **`Website/`** | React 19, Vite, Leaflet, Tailwind CSS 4 | [Website README](Website/README.md) | Vector-based interactive Cebu GIS map & project visualizer |
+| **`mobile/`** | Mobile Companion (Upcoming) | [Mobile README](mobile/Readme.md) | Field-audit, citizen photo verification & offline GPS cache |
+
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Backend & Knowledge Graph Setup
+
+Full setup instructions in [backend/Readme.md](backend/Readme.md).
 
 ```powershell
+# Navigate to backend
 cd backend
+
+# Create & activate virtual environment
 python -m venv venv
-.\venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1    # On Linux/macOS: source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Configure environment variables
+Copy-Item .env.example .env    # Fill in NEO4J_URI, NEO4J_PASSWORD, GROQ_API_KEY
+
+# Launch interactive CLI console
 python main.py
+
+# Or launch FastAPI REST & SSE server
+python main.py --api
 ```
 
-### Web GIS Frontend
-See the setup guide in [`Website/`](file:///C:/Users/User/VSCode_Programming/track/ProjectTRACK/Website).
+### 2. Web GIS Frontend Setup
+
+Full setup instructions in [Website/README.md](Website/README.md).
 
 ```powershell
+# Navigate to Website
 cd Website
+
+# Install Node dependencies
 npm install
+
+# Start local Vite development server
 npm run dev
 ```
 
+The web client runs locally at `http://localhost:5173`.
+
 ---
 
-## 🧪 Testing
+## 🔌 Backend API Reference
 
-Run the automated backend test suite (18 unit & integration tests):
+When the FastAPI server is running (`python main.py --api`), the following endpoints are available at `http://localhost:8000`:
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Health check for Neo4j Aura and LLM engines |
+| `GET` | `/api/projects` | Paginated project search with keyword, LGU, and contractor filters |
+| `GET` | `/api/projects/{id}` | Detailed project metadata, budget, contractor, and coordinates |
+| `GET` | `/api/analytics/top-contractors` | Contractor leaderboard by awarded budget |
+| `GET` | `/api/analytics/summary` | Global counts (projects, contractors, total budget) |
+| `POST` | `/api/chat` | Domain-guarded grounded AI question answering |
+| `GET` | `/api/chat/stream` | Server-Sent Events (SSE) streaming answers (~500+ tok/s) |
+
+Interactive Swagger documentation is available at `http://localhost:8000/docs`.
+
+---
+
+## 🧪 Testing & Validation
+
+### Automated Backend Test Suite
+Run the 18 unit and integration tests covering API routes, guardrails, and multi-tier fallback resilience:
 
 ```powershell
 cd backend
 python -m unittest discover -s backend/tests -p "test_*.py"
 ```
 
+### Frontend Code Quality
+Validate React & Tailwind code formatting:
+
+```powershell
+cd Website
+npm run lint
+```
+
+---
+
+## 🛡️ Security & Privacy
+
+* Sensitive API keys, database credentials, and service tokens are kept strictly in `.env` files and excluded via `.gitignore`.
+* Never commit `.env` or production credentials to any repository branch. A template is provided in `backend/.env.example`.
+
 ---
 
 ## 📄 License
-MIT License. Open-source for civic infrastructure transparency and public research.
+MIT License. Open-source for civic transparency and public infrastructure research.

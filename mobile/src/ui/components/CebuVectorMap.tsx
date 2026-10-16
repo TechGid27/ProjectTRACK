@@ -2,11 +2,10 @@ import React, { useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
-  Pressable,
+  TouchableOpacity,
   StyleSheet,
   useWindowDimensions,
   PanResponder,
-  Platform,
 } from 'react-native';
 import Svg, { Path, G, Circle } from 'react-native-svg';
 import { Pin, MunicipalityCollection } from '../../core/types';
@@ -18,15 +17,6 @@ import {
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 const cebuData = cebuDataRaw as unknown as MunicipalityCollection;
-const isWeb = Platform.OS === 'web';
-
-function getSvgClickProps(handler?: () => void) {
-  if (!handler) return {};
-  if (isWeb) {
-    return { onClick: handler } as Record<string, unknown>;
-  }
-  return { onPress: handler };
-}
 
 interface CebuVectorMapProps {
   selectedMunicipality?: string | null;
@@ -140,16 +130,18 @@ export default function CebuVectorMap({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           return (
-            Math.abs(gestureState.dx) > 6 ||
-            Math.abs(gestureState.dy) > 6 ||
+            Math.abs(gestureState.dx) > 8 ||
+            Math.abs(gestureState.dy) > 8 ||
             gestureState.numberActiveTouches === 2
           );
         },
+        onMoveShouldSetPanResponderCapture: () => false,
         onPanResponderGrant: (evt) => {
           startOffset.current = { ...offsetRef.current };
-          if (evt.nativeEvent.touches.length === 2) {
+          if (evt.nativeEvent.touches && evt.nativeEvent.touches.length === 2) {
             const [t1, t2] = evt.nativeEvent.touches;
             initialDistance.current = Math.hypot(
               t1.pageX - t2.pageX,
@@ -161,7 +153,11 @@ export default function CebuVectorMap({
           }
         },
         onPanResponderMove: (evt, gestureState) => {
-          if (evt.nativeEvent.touches.length === 2 && initialDistance.current) {
+          if (
+            evt.nativeEvent.touches &&
+            evt.nativeEvent.touches.length === 2 &&
+            initialDistance.current
+          ) {
             const [t1, t2] = evt.nativeEvent.touches;
             const currentDistance = Math.hypot(
               t1.pageX - t2.pageX,
@@ -174,7 +170,7 @@ export default function CebuVectorMap({
             );
             scaleRef.current = nextScale;
             setScale(nextScale);
-          } else if (evt.nativeEvent.touches.length <= 1) {
+          } else if (!evt.nativeEvent.touches || evt.nativeEvent.touches.length <= 1) {
             const maxPan = width * scaleRef.current * 0.8;
             const nextX = Math.min(maxPan, Math.max(-maxPan, startOffset.current.x + gestureState.dx));
             const nextY = Math.min(maxPan, Math.max(-maxPan, startOffset.current.y + gestureState.dy));
@@ -242,7 +238,7 @@ export default function CebuVectorMap({
                   fill={fillColor}
                   stroke={strokeColor}
                   strokeWidth={strokeWidth}
-                  {...getSvgClickProps(() => onSelectMunicipality?.(item.normalizedName))}
+                  onPress={() => onSelectMunicipality?.(item.normalizedName)}
                 />
               );
             })}
@@ -262,7 +258,10 @@ export default function CebuVectorMap({
                 <G
                   key={pin.id}
                   testID={`map-pin-${pin.id}`}
-                  {...getSvgClickProps(() => onSelectPin?.(pin))}
+                  onPress={() => {
+                    const { x: _x, y: _y, ...originalPin } = pin;
+                    onSelectPin?.(originalPin);
+                  }}
                 >
                   {/* Outer Glow Circle */}
                   <Circle
@@ -289,34 +288,33 @@ export default function CebuVectorMap({
 
       {/* Floating Zoom & Pan Controls */}
       <View style={styles.controlsContainer}>
-        <Pressable
+        <TouchableOpacity
           testID="zoom-in-btn"
-          style={({ pressed }) => [styles.controlBtn, pressed && styles.controlBtnPressed]}
+          style={styles.controlBtn}
           onPress={handleZoomIn}
+          activeOpacity={0.7}
           accessibilityLabel="Zoom In"
         >
           <Text style={styles.controlBtnText}>+</Text>
-        </Pressable>
-        <Pressable
+        </TouchableOpacity>
+        <TouchableOpacity
           testID="zoom-out-btn"
-          style={({ pressed }) => [styles.controlBtn, pressed && styles.controlBtnPressed]}
+          style={styles.controlBtn}
           onPress={handleZoomOut}
+          activeOpacity={0.7}
           accessibilityLabel="Zoom Out"
         >
           <Text style={styles.controlBtnText}>−</Text>
-        </Pressable>
-        <Pressable
+        </TouchableOpacity>
+        <TouchableOpacity
           testID="zoom-reset-btn"
-          style={({ pressed }) => [
-            styles.controlBtn,
-            styles.resetBtn,
-            pressed && styles.controlBtnPressed,
-          ]}
+          style={[styles.controlBtn, styles.resetBtn]}
           onPress={handleReset}
+          activeOpacity={0.7}
           accessibilityLabel="Reset View"
         >
           <Text style={styles.resetBtnText}>↺</Text>
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {/* Zoom Level Indicator */}
@@ -359,9 +357,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  controlBtnPressed: {
-    opacity: 0.7,
   },
   controlBtnText: {
     fontSize: 20,

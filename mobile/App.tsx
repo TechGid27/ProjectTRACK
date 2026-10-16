@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  Pressable,
+  TouchableOpacity,
   StyleSheet,
   StatusBar,
   Platform,
@@ -72,12 +72,13 @@ export class ErrorBoundary extends React.Component<
           <Text style={errorStyles.message}>
             {this.state.error?.message || 'An unexpected rendering error occurred.'}
           </Text>
-          <Pressable
-            style={({ pressed }) => [errorStyles.button, pressed && { opacity: 0.8 }]}
+          <TouchableOpacity
+            style={errorStyles.button}
             onPress={() => this.setState({ hasError: false, error: null })}
+            activeOpacity={0.8}
           >
             <Text style={errorStyles.buttonText}>Try Again</Text>
-          </Pressable>
+          </TouchableOpacity>
         </View>
       );
     }

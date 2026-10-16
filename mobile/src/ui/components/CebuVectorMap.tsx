@@ -2,10 +2,11 @@ import React, { useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   useWindowDimensions,
   PanResponder,
+  Platform,
 } from 'react-native';
 import Svg, { Path, G, Circle } from 'react-native-svg';
 import { Pin, MunicipalityCollection } from '../../core/types';
@@ -17,6 +18,15 @@ import {
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 const cebuData = cebuDataRaw as unknown as MunicipalityCollection;
+const isWeb = Platform.OS === 'web';
+
+function getSvgClickProps(handler?: () => void) {
+  if (!handler) return {};
+  if (isWeb) {
+    return { onClick: handler } as Record<string, unknown>;
+  }
+  return { onPress: handler };
+}
 
 interface CebuVectorMapProps {
   selectedMunicipality?: string | null;
@@ -232,7 +242,7 @@ export default function CebuVectorMap({
                   fill={fillColor}
                   stroke={strokeColor}
                   strokeWidth={strokeWidth}
-                  onPress={() => onSelectMunicipality?.(item.normalizedName)}
+                  {...getSvgClickProps(() => onSelectMunicipality?.(item.normalizedName))}
                 />
               );
             })}
@@ -252,7 +262,7 @@ export default function CebuVectorMap({
                 <G
                   key={pin.id}
                   testID={`map-pin-${pin.id}`}
-                  onPress={() => onSelectPin?.(pin)}
+                  {...getSvgClickProps(() => onSelectPin?.(pin))}
                 >
                   {/* Outer Glow Circle */}
                   <Circle
@@ -279,33 +289,34 @@ export default function CebuVectorMap({
 
       {/* Floating Zoom & Pan Controls */}
       <View style={styles.controlsContainer}>
-        <TouchableOpacity
+        <Pressable
           testID="zoom-in-btn"
-          style={styles.controlBtn}
+          style={({ pressed }) => [styles.controlBtn, pressed && styles.controlBtnPressed]}
           onPress={handleZoomIn}
-          activeOpacity={0.7}
           accessibilityLabel="Zoom In"
         >
           <Text style={styles.controlBtnText}>+</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </Pressable>
+        <Pressable
           testID="zoom-out-btn"
-          style={styles.controlBtn}
+          style={({ pressed }) => [styles.controlBtn, pressed && styles.controlBtnPressed]}
           onPress={handleZoomOut}
-          activeOpacity={0.7}
           accessibilityLabel="Zoom Out"
         >
           <Text style={styles.controlBtnText}>−</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </Pressable>
+        <Pressable
           testID="zoom-reset-btn"
-          style={[styles.controlBtn, styles.resetBtn]}
+          style={({ pressed }) => [
+            styles.controlBtn,
+            styles.resetBtn,
+            pressed && styles.controlBtnPressed,
+          ]}
           onPress={handleReset}
-          activeOpacity={0.7}
           accessibilityLabel="Reset View"
         >
           <Text style={styles.resetBtnText}>↺</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
 
       {/* Zoom Level Indicator */}
@@ -348,6 +359,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  controlBtnPressed: {
+    opacity: 0.7,
   },
   controlBtnText: {
     fontSize: 20,

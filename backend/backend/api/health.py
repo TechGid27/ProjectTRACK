@@ -39,7 +39,7 @@ async def get_system_health():
             status="healthy" if llm_ok else "unreachable",
             reachable=llm_ok,
             latency_ms=llm_lat,
-            message=llm_err or f"Ollama model '{settings.LLM_MODEL}' online"
+            message=llm_err or f"LLM model '{settings.LLM_MODEL}' online"
         ),
         environment="development" if settings.DEBUG else "production"
     )

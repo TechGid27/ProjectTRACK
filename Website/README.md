@@ -28,6 +28,10 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 
 ### 1. Installation
 ```bash
+# Navigate to Website directory
+cd Website
+
+# Install dependencies
 npm install
 ```
 
@@ -56,6 +60,6 @@ npm run preview  # Locally preview production build
 
 ---
 
-## License
+## 📁 Project Structure
 
 This package is part of the ProjectTrack open-source monorepo, licensed under the MIT License.

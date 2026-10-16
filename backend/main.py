@@ -17,6 +17,7 @@ Usage:
   python main.py --summary                  # View total dataset statistics
   python main.py --api                      # Launch FastAPI backend server (http://localhost:8000)
   python main.py --geocode                  # Batch geocode all Neo4j location and project nodes
+  python main.py --setup-local-ai           # Configure offline local AI fallback (qwen2.5:0.5b)
 """
 
 import sys
@@ -136,6 +137,7 @@ def show_menu():
     print("  [8] 📊 View Dataset & Knowledge Graph Statistics")
     print("  [9] 🚀 Launch FastAPI Backend Server (REST & SSE Streaming)")
     print("  [10] 📍 Batch Geocode Neo4j Graph Locations (WGS84 Coordinates)")
+    print("  [11] 🤖 Setup Local AI Fallback (qwen2.5:0.5b ~398MB)")
     print("  [0] ❌ Exit")
     print("=" * 68)
 
@@ -268,6 +270,11 @@ def handle_menu_choice(choice: str) -> bool:
         close_driver()
         return True
 
+    elif choice in ("11", "setup-local-ai", "setup-ai", "setup"):
+        from backend.setup_local_ai import setup_local_ai
+        setup_local_ai(auto_confirm=False)
+        return True
+
     elif choice in ("0", "exit", "quit", "q"):
         print("👋 Goodbye!")
         return False
@@ -332,6 +339,12 @@ def main():
             print("\n📍 Running Neo4j knowledge graph batch geocoding...")
             geocode_neo4j_graph(driver)
             close_driver()
+            return
+
+        if first_arg in ("--setup-local-ai", "setup-local-ai", "--setup-ai"):
+            from backend.setup_local_ai import setup_local_ai
+            auto = "--yes" in sys.argv or "-y" in sys.argv
+            setup_local_ai(auto_confirm=auto)
             return
 
         # Database queries below require Neo4j credentials

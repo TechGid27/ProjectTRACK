@@ -86,4 +86,31 @@ describe('CebuVectorMap Component', () => {
     const bogoPath = getByTestId('muni-path-City of Bogo');
     expect(bogoPath.props.fill).toBe('#1f3d3c'); // Active teal fill
   });
+
+  test('tapping zoom in button increases zoom and displays zoom level badge', () => {
+    const { getByTestId, queryByTestId } = render(
+      <CebuVectorMap
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    // Initial scale is 1.0x so badge is not visible
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+
+    // Tap zoom in
+    const zoomInBtn = getByTestId('zoom-in-btn');
+    fireEvent.press(zoomInBtn);
+
+    // Badge should now appear showing scale
+    const badge = getByTestId('zoom-level-badge');
+    expect(badge).toBeTruthy();
+
+    // Tap reset
+    const resetBtn = getByTestId('zoom-reset-btn');
+    fireEvent.press(resetBtn);
+
+    // Badge should be hidden after reset back to 1.0x
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+  });
 });

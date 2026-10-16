@@ -3,6 +3,7 @@ export const site = {
 }
 
 export const navLinks = [
-  { label: 'Home', href: '#/' }, 
-  { label: 'Sign In', href: '#/signin' }
+  { label: 'Home', href: '/' },
+  { label: 'Contractor Rankings', href: '/contractors' },
+  { label: 'Sign In', href: '/signin' },
 ]

@@ -2,10 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { divIcon, DomEvent } from 'leaflet'
 import { GeoJSON, MapContainer, Marker, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import municipalities from '../../assets/cebuMunicipalities.json'
-import { pins } from '../../data/pins'
-import { lguQuery, mockProjectsByLocation, projectContractor } from '../../data/mockApi'
-import { fetchProject, fetchProjectsByLocation } from '../../services/api'
+import { lguQuery, projectContractor } from '../../data/projectHelpers'
+import {
+  fetchMapPoints,
+  fetchProject,
+  fetchProjectReports,
+  fetchProjectsByLocation,
+  submitAnomalyReport,
+} from '../../services/api'
+import { getSession } from '../../services/auth'
 import {
   BARANGAY_MIN_ZOOM,
   fetchOsmContextCached,
@@ -21,19 +26,6 @@ const LABEL_MIN_ZOOM = 11
 
 const CONTROL_BTN =
   'grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-black/65 text-white shadow-lg backdrop-blur-md transition hover:bg-black/85 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70'
-
-function pinIcon(tone, selected) {
-  return divIcon({
-    className: '',
-    html: `<span class="pin${tone === 'default' ? '' : ` pin--${tone}`}"${
-      selected
-        ? ' style="width:20px;height:20px;box-shadow:0 0 0 5px rgba(16,185,129,0.35);"'
-        : ''
-    }></span>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-  })
-}
 
 function labelIcon(name) {
   return divIcon({
@@ -62,9 +54,16 @@ function barangayPlaceIcon(name) {
   })
 }
 
-const PROJECT_PIN_ICON = divIcon({
+const projectPinIcon = divIcon({
   className: '',
   html: '<span class="project-pin"></span>',
+  iconSize: [13, 13],
+  iconAnchor: [6, 6],
+})
+
+const projectPinCompletedIcon = divIcon({
+  className: '',
+  html: '<span class="project-pin project-pin--completed"></span>',
   iconSize: [13, 13],
   iconAnchor: [6, 6],
 })
@@ -118,11 +117,11 @@ function MapCamera({ target }) {
   useEffect(() => {
     if (!target) return
     if (target.kind === 'site') {
-      map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 12), {
+      map.flyTo([target.lat, target.lng], Math.max(map.getZoom(), 13), {
         duration: 0.9,
       })
     } else {
-      map.panTo([target.lat, target.lng], { duration: 0.5 })
+      map.flyTo([target.lat, target.lng], 12, { duration: 0.8 })
     }
   }, [map, target])
 
@@ -135,12 +134,10 @@ function MapBackgroundClick({ onClear }) {
   useEffect(() => {
     const handler = (event) => {
       const target = event.originalEvent?.target
-      if (
-        target instanceof Element &&
-        target.closest('.leaflet-interactive')
-      ) {
-        return
-      }
+      if (!(target instanceof Element)) return
+      if (target.closest('.leaflet-interactive')) return
+      if (target.closest('.location-intel-panel')) return
+      if (target.closest('[role="dialog"]')) return
       onClear()
     }
     map.on('click', handler)
@@ -177,6 +174,20 @@ function roadClassName(highway) {
     return 'road road--minor'
   }
   return 'road road--tertiary'
+}
+
+let municipalitiesFilePromise = null
+
+function loadMunicipalities() {
+  if (!municipalitiesFilePromise) {
+    municipalitiesFilePromise = fetch('/data/cebuMunicipalities.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => {
+        municipalitiesFilePromise = null
+        return null
+      })
+  }
+  return municipalitiesFilePromise
 }
 
 let barangayFilePromise = null
@@ -308,24 +319,31 @@ const WATER_BODIES = [
   { name: 'Cebu Strait', side: 'East' },
 ]
 
-const QUICK_ACTIONS = [
-  {
-    label: 'Export',
-    icon: 'M7 3h6v4H7V3zm0 14h6v4H7v-4zM3 9h18v2H3V9zm0 4h18v2H3v-2z',
-  },
-  {
-    label: 'Schedule',
-    icon: 'M7 2v3M17 2v3M3 8h18M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z',
-  },
-  {
-    label: 'Share',
-    icon: 'M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13',
-  },
-]
-
 const STATUS_CLS = {
   Ongoing: 'bg-emerald-400/15 text-emerald-300',
   Completed: 'bg-sky-400/15 text-sky-300',
+}
+
+function parseStatus(status) {
+  const raw = String(status ?? '')
+  const match = raw.match(/(\d+(?:\.\d+)?)\s*%/)
+  const pct = match ? Number(match[1]) : null
+  const lower = raw.toLowerCase()
+  const base = lower.startsWith('completed')
+    ? 'Completed'
+    : lower.startsWith('on-going') || lower.startsWith('ongoing')
+      ? 'Ongoing'
+      : raw || 'Unknown'
+  return { base, pct }
+}
+
+function statusBadgeLabel(status) {
+  const { base, pct } = parseStatus(status)
+  return pct != null ? `${base} · ${pct}%` : base
+}
+
+function isCompletedStatus(status) {
+  return parseStatus(status).base === 'Completed'
 }
 
 function IntelChip({ children }) {
@@ -352,12 +370,18 @@ function LocationIntelPanel({
   onReset,
   onSelectSite,
   onSelectProject,
+  onOpenFullDetails,
+  locProjects,
+  locError,
+  mapPins,
+  municipalities,
 }) {
   const panelRef = useRef(null)
   const cardRefs = useRef({})
+  const [projPage, setProjPage] = useState(0)
   const names = useMemo(
-    () => municipalities.features.map((f) => f.properties.name),
-    [],
+    () => (municipalities?.features ?? []).map((f) => f.properties.name),
+    [municipalities],
   )
   const cityCount = useMemo(
     () => names.filter((n) => CITY_RE.test(n)).length,
@@ -367,15 +391,15 @@ function LocationIntelPanel({
   const nearbySites = useMemo(() => {
     if (!selected) return []
     const origin = [selected.lat, selected.lng]
-    return pins
+    return mapPins
       .map((pin) => ({ ...pin, km: haversineKm(origin, pin.position) }))
       .filter((pin) => pin.name !== selected.name)
       .sort((a, b) => a.km - b.km)
       .slice(0, 4)
-  }, [selected])
+  }, [selected, mapPins])
 
   const nearbyLgu = useMemo(() => {
-    if (!selected || selected.kind !== 'site') return null
+    if (!selected || selected.kind !== 'site' || !municipalities) return null
     let best = null
     for (const feature of municipalities.features) {
       if (feature.properties.name === selected.name) continue
@@ -384,36 +408,18 @@ function LocationIntelPanel({
       if (!best || km < best.km) best = { name: feature.properties.name, km }
     }
     return best
-  }, [selected])
+  }, [selected, municipalities])
 
   const sitesNearbyLgu = useMemo(() => {
-    if (!selected || selected.kind !== 'lgu') return null
+    if (!selected || selected.kind !== 'lgu' || !municipalities) return null
     const feature = municipalities.features.find(
       (f) => f.properties.name === selected.name,
     )
     if (!feature) return null
     const [lng, lat] = feature.properties.label
-    return pins.filter((pin) => haversineKm([lat, lng], pin.position) <= 30)
+    return mapPins.filter((pin) => haversineKm([lat, lng], pin.position) <= 30)
       .length
-  }, [selected])
-
-  const [locState, setLocState] = useState({ name: null, data: null })
-
-  const queryName = selected ? lguQuery(selected.name) : null
-
-  const locProjects =
-    queryName && locState.name === queryName ? locState.data : null
-
-  useEffect(() => {
-    let cancelled = false
-    if (!queryName) return undefined
-    fetchProjectsByLocation(queryName).then((data) => {
-      if (!cancelled) setLocState({ name: queryName, data })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [queryName])
+  }, [selected, mapPins, municipalities])
 
   useEffect(() => {
     const node = panelRef.current
@@ -427,13 +433,35 @@ function LocationIntelPanel({
     }
   }, [])
 
+  const panelProjects = locProjects?.projects ?? []
+  const panelPageCount = Math.max(
+    1,
+    Math.ceil(panelProjects.length / PANEL_PAGE_SIZE),
+  )
+  const [prevHighlight, setPrevHighlight] = useState(highlight)
+  if (highlight !== prevHighlight) {
+    setPrevHighlight(highlight)
+    const idx = highlight
+      ? panelProjects.findIndex((p) => p.entity === highlight)
+      : -1
+    if (idx >= 0) setProjPage(Math.floor(idx / PANEL_PAGE_SIZE))
+  }
+  const safeProjPage = Math.min(projPage, panelPageCount - 1)
+  const pageProjects = panelProjects.slice(
+    safeProjPage * PANEL_PAGE_SIZE,
+    (safeProjPage + 1) * PANEL_PAGE_SIZE,
+  )
+
   useEffect(() => {
     if (!highlight) return
-    cardRefs.current[highlight]?.scrollIntoView({
-      block: 'nearest',
-      behavior: 'smooth',
-    })
-  }, [highlight])
+    const timer = window.setTimeout(() => {
+      cardRefs.current[highlight]?.scrollIntoView({
+        block: 'nearest',
+        behavior: 'smooth',
+      })
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [highlight, safeProjPage])
 
   const kindLabel = selected
     ? selected.kind === 'site'
@@ -446,7 +474,7 @@ function LocationIntelPanel({
   return (
     <div
       ref={panelRef}
-      className="absolute top-3 left-3 z-[1000] flex max-h-[calc(100%-1.5rem)] w-[270px] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/85 shadow-2xl backdrop-blur-md sm:w-[290px]"
+      className="location-intel-panel absolute top-3 left-3 z-[1000] flex max-h-[calc(100%-1.5rem)] w-[270px] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/85 shadow-2xl backdrop-blur-md sm:w-[290px]"
     >
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <h3 className="text-sm font-bold text-white">Location Intel</h3>
@@ -482,7 +510,7 @@ function LocationIntelPanel({
           )}
         </div>
         <p className="mt-1.5 font-serif text-xl font-bold text-white">
-          {selected ? selected.name : 'Northern Cebu'}
+          {selected ? selected.name : 'Cebu Province'}
         </p>
         <p className="mt-0.5 text-[11px] text-white/50">
           {selected
@@ -504,7 +532,7 @@ function LocationIntelPanel({
             <>
               <IntelChip>{cityCount} Cities</IntelChip>
               <IntelChip>Coastal Arch.</IntelChip>
-              <IntelChip>{pins.length} Sites</IntelChip>
+              <IntelChip>{mapPins.length} Sites</IntelChip>
             </>
           )}
         </div>
@@ -529,11 +557,21 @@ function LocationIntelPanel({
         ) : (
           <div className="mt-2.5 grid grid-cols-2 gap-2">
             <MetricCard label="LGUs" value={names.length} />
-            <MetricCard label="Project sites" value={pins.length} />
+            <MetricCard label="Project sites" value={mapPins.length} />
             <MetricCard label="Cities" value={cityCount} />
             <MetricCard label="Municipalities" value={names.length - cityCount} />
           </div>
         )}
+        <div className="mt-2.5 flex items-center gap-3 text-[10px] text-white/50">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-teal-600" />
+            Ongoing
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-sky-600" />
+            Completed
+          </span>
+        </div>
       </div>
 
       {selected && nearbySites.length > 0 && (
@@ -552,7 +590,9 @@ function LocationIntelPanel({
                   <span className="flex items-center gap-2 text-white/80">
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        site.tone === 'amber' ? 'bg-amber-400' : 'bg-[#c4585f]'
+                        site.status === 'Completed'
+                          ? 'bg-sky-500'
+                          : 'bg-teal-600'
                       }`}
                     />
                     {site.name}
@@ -601,33 +641,224 @@ function LocationIntelPanel({
               </span>
             )}
           </div>
-          {!locProjects ? (
+          {locError ? (
+            <p className="mt-2 text-[11px] text-white/50">
+              Couldn&apos;t load projects — the backend may be offline.
+            </p>
+          ) : !locProjects ? (
             <p className="mt-2 text-[11px] text-white/50">Loading projects…</p>
           ) : locProjects.projects.length === 0 ? (
             <p className="mt-2 text-[11px] text-white/50">
-              No example project data for this location yet.
+              No projects found for this location yet.
             </p>
           ) : (
-            <ul className="mt-2 space-y-2">
-              {locProjects.projects.map((project) => {
+            <>
+              <ul className="mt-2 space-y-2">
+                {pageProjects.map((project) => {
+                  const contractor = projectContractor(project)
+                  return (
+                    <li
+                      key={project.entity}
+                      ref={(node) => {
+                        if (node) cardRefs.current[project.entity] = node
+                        else delete cardRefs.current[project.entity]
+                      }}
+                      className={`rounded-xl border transition ${
+                        highlight === project.entity
+                          ? 'border-emerald-400/70 bg-emerald-400/10'
+                          : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onSelectProject(project.entity)}
+                        className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold text-white/60">
+                            {project.entity}
+                          </span>
+                          <span
+                            className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold ${
+                              STATUS_CLS[parseStatus(project.status).base] ??
+                              'bg-white/10 text-white/60'
+                            }`}
+                          >
+                            {statusBadgeLabel(project.status)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-snug break-words text-white/80">
+                          {project.description}
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                          <span className="whitespace-nowrap font-bold text-emerald-300">
+                            {project.budget}
+                          </span>
+                          {contractor && (
+                            <span className="truncate text-white/50">
+                              {contractor}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              {panelProjects.length > PANEL_PAGE_SIZE && (
+                <div className="mt-2.5 flex items-center justify-between">
+                  <button
+                    type="button"
+                    disabled={safeProjPage === 0}
+                    onClick={() => setProjPage((p) => p - 1)}
+                    className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="text-[10px] text-white/40">
+                    {safeProjPage + 1} / {panelPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safeProjPage >= panelPageCount - 1}
+                    onClick={() => setProjPage((p) => p + 1)}
+                    className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="px-4 py-4">
+        <button
+          type="button"
+          disabled={!selected}
+          onClick={onOpenFullDetails}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1f3d3c] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Full Details
+          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M4 10h12M11 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const REPORTS_KEY = 'projecttrack-project-reports'
+
+const FULL_DETAILS_PAGE_SIZE = 8
+const PANEL_PAGE_SIZE = 5
+
+function FullDetailsModal({ locationName, onClose, onSelectProject }) {
+  const [projects, setProjects] = useState(null)
+  const [error, setError] = useState(false)
+  const [page, setPage] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!locationName) return undefined
+    fetchProjectsByLocation(locationName, 50)
+      .then((data) => {
+        if (!cancelled) setProjects(data)
+      })
+      .catch(() => {
+        if (!cancelled) setError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [locationName])
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const list = projects?.projects ?? []
+  const pageCount = Math.max(1, Math.ceil(list.length / FULL_DETAILS_PAGE_SIZE))
+  const pageItems = list.slice(
+    page * FULL_DETAILS_PAGE_SIZE,
+    (page + 1) * FULL_DETAILS_PAGE_SIZE,
+  )
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Full details for ${locationName}`}
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-4"
+    >
+      <button
+        type="button"
+        aria-label="Close full details"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+      />
+      <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0c1418]/95 shadow-2xl backdrop-blur-md">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-semibold tracking-widest text-white/40">
+              FULL DETAILS
+            </p>
+            <h2 className="mt-1 font-serif text-xl font-bold text-white">
+              {locationName}
+            </h2>
+            <p className="mt-0.5 text-[11px] text-white/50">
+              {projects
+                ? `${
+                    projects.total_count ?? list.length
+                  } project${
+                    (projects.total_count ?? list.length) === 1 ? '' : 's'
+                  }${
+                    projects.total_budget_formatted
+                      ? ` · ${projects.total_budget_formatted}`
+                      : ''
+                  }`
+                : 'Loading projects…'}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-white/50 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+          >
+            <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {error ? (
+            <p className="text-sm text-white/50">
+              Couldn&apos;t load projects — the backend may be offline.
+            </p>
+          ) : !projects ? (
+            <p className="text-sm text-white/50">Loading projects…</p>
+          ) : list.length === 0 ? (
+            <p className="text-sm text-white/50">
+              No projects found for this location yet.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {pageItems.map((project) => {
                 const contractor = projectContractor(project)
                 return (
-                  <li
-                    key={project.entity}
-                    ref={(node) => {
-                      if (node) cardRefs.current[project.entity] = node
-                      else delete cardRefs.current[project.entity]
-                    }}
-                    className={`rounded-xl border transition ${
-                      highlight === project.entity
-                        ? 'border-emerald-400/70 bg-emerald-400/10'
-                        : 'border-white/10 bg-white/5'
-                    }`}
-                  >
+                  <li key={project.entity}>
                     <button
                       type="button"
                       onClick={() => onSelectProject(project.entity)}
-                      className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                      className="w-full cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] font-bold text-white/60">
@@ -642,7 +873,7 @@ function LocationIntelPanel({
                           {project.status}
                         </span>
                       </div>
-                      <p className="mt-1 text-[11px] leading-snug text-white/80">
+                      <p className="mt-1 text-[11px] leading-snug break-words text-white/80">
                         {project.description}
                       </p>
                       <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
@@ -662,52 +893,340 @@ function LocationIntelPanel({
             </ul>
           )}
         </div>
-      )}
 
-      <div className="px-4 py-4">
-        <p className="text-[10px] font-semibold tracking-widest text-white/40">
-          QUICK ACTIONS
-        </p>
-        <div className="mt-2.5 grid grid-cols-3 gap-2">
-          {QUICK_ACTIONS.map((action) => (
+        {list.length > FULL_DETAILS_PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 border-t border-white/10 px-5 py-3">
             <button
-              key={action.label}
               type="button"
-              className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2 py-2.5 text-[10px] font-medium text-white/70 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                aria-hidden="true"
-              >
-                <path d={action.icon} strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {action.label}
+              ← Prev
             </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          disabled={!locProjects?.projects?.length}
-          onClick={() =>
-            onSelectProject(highlight ?? locProjects.projects[0].entity)
-          }
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1f3d3c] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Full Details
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="M4 10h12M11 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
+            <span className="text-[11px] text-white/50">
+              Page {page + 1} of {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={page >= pageCount - 1}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-const REPORTS_KEY = 'projecttrack-project-reports'
+function CoordGroupModal({ projects, onClose, onSelectProject }) {
+  const count = projects.length
+  const top = projects[0]
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Projects at shared coordinate`}
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-4"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+      />
+      <div className="relative z-10 flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0c1418]/95 shadow-2xl backdrop-blur-md">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+          <div>
+            <p className="text-[10px] font-semibold tracking-widest text-white/40">
+              SHARED LOCATION
+            </p>
+            <h2 className="mt-1 font-serif text-lg font-bold text-white">
+              {count} project{count !== 1 ? 's' : ''} at this coordinate
+            </h2>
+            <p className="mt-0.5 text-[11px] text-white/50">
+              {top?.position?.[0]?.toFixed(4)}, {top?.position?.[1]?.toFixed(4)}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-white/50 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+          >
+            <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <ul className="space-y-2">
+            {projects.map((project) => {
+              const { base, pct } = parseStatus(project.status)
+              return (
+                <li key={project.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject(project.id)}
+                    className="w-full cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold text-white/60">
+                        {project.id}
+                      </span>
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 text-[9px] font-semibold ${
+                          STATUS_CLS[base] ?? 'bg-white/10 text-white/60'
+                        }`}
+                      >
+                        {statusBadgeLabel(project.status)}
+                      </span>
+                    </div>
+                    {project.name && (
+                      <p className="mt-1 truncate text-[11px] text-white/70">
+                        {project.name}
+                      </p>
+                    )}
+                    <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
+                      <span className="whitespace-nowrap font-bold text-emerald-300">
+                        {project.budgetNum != null
+                          ? `₱${(project.budgetNum / 1e6).toFixed(1)}M`
+                          : ''}
+                      </span>
+                      {pct != null && (
+                        <span className="text-white/40">{pct}%</span>
+                      )}
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
+  const [signedIn, setSignedIn] = useState(undefined)
+  const [submitting, setSubmitting] = useState(false)
+  const [form, setForm] = useState({
+    picName: '',
+    picFile: null,
+    location: defaultLocation ?? '',
+    desc: '',
+    error: '',
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    getSession()
+      .then((user) => {
+        if (!cancelled) setSignedIn(Boolean(user))
+      })
+      .catch(() => {
+        if (!cancelled) setSignedIn(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  function patch(partial) {
+    setForm((prev) => ({ ...prev, ...partial }))
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!form.desc.trim()) {
+      patch({ error: 'Add a short description of what you observed.' })
+      return
+    }
+    setSubmitting(true)
+    patch({ error: '' })
+    try {
+      const saved = await submitAnomalyReport({
+        projectId: entity,
+        description: form.desc.trim(),
+        location: form.location.trim(),
+        picture: form.picFile,
+      })
+      onSubmitted({
+        type: 'anomaly',
+        id: saved.id,
+        location: form.location.trim(),
+        description: form.desc.trim(),
+        pictureName: form.picName,
+        photoUrl: saved.photo_url ?? null,
+        at: new Date().toISOString(),
+        pending: false,
+      })
+    } catch (error) {
+      patch({
+        error:
+          error?.status === 401
+            ? 'Sign in to file a report.'
+            : error?.message || 'Report submission failed — please try again.',
+      })
+      if (error?.status === 401) setSignedIn(false)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Report anomaly for ${entity}`}
+      className="fixed inset-0 z-[2100] flex items-center justify-center p-4"
+    >
+      <button
+        type="button"
+        aria-label="Close report form"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+      />
+      <div className="relative z-10 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/95 p-5 shadow-2xl backdrop-blur-md">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold tracking-widest text-amber-400/70">
+              REPORT ANOMALY
+            </p>
+            <h2 className="mt-1 font-serif text-lg font-bold text-white">
+              {entity}
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-white/50 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+          >
+            <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        {signedIn === undefined ? (
+          <p className="mt-6 text-sm text-white/50">Checking session…</p>
+        ) : signedIn === false ? (
+          <div className="mt-6 space-y-3">
+            <p className="text-sm leading-relaxed text-white/75">
+              You need to be signed in to file an anomaly report. Reports are
+              tied to your account so the community can verify them.
+            </p>
+            <a
+              href="/signin"
+              onClick={onClose}
+              className="flex w-full items-center justify-center rounded-xl bg-[#1f3d3c] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70"
+            >
+              Sign in to file a report
+            </a>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="mt-4 space-y-2.5" noValidate>
+            <div>
+              <label
+                htmlFor="anomaly-picture"
+                className="block text-[10px] font-medium text-white/50"
+              >
+                Picture
+              </label>
+              <div className="mt-1 flex items-center gap-2 overflow-hidden">
+                <input
+                  id="anomaly-picture"
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null
+                    patch({ picName: file?.name ?? '', picFile: file })
+                  }}
+                  className="sr-only"
+                />
+                <label
+                  htmlFor="anomaly-picture"
+                  className="shrink-0 cursor-pointer rounded-lg bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-white/80 transition hover:bg-white/15"
+                >
+                  Choose File
+                </label>
+                <span className="min-w-0 truncate text-[11px] text-white/60">
+                  {form.picName || 'No file chosen'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <label
+                htmlFor="anomaly-location"
+                className="block text-[10px] font-medium text-white/50"
+              >
+                Location
+              </label>
+              <input
+                id="anomaly-location"
+                type="text"
+                value={form.location}
+                onChange={(event) => patch({ location: event.target.value })}
+                placeholder="Barangay / street / landmark"
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="anomaly-description"
+                className="block text-[10px] font-medium text-white/50"
+              >
+                Description
+              </label>
+              <textarea
+                id="anomaly-description"
+                rows={3}
+                value={form.desc}
+                onChange={(event) => patch({ desc: event.target.value, error: '' })}
+                placeholder="What did you observe?"
+                className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              />
+            </div>
+            {form.error && (
+              <p role="alert" className="text-[10px] text-red-300">
+                {form.error}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 rounded-xl bg-amber-500/90 px-3 py-2 text-[11px] font-semibold text-black transition hover:bg-amber-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400/70 disabled:opacity-60"
+              >
+                {submitting ? 'Submitting…' : 'Submit Report'}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-white/10 px-3 py-2 text-[11px] font-semibold text-white/60 transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function readReport(id) {
   try {
@@ -731,14 +1250,7 @@ function writeReport(id, value) {
 function ProjectDetailModal({ entity, onClose }) {
   const [detailState, setDetailState] = useState({ id: null, data: null })
   const [reportState, setReportState] = useState({ id: null, value: null })
-  const [formState, setFormState] = useState({
-    id: null,
-    show: false,
-    picName: '',
-    location: '',
-    desc: '',
-    error: '',
-  })
+  const [reportModalOpen, setReportModalOpen] = useState(false)
 
   const report =
     reportState.id === entity
@@ -747,63 +1259,37 @@ function ProjectDetailModal({ entity, onClose }) {
         ? readReport(entity)
         : null
 
-  const form =
-    formState.id === entity
-      ? formState
-      : { id: entity, show: false, picName: '', location: '', desc: '', error: '' }
-
-  function openAnomalyForm() {
-    setFormState({
-      id: entity,
-      show: true,
-      picName: '',
-      location: (detailState.id === entity ? detailState.data?.location : '') ?? '',
-      desc: '',
-      error: '',
-    })
-  }
-
-  function patchForm(partial) {
-    setFormState((prev) => ({
-      ...(prev.id === entity
-        ? prev
-        : {
-            id: entity,
-            show: true,
-            picName: '',
-            location: '',
-            desc: '',
-            error: '',
-          }),
-      ...partial,
-      id: entity,
-    }))
-  }
-
-  function submitAnomaly(event) {
-    event.preventDefault()
-    if (!form.desc.trim()) {
-      patchForm({ error: 'Add a short description of what you observed.' })
-      return
-    }
-    const value = {
-      type: 'anomaly',
-      location: form.location.trim(),
-      description: form.desc.trim(),
-      pictureName: form.picName,
-      at: new Date().toISOString(),
-    }
-    writeReport(entity, value)
-    setReportState({ id: entity, value })
-    setFormState((prev) => ({ ...prev, id: entity, show: false, error: '' }))
-  }
-
   useEffect(() => {
     let cancelled = false
     if (!entity) return undefined
-    fetchProject(entity).then((data) => {
-      if (!cancelled) setDetailState({ id: entity, data })
-    })
+    fetchProject(entity)
+      .then((data) => {
+        if (!cancelled) setDetailState({ id: entity, data })
+      })
+      .catch(() => {
+        if (!cancelled) setDetailState({ id: entity, data: null })
+      })
+    fetchProjectReports(entity)
+      .then((data) => {
+        if (cancelled) return
+        const latest = data.reports?.[data.reports.length - 1]
+        if (latest) {
+          setReportState({
+            id: entity,
+            value: {
+              type: 'anomaly',
+              id: latest.id,
+              location: latest.location ?? '',
+              description: latest.description,
+              pictureName: '',
+              photoUrl: latest.photo_url ?? null,
+              at: latest.created_at,
+              pending: false,
+            },
+          })
+        }
+      })
+      .catch(() => {})
     return () => {
       cancelled = true
     }
@@ -875,9 +1361,36 @@ function ProjectDetailModal({ entity, onClose }) {
           </p>
         ) : (
           <>
-            <p className="mt-3 text-sm leading-relaxed text-white/85">
+            <p className="mt-3 text-sm leading-relaxed break-words text-white/85">
               {project.description}
             </p>
+            {(() => {
+              const { base, pct } = parseStatus(project.status)
+              if (pct == null) return null
+              return (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span
+                      className={`font-semibold ${
+                        base === 'Completed'
+                          ? 'text-sky-300'
+                          : 'text-emerald-300'
+                      }`}
+                    >
+                      {base} · {pct}% complete
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className={`h-full rounded-full ${
+                        base === 'Completed' ? 'bg-sky-400' : 'bg-emerald-400'
+                      }`}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })()}
             <dl className="mt-4 space-y-2">
               {rows.map(([label, value]) => (
                 <div
@@ -904,117 +1417,31 @@ function ProjectDetailModal({ entity, onClose }) {
                   role="status"
                   className="mt-2.5 rounded-lg bg-emerald-400/15 px-3 py-2 text-[11px] font-semibold text-emerald-300"
                 >
-                  Thank you — your anomaly report for this project was saved.
+                  {report.pending
+                    ? 'Report saved on this device — server was unreachable, it will not appear for others yet.'
+                    : 'Thank you — your anomaly report for this project was submitted.'}
                 </p>
-              ) : form.show ? (
-                <form
-                  onSubmit={submitAnomaly}
-                  className="mt-2.5 space-y-2.5"
-                  noValidate
-                >
-                  <div>
-                    <label
-                      htmlFor="anomaly-picture"
-                      className="block text-[10px] font-medium text-white/50"
-                    >
-                      Picture
-                    </label>
-                    <div className="mt-1 flex items-center gap-2 overflow-hidden">
-                      <input
-                        id="anomaly-picture"
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) =>
-                          patchForm({
-                            picName: event.target.files?.[0]?.name ?? '',
-                          })
-                        }
-                        className="sr-only"
-                      />
-                      <label
-                        htmlFor="anomaly-picture"
-                        className="shrink-0 cursor-pointer rounded-lg bg-white/10 px-2.5 py-1 text-[10px] font-semibold text-white/80 transition hover:bg-white/15"
-                      >
-                        Choose File
-                      </label>
-                      <span className="min-w-0 truncate text-[11px] text-white/60">
-                        {form.picName || 'No file chosen'}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="anomaly-location"
-                      className="block text-[10px] font-medium text-white/50"
-                    >
-                      Location
-                    </label>
-                    <input
-                      id="anomaly-location"
-                      type="text"
-                      value={form.location}
-                      onChange={(event) =>
-                        patchForm({ location: event.target.value })
-                      }
-                      placeholder="Barangay / street / landmark"
-                      className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="anomaly-description"
-                      className="block text-[10px] font-medium text-white/50"
-                    >
-                      Description
-                    </label>
-                    <textarea
-                      id="anomaly-description"
-                      rows={3}
-                      value={form.desc}
-                      onChange={(event) =>
-                        patchForm({
-                          desc: event.target.value,
-                          error: '',
-                        })
-                      }
-                      placeholder="What did you observe?"
-                      className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
-                    />
-                  </div>
-                  {form.error && (
-                    <p role="alert" className="text-[10px] text-red-300">
-                      {form.error}
-                    </p>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      className="flex-1 rounded-xl bg-[#1f3d3c] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70"
-                    >
-                      Submit Report
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormState((prev) => ({
-                          ...prev,
-                          id: entity,
-                          show: false,
-                          error: '',
-                        }))
-                      }
-                      className="rounded-xl border border-white/10 px-3 py-2 text-[11px] font-semibold text-white/60 transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
               ) : (
                 <button
                   type="button"
-                  onClick={openAnomalyForm}
-                  className="mt-2.5 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-300 transition hover:bg-amber-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400/70"
+                  onClick={() => setReportModalOpen(true)}
+                  className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-400/40 bg-red-400/10 px-3 py-2 text-[11px] font-semibold text-red-300 transition hover:bg-red-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400/70"
                 >
+                  <svg
+                    viewBox="0 0 20 20"
+                    className="h-3.5 w-3.5 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M10 2.5L1.5 17h17L10 2.5z"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M10 8v3.5" strokeLinecap="round" />
+                    <circle cx="10" cy="14" r="0.6" fill="currentColor" />
+                  </svg>
                   Report Anomaly
                 </button>
               )}
@@ -1035,6 +1462,18 @@ function ProjectDetailModal({ entity, onClose }) {
           </>
         )}
       </div>
+      {reportModalOpen && (
+        <ReportAnomalyModal
+          entity={entity}
+          defaultLocation={(detailState.id === entity ? detailState.data?.location : '') ?? ''}
+          onClose={() => setReportModalOpen(false)}
+          onSubmitted={(merged) => {
+            writeReport(entity, merged)
+            setReportState({ id: entity, value: merged })
+            setReportModalOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1115,18 +1554,116 @@ function CebuMap() {
   const [zoom, setZoom] = useState(8)
   const [highlightEntity, setHighlightEntity] = useState(null)
   const [detailEntity, setDetailEntity] = useState(null)
+  const [fullDetails, setFullDetails] = useState(null)
+  const [coordGroup, setCoordGroup] = useState(null)
+  const [mapPins, setMapPins] = useState([])
+  const [lguPinState, setLguPinState] = useState({ name: null, pins: [] })
+  const [municipalities, setMunicipalities] = useState(null)
+  const [locState, setLocState] = useState({
+    name: null,
+    data: null,
+    error: false,
+  })
 
   const onZoom = useCallback((value) => setZoom(value), [])
 
-  const icons = useMemo(
-    () => ({
-      default: pinIcon('default'),
-      amber: pinIcon('amber'),
-      defaultSelected: pinIcon('default', true),
-      amberSelected: pinIcon('amber', true),
-    }),
-    [],
-  )
+  useEffect(() => {
+    let cancelled = false
+    loadMunicipalities().then((data) => {
+      if (!cancelled) setMunicipalities(data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    function onSelectLgu(event) {
+      const name = event.detail
+      if (!name || !municipalities) return
+      const feature = municipalities.features.find(
+        (f) => f.properties.name === name,
+      )
+      if (!feature) return
+      const [lng, lat] = feature.properties.label
+      setHighlightEntity(null)
+      setSelected({ kind: 'lgu', name, lat, lng, feature })
+      setIntelOpen(true)
+    }
+    window.addEventListener('projecttrack:select-lgu', onSelectLgu)
+    return () =>
+      window.removeEventListener('projecttrack:select-lgu', onSelectLgu)
+  }, [municipalities])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchMapPoints(5000)
+      .then((points) => {
+        if (cancelled) return
+        setMapPins(
+          points.map((point) => ({
+            id: point.id,
+            name: point.formatted_address || point.municipality || point.id,
+            position: [point.latitude, point.longitude],
+            status: point.status || null,
+            municipality: point.municipality || null,
+            budgetNum: point.budget_num ?? null,
+          })),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setMapPins([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const queryName = selected ? lguQuery(selected.name) : null
+  const locProjects =
+    queryName && locState.name === queryName ? locState.data : null
+  const locError =
+    queryName && locState.name === queryName ? locState.error : false
+
+  useEffect(() => {
+    let cancelled = false
+    if (!queryName) return undefined
+    fetchMapPoints(500, queryName)
+      .then((points) => {
+        if (cancelled) return
+        setLguPinState({
+          name: queryName,
+          pins: points.map((point) => ({
+            id: point.id,
+            name: point.formatted_address || point.municipality || point.id,
+            position: [point.latitude, point.longitude],
+            status: point.status || null,
+            budgetNum: point.budget_num ?? null,
+          })),
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setLguPinState({ name: queryName, pins: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [queryName])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!queryName) return undefined
+    fetchProjectsByLocation(queryName, 100)
+      .then((data) => {
+        if (!cancelled) setLocState({ name: queryName, data, error: false })
+      })
+      .catch(() => {
+        if (!cancelled) setLocState({ name: queryName, data: null, error: true })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [queryName])
 
   function selectSite(pin) {
     setHighlightEntity(null)
@@ -1159,6 +1696,7 @@ function CebuMap() {
 
   const showDetail =
     zoom >= BARANGAY_MIN_ZOOM && selected?.kind === 'lgu'
+  const showProjectPins = selected?.kind === 'lgu'
 
   function openProjectDetail(entity) {
     if (!entity) return
@@ -1168,10 +1706,38 @@ function CebuMap() {
 
   const selectedProjects = useMemo(() => {
     if (selected?.kind !== 'lgu') return []
-    return mockProjectsByLocation(lguQuery(selected.name)).projects.filter(
-      (project) => project.lat != null && project.lng != null,
+    const pins =
+      lguPinState.name === queryName ? lguPinState.pins : []
+    if (pins.length === 0) return []
+
+    const sorted = [...pins].sort(
+      (a, b) => (b.budgetNum ?? 0) - (a.budgetNum ?? 0),
     )
-  }, [selected])
+
+    const groups = new Map()
+    for (const pin of sorted) {
+      const key = `${pin.position[0].toFixed(4)},${pin.position[1].toFixed(4)}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(pin)
+    }
+
+    return [...groups.entries()].map(([key, group]) => {
+      const top = group[0]
+      const [lat, lng] = top.position
+      return {
+        key,
+        entity: top.id,
+        latitude: lat,
+        longitude: lng,
+        displayLat: lat,
+        displayLng: lng,
+        status: top.status,
+        budgetNum: top.budgetNum,
+        count: group.length,
+        group,
+      }
+    })
+  }, [lguPinState, queryName, selected])
 
   return (
     <section className="w-full">
@@ -1187,24 +1753,26 @@ function CebuMap() {
         scrollWheelZoom
         className="leaflet-container h-[80vh] min-h-96 w-full lg:h-[91vh]"
       >
-        <GeoJSON
-          data={municipalities}
-          style={(feature) => ({
-            className:
-              feature.properties.name === selected?.name &&
-              selected?.kind === 'lgu'
-                ? 'land land--selected'
-                : 'land',
-            fillOpacity: 1,
-          })}
-          onEachFeature={(feature, layer) => {
-            layer.on('click', (event) => {
-              DomEvent.stopPropagation(event.originalEvent)
-              selectLgu(feature)
-            })
-          }}
-        />
-        {municipalities.features.map((feature) => (
+        {municipalities && (
+          <GeoJSON
+            data={municipalities}
+            style={(feature) => ({
+              className:
+                feature.properties.name === selected?.name &&
+                selected?.kind === 'lgu'
+                  ? 'land land--selected'
+                  : 'land',
+              fillOpacity: 1,
+            })}
+            onEachFeature={(feature, layer) => {
+              layer.on('click', (event) => {
+                DomEvent.stopPropagation(event.originalEvent)
+                selectLgu(feature)
+              })
+            }}
+          />
+        )}
+        {municipalities?.features.map((feature) => (
           <Marker
             key={feature.properties.name}
             // GeoJSON is [lng, lat]; Leaflet markers expect [lat, lng].
@@ -1213,36 +1781,6 @@ function CebuMap() {
             interactive={false}
           />
         ))}
-        {pins.map((pin) => {
-          const isSelected = selected?.kind === 'site' && selected.name === pin.name
-          return (
-            <Marker
-              key={pin.id}
-              position={pin.position}
-              icon={
-                isSelected
-                  ? icons[`${pin.tone ?? 'default'}Selected`]
-                  : icons[pin.tone] ?? icons.default
-              }
-              alt={pin.name}
-              eventHandlers={{
-                click(event) {
-                  DomEvent.stopPropagation(event.originalEvent)
-                  selectSite(pin)
-                },
-              }}
-            >
-              <Tooltip
-                direction="top"
-                offset={[0, -10]}
-                opacity={1}
-                className="pin-label"
-              >
-                {pin.name}
-              </Tooltip>
-            </Marker>
-          )
-        })}
         <MapAutoResize />
         <MapLabels />
         <MapControls />
@@ -1250,31 +1788,52 @@ function CebuMap() {
         <MapBackgroundClick onClear={() => setSelected(null)} />
         <ZoomWatcher onZoom={onZoom} />
         <BarangayLayer target={selected} visible={showDetail} zoom={zoom} />
-        {showDetail &&
-          selectedProjects.map((project) => (
-            <Marker
-              key={project.entity}
-              position={[project.lat, project.lng]}
-              icon={PROJECT_PIN_ICON}
-              alt={project.entity}
-              eventHandlers={{
-                click(event) {
-                  DomEvent.stopPropagation(event.originalEvent)
-                  setIntelOpen(true)
-                  openProjectDetail(project.entity)
-                },
-              }}
-            >
-              <Tooltip
-                direction="top"
-                offset={[0, -8]}
-                opacity={1}
-                className="pin-label"
+        {showProjectPins &&
+          selectedProjects.map((project) => {
+            const pct = parseStatus(project.status).pct
+            return (
+              <Marker
+                key={project.entity}
+                position={[project.displayLat, project.displayLng]}
+                icon={
+                  isCompletedStatus(project.status)
+                    ? projectPinCompletedIcon
+                    : projectPinIcon
+                }
+                alt={project.entity}
+                eventHandlers={{
+                  click(event) {
+                    DomEvent.stopPropagation(event.originalEvent)
+                    setIntelOpen(true)
+                    if (project.count > 1) {
+                      setCoordGroup({
+                        key: project.key,
+                        projects: project.group,
+                      })
+                    } else {
+                      setHighlightEntity(project.entity)
+                      openProjectDetail(project.entity)
+                    }
+                  },
+                }}
               >
-                {project.entity} · {project.budget}
-              </Tooltip>
-            </Marker>
-          ))}
+                <Tooltip
+                  direction="top"
+                  offset={[0, -8]}
+                  opacity={1}
+                  className="pin-label"
+                >
+                  {project.count > 1
+                    ? `${project.count} projects · ${project.entity}+`
+                    : project.entity}
+                  {pct != null ? ` · ${pct}%` : ''}
+                  {project.budgetNum != null
+                    ? ` · ₱${(project.budgetNum / 1e6).toFixed(1)}M`
+                    : ''}
+                </Tooltip>
+              </Marker>
+            )
+          })}
         {intelOpen ? (
           <LocationIntelPanel
             key={selected ? `${selected.kind}:${selected.name}` : 'overview'}
@@ -1284,6 +1843,13 @@ function CebuMap() {
             onReset={() => setSelected(null)}
             onSelectSite={selectSite}
             onSelectProject={openProjectDetail}
+            onOpenFullDetails={() => {
+              if (selected) setFullDetails(lguQuery(selected.name))
+            }}
+            locProjects={locProjects}
+            locError={locError}
+            mapPins={mapPins}
+            municipalities={municipalities}
           />
         ) : (
           <button
@@ -1300,6 +1866,29 @@ function CebuMap() {
         entity={detailEntity}
         onClose={() => setDetailEntity(null)}
       />
+      {fullDetails && (
+        <FullDetailsModal
+          key={fullDetails}
+          locationName={fullDetails}
+          onClose={() => setFullDetails(null)}
+          onSelectProject={(entity) => {
+            setFullDetails(null)
+            openProjectDetail(entity)
+          }}
+        />
+      )}
+      {coordGroup && (
+        <CoordGroupModal
+          key={coordGroup.key}
+          projects={coordGroup.projects}
+          onClose={() => setCoordGroup(null)}
+          onSelectProject={(id) => {
+            setCoordGroup(null)
+            setHighlightEntity(id)
+            openProjectDetail(id)
+          }}
+        />
+      )}
     </section>
   )
 }

@@ -152,7 +152,7 @@ export default function ProjectDetailModal({
           </View>
         </SafeAreaView>
       </View>
-    </View>
+    </Modal>
   );
 }
 

@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { ProjectDetail, ProjectStatus } from '../../core/types';
 import { formatCurrencyPHP } from '../../core/geoUtils';
@@ -22,7 +22,7 @@ type FilterOption = 'All' | ProjectStatus;
 
 export default function LocationIntelSheet({
   lguName,
-  projects,
+  projects = [],
   onSelectProject,
   onReportAnomaly,
   onClose,
@@ -63,12 +63,22 @@ export default function LocationIntelSheet({
     }
   };
 
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetMaxHeight = Math.max(260, (windowHeight || 600) * 0.48);
+
   return (
-    <View style={styles.container} testID="location-intel-sheet">
+    <View
+      style={[styles.container, { maxHeight: sheetMaxHeight }]}
+      testID="location-intel-sheet"
+    >
       {/* Draggable Handle Bar */}
-      <View style={styles.handleBarContainer}>
+      <TouchableOpacity
+        style={styles.handleBarContainer}
+        onPress={onClose}
+        activeOpacity={0.7}
+      >
         <View style={styles.handleBar} />
-      </View>
+      </TouchableOpacity>
 
       {/* Header with Title and Anomaly Action */}
       <View style={styles.headerRow}>
@@ -245,7 +255,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 24,
-    maxHeight: Dimensions.get('window').height * 0.45,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,

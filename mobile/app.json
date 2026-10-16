@@ -18,6 +18,9 @@
         "backgroundColor": "#1f3d3c"
       },
       "package": "com.projecttrack.mobile"
+    },
+    "web": {
+      "bundler": "metro"
     }
   }
 }

@@ -37,7 +37,7 @@ describe('HomeScreen Component', () => {
     );
 
     // Find Bogo City path
-    const bogoPath = getByTestId('muni-path-Bogo');
+    const bogoPath = getByTestId('muni-path-City of Bogo');
     fireEvent.press(bogoPath);
 
     // Bogo City should now be displayed in Location Intel sheet

@@ -12,7 +12,7 @@ import {
   getProjectById,
   computeLguSummary,
 } from '../src/data/mockApi';
-import { Pin, ProjectDetail, AnomalyReport } from '../src/core/types';
+import { AnomalyReport } from '../src/core/types';
 
 describe('Core Geo Utilities', () => {
   test('haversineDistance returns 0 for identical points', () => {

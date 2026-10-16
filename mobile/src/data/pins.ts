@@ -124,3 +124,5 @@ export function getPinsByLgu(lguName: string): Pin[] {
 export function getPinById(id: string): Pin | undefined {
   return pins.find((pin) => pin.id === id);
 }
+
+export const initialPins = pins;

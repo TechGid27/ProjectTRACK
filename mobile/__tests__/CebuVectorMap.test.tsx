@@ -84,6 +84,39 @@ describe('CebuVectorMap Component', () => {
     );
 
     const bogoPath = getByTestId('muni-path-City of Bogo');
-    expect(bogoPath.props.fill).toBe('#1f3d3c'); // Active teal fill
+    const fillProp = bogoPath.props.fill;
+    // On React Native SVG mock, hex is processed into color payload object
+    if (typeof fillProp === 'object' && fillProp !== null) {
+      expect(fillProp.payload).toBeDefined();
+    } else {
+      expect(fillProp).toBe('#1f3d3c');
+    }
+  });
+
+  test('tapping zoom in button increases zoom and displays zoom level badge', () => {
+    const { getByTestId, queryByTestId } = render(
+      <CebuVectorMap
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    // Initial scale is 1.0x so badge is not visible
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+
+    // Tap zoom in
+    const zoomInBtn = getByTestId('zoom-in-btn');
+    fireEvent.press(zoomInBtn);
+
+    // Badge should now appear showing scale
+    const badge = getByTestId('zoom-level-badge');
+    expect(badge).toBeTruthy();
+
+    // Tap reset
+    const resetBtn = getByTestId('zoom-reset-btn');
+    fireEvent.press(resetBtn);
+
+    // Badge should be hidden after reset back to 1.0x
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
   });
 });

@@ -156,10 +156,13 @@ export default function SignInScreen({ onSuccess, onBack }: SignInScreenProps) {
   );
 }
 
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#f1f5f9',
+    height: '100%',
+    width: '100%',
   },
   keyboardContainer: {
     flex: 1,

@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, Alert, Dimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import MapHeader from '../components/MapHeader';
 import CebuVectorMap from '../components/CebuVectorMap';
 import LocationIntelSheet from '../components/LocationIntelSheet';
 import ProjectDetailModal from '../components/ProjectDetailModal';
 import ReportAnomalyModal from '../components/ReportAnomalyModal';
-import { initialPins } from '../../data/pins';
+import { pins, initialPins } from '../../data/pins';
 import {
   mockProjects,
   getProjectsByLocation,
@@ -18,7 +18,10 @@ interface HomeScreenProps {
   onNavigateToSignIn: () => void;
 }
 
+
 export default function HomeScreen({ onNavigateToSignIn }: HomeScreenProps) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
   const [selectedLgu, setSelectedLgu] = useState<string | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectDetail | null>(null);
@@ -28,7 +31,7 @@ export default function HomeScreen({ onNavigateToSignIn }: HomeScreenProps) {
 
   // 1. Filter pins based on search query or selected LGU
   const filteredPins = useMemo(() => {
-    let result = initialPins;
+    let result = initialPins || pins || [];
     if (selectedLgu) {
       const norm = normalizeLguName(selectedLgu).toLowerCase();
       result = result.filter(
@@ -93,7 +96,6 @@ export default function HomeScreen({ onNavigateToSignIn }: HomeScreenProps) {
   // Handler: Initiating Anomaly Report
   const handleReportAnomaly = (targetLgu: string) => {
     if (!selectedProject) {
-      // Pick first project from current active list or construct fallback
       const fallback = activeProjects[0] || {
         id: `CIVIL-${normalizeLguName(targetLgu).toUpperCase()}`,
         title: `Public Infrastructure Site in ${targetLgu}`,
@@ -117,7 +119,6 @@ export default function HomeScreen({ onNavigateToSignIn }: HomeScreenProps) {
   // Handler: Submitting report
   const handleSubmitReport = (report: AnomalyReport) => {
     setIsReportModalOpen(false);
-    // Show citizen confirmation
     if (typeof alert !== 'undefined') {
       alert(`Report submitted successfully for Project ${report.projectId}!`);
     }
@@ -130,14 +131,15 @@ export default function HomeScreen({ onNavigateToSignIn }: HomeScreenProps) {
     setSearchQuery('');
   };
 
-  const mapHeight = Dimensions.get('window').height * 0.52;
+  const mapHeight = Math.max(280, (windowHeight || 600) * 0.52);
+  const mapWidth = Math.max(300, windowWidth || 360);
 
   return (
     <View style={styles.container}>
       {/* Top Floating App Header with Search */}
       <MapHeader
         totalLgus={53}
-        totalPins={initialPins.length}
+        totalPins={(initialPins || pins || []).length}
         onSearch={setSearchQuery}
         onSignInPress={onNavigateToSignIn}
         onResetSelection={handleResetSelection}
@@ -151,6 +153,7 @@ export default function HomeScreen({ onNavigateToSignIn }: HomeScreenProps) {
           pins={filteredPins}
           onSelectMunicipality={handleSelectMunicipality}
           onSelectPin={handleSelectPin}
+          width={mapWidth}
           height={mapHeight}
         />
       </View>
@@ -187,10 +190,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#cbe3df', // Water background
+    position: 'relative',
+    height: '100%',
+    width: '100%',
   },
   mapContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
 });

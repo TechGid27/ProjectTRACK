@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Path, G, Circle } from 'react-native-svg';
 import { Pin, MunicipalityCollection } from '../../core/types';
 import {
@@ -21,26 +21,32 @@ interface CebuVectorMapProps {
   height?: number;
 }
 
-const DEFAULT_MAP_WIDTH = Dimensions.get('window').width;
-const DEFAULT_MAP_HEIGHT = Dimensions.get('window').height * 0.65;
-
 export default function CebuVectorMap({
   selectedMunicipality,
   selectedPinId,
   pins = [],
   onSelectMunicipality,
   onSelectPin,
-  width = DEFAULT_MAP_WIDTH,
-  height = DEFAULT_MAP_HEIGHT,
+  width: propWidth,
+  height: propHeight,
 }: CebuVectorMapProps) {
+  const windowDims = useWindowDimensions();
+
+  // Robust dimensions that will never collapse to 0 on web or initial mount
+  const width = Math.max(280, propWidth ?? windowDims?.width ?? 360);
+  const height = Math.max(
+    280,
+    propHeight ?? (windowDims?.height ? windowDims.height * 0.65 : 480),
+  );
+
   // 1. Calculate map bounds once
   const bounds = useMemo(() => {
-    return computeBoundingBox(cebuData.features);
+    return computeBoundingBox(cebuData?.features || []);
   }, []);
 
   // 2. Build SVG path commands for all municipalities
   const pathsData = useMemo(() => {
-    return cebuData.features.map((feature) => {
+    return (cebuData?.features || []).map((feature) => {
       const name = feature.properties.name;
       const normalized = normalizeLguName(name);
       let d = '';

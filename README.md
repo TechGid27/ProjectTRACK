@@ -1,147 +1,170 @@
-# ProjectTRACK: DPWH Cebu Infrastructure Tracking & Intelligence System
+# ProjectTrack
 
-**ProjectTRACK** is an intelligent civic infrastructure platform for tracking, analyzing, and querying **4,370+ DPWH civil works projects** across Cebu Province (2022 – Present).
+> **Civic Intelligence and Transparency Engine for DPWH Infrastructure Projects Across Cebu**  
+> *Transforming fragmented public civil works data into verifiable, geospatial, and graph-powered community intelligence.*
 
-Built with **Neo4j Aura (Knowledge Graph)**, **FastAPI (REST & SSE Streaming Backend)**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, **Interactive Geospatial Web GIS (React 19 + Leaflet)**, and **Multi-Tier Fallback Resilience**.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Branch](https://img.shields.io/badge/Branch-development-orange.svg)](#)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF.svg?logo=vite)](https://vite.dev)
+[![Neo4j](https://img.shields.io/badge/Neo4j-AuraDB-45818e.svg?logo=neo4j)](https://neo4j.com)
+[![Leaflet](https://img.shields.io/badge/GIS-Leaflet%20Maps-199900.svg?logo=leaflet)](https://leafletjs.com)
 
 ---
 
-## 🏗️ System Architecture
+## Executive Summary (2-Minute Read)
 
-```text
-ProjectTRACK/
-├── backend/                    # ⚡ Python FastAPI & GraphRAG Pipeline
-│   ├── backend/                # FastAPI application, services, models, and tests
-│   ├── pipeline/               # Knowledge graph sync, scraping & Cypher query engine
-│   ├── main.py                 # Master CLI runner, interactive console, and local AI setup
-│   ├── requirements.txt        # Python backend dependencies
-│   └── Readme.md               # Backend documentation & installation guide
-├── Website/                    # 🌐 React 19 + Vite + Leaflet Web Application
-│   ├── src/                    # Interactive Cebu vector map, glowing pins, statistics
-│   ├── package.json            # React 19 + Vite dependencies
-│   └── README.md               # Frontend documentation & development guide
-├── mobile/                     # 📱 Mobile application
-│   └── Readme.md               # Mobile client architecture & roadmap
-├── .gitignore                  # Monorepo git ignore rules (protecting .env & build caches)
-└── README.md                   # Monorepo master documentation
+Every fiscal year, billions of Philippine Pesos are allocated for Department of Public Works and Highways (DPWH) civil works projects across the country. Citizens, watchdog organizations, journalists, and local governments routinely encounter structural transparency barriers:
+
+* **Opaque Project Statuses**: Difficulty in independently verifying execution progress and tracking completion timelines.
+* **Information Fragmentation**: Procurement notices, allocation records, and contractor track records reside in separate, non-relational databases.
+* **Absence of Ground-Truth Validation**: Vulnerability to off-site photo submissions and lack of mandatory physical proximity checks during on-site documentation.
+
+**ProjectTrack** addresses these systemic challenges for the Province of Cebu across all **53 Local Government Units (LGUs)** (44 municipalities and 9 cities). By combining automated web scraping, Neo4j knowledge graphs, tamper-evident image forensics, geofenced mobile verification, and a domain-guarded GraphRAG assistant, ProjectTrack converts raw public disclosures into structured, accessible civic intelligence.
+
+---
+
+## System Features
+
+### Web Platform (`Website`)
+* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers and district clusters.
+* **GraphRAG-Powered AI Assistant**: Contextual natural language query engine grounded in the Neo4j knowledge graph, with domain guardrails and a configurable LLM provider (Groq by default).
+* **Image Forensics Verification**: Built-in Error Level Analysis (ELA) and cryptographic metadata inspection to detect digital manipulation, timestamp tampering, or image recycling.
+* **Budget and Expenditure Transparency**: Real-time auditing of allocated funds, expenditure disbursements, variance indicators, and source funding across municipalities.
+* **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store.
+
+### Planned Mobile Field Auditor (`mobile` — React Native with Expo)
+* **Geofenced On-Site Photo Capture**: Planned use of React Native and Expo (`expo-location`, `expo-camera`) to verify GPS proximity to project coordinates before photo capture.
+* **Offline-First Background Sync**: Planned offline caching and background synchronization for field observations in low-connectivity areas.
+
+### Core Backend and Services (`backend`)
+* **Personnel and Entity Graph Mapping**: Models relationships between contractors, authorized managing officers, district engineers, and procurement awards into a traversable graph.
+* **High-Throughput RESTful and SSE API**: Production-grade FastAPI endpoints supporting sub-20ms instant Cypher queries, Server-Sent Events (SSE) streaming, and standardized GeoJSON feeds.
+
+---
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Data_Pipeline["Data Extraction & Normalization"]
+        DPWH["DPWH Portals & Procurement Data"] --> Scraper["Apify / Python Scrapers"]
+        Scraper --> Lake["Supabase Document Lake"]
+        Lake --> Ingestion["Batch Ingestion & Geocoding"]
+        Ingestion --> GraphDB[("Neo4j AuraDB\n(Knowledge Graph)")]
+    end
+
+    subgraph Backend_Services["Backend Core (FastAPI)"]
+        GraphDB <--> Engine["FastAPI Engine"]
+        Engine --> Guardrails["5-Layer Domain Guardrails"]
+        Guardrails --> RAG["GraphRAG Engine\n(Configurable LLM / local Ollama fallback)"]
+        Engine --> Forensics["Image Forensics & ELA"]
+    end
+
+    subgraph Client_Applications["Client Applications"]
+        Engine <==>|"REST / SSE Stream"| Web["Web Portal\n(React 19 + Leaflet + Tailwind 4)"]
+        Engine <==>|"Secure Sync API"| MobileApp["Mobile App\n(React Native Expo)"]
+    end
 ```
 
 ---
 
-## 🌟 Key Highlights
+## Quick Start Guide
 
-* **⚡ Sub-20ms Graph Queries**: Direct Cypher and full-text index searches across 4,370+ DPWH projects, contractors, budgets, and jurisdictions.
-* **🛡️ 5-Layer Domain Guardrails**: Pre-retrieval intent classification that intercepts programming queries, generic trivia, and off-topic prompts in `<0.1ms`.
-* **🤖 Multi-Tier Fallback Resilience (100% Uptime / Zero Crash)**:
-  * **Tier 0**: Groq LPU engine running `qwen/qwen3.8-27b` at ~500+ tok/s.
-  * **Tier 1**: Offline local AI fallback with `qwen2.5:0.5b` (~398 MB) via local Ollama.
-  * **Tier 2**: Deterministic Graph Synthesizer (<5ms) directly from Neo4j when rate limits (HTTP 429) or network disruptions occur.
-* **📦 1-Command Permission-Gated Local AI**: Run `python main.py --setup-local-ai` in `backend/` to configure local Ollama with explicit `[y/N]` confirmation.
-* **📍 Geospatial Intelligence**: Full batch geocoding (`python main.py --geocode`) attaching verified WGS84 coordinates to Neo4j project and location nodes.
-* **🗺️ Interactive Web GIS**: Real-time vector map of Cebu with zero tile server dependencies, rendering 53 LGU boundaries and glowing project pins.
+### 1. Prerequisites
+* Python 3.10 or higher
+* Node.js 18 or higher with npm
+* Git
 
----
-
-## 📁 Repository Modules
-
-| Module | Stack | Documentation | Description |
-| :--- | :--- | :--- | :--- |
-| **`backend/`** | Python 3.10+, FastAPI, Neo4j Aura, Groq | [Backend README](backend/Readme.md) | GraphRAG pipeline, REST & SSE API, Guardrails, CLI runner |
-| **`Website/`** | React 19, Vite, Leaflet, Tailwind CSS 4 | [Website README](Website/README.md) | Vector-based interactive Cebu GIS map & project visualizer |
-| **`mobile/`** | Mobile Companion (Upcoming) | [Mobile README](mobile/Readme.md) | Field-audit, citizen photo verification & offline GPS cache |
-
----
-
-## 🚀 Quick Start Guide
-
-### 1. Backend & Knowledge Graph Setup
-
-Full setup instructions in [backend/Readme.md](backend/Readme.md).
-
-```powershell
-# Navigate to backend
+### 2. Backend Setup
+```bash
+# Navigate to backend directory
 cd backend
 
-# Create & activate virtual environment
+# Create and activate virtual environment
 python -m venv venv
-.\venv\Scripts\Activate.ps1    # On Linux/macOS: source venv/bin/activate
+# Windows: .\venv\Scripts\Activate.ps1 | Linux/macOS: source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Configure environment variables
-Copy-Item .env.example .env    # Fill in NEO4J_URI, NEO4J_PASSWORD, GROQ_API_KEY
+cp .env.example .env
 
-# Launch interactive CLI console
-python main.py
-
-# Or launch FastAPI REST & SSE server
-python main.py --api
+# Start FastAPI application
+python -m uvicorn backend.main:create_app --factory --reload --port 8000
 ```
+The REST API will be accessible at `http://localhost:8000` (Interactive documentation at `http://localhost:8000/docs`).
 
-### 2. Web GIS Frontend Setup
-
-Full setup instructions in [Website/README.md](Website/README.md).
-
-```powershell
-# Navigate to Website
+### 3. Website Setup
+```bash
+# Open a new terminal and navigate to Website directory
 cd Website
 
-# Install Node dependencies
+# Install frontend dependencies
 npm install
 
-# Start local Vite development server
+# Start development server
 npm run dev
 ```
-
-The web client runs locally at `http://localhost:5173`.
-
----
-
-## 🔌 Backend API Reference
-
-When the FastAPI server is running (`python main.py --api`), the following endpoints are available at `http://localhost:8000`:
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Health check for Neo4j Aura and LLM engines |
-| `GET` | `/api/projects` | Paginated project search with keyword, LGU, and contractor filters |
-| `GET` | `/api/projects/{id}` | Detailed project metadata, budget, contractor, and coordinates |
-| `GET` | `/api/analytics/top-contractors` | Contractor leaderboard by awarded budget |
-| `GET` | `/api/analytics/summary` | Global counts (projects, contractors, total budget) |
-| `POST` | `/api/chat` | Domain-guarded grounded AI question answering |
-| `GET` | `/api/chat/stream` | Server-Sent Events (SSE) streaming answers (~500+ tok/s) |
-
-Interactive Swagger documentation is available at `http://localhost:8000/docs`.
+The web dashboard will be available at `http://localhost:5173`.
 
 ---
 
-## 🧪 Testing & Validation
+## Documentation Hub
 
-### Automated Backend Test Suite
-Run the 18 unit and integration tests covering API routes, guardrails, and multi-tier fallback resilience:
+Comprehensive architectural, technical, and operational documentation is maintained in the [`docs/`](docs/) directory:
 
-```powershell
-cd backend
-python -m unittest discover -s backend/tests -p "test_*.py"
+| Document | Description |
+| :--- | :--- |
+| [**01. Getting Started**](docs/01-getting-started.md) | Setup walkthrough, 3-minute guided evaluation tour, and verification steps. |
+| [**02. Architecture & Pipelines**](docs/02-architecture.md) | System topology, GraphRAG data pipeline, guardrail mechanics, and forensic verification. |
+| [**03. Tech Stack Justification**](docs/03-tech-stack.md) | Engineering justifications for Neo4j, FastAPI, React 19, Leaflet, and MiMo. |
+| [**04. Comprehensive Setup Guide**](docs/04-setup-guide.md) | Production provisioning, Neo4j Aura cloud configuration, and deployment topology. |
+| [**05. API Reference**](docs/05-api-reference.md) | Endpoint specifications, JSON request/response contracts, and SSE streaming schemas. |
+| [**06. Development Roadmap**](docs/06-roadmap.md) | Phased milestones, barangay polygon rendering, and community initiative integration. |
+| [**07. Security Architecture**](docs/07-security.md) | Threat modeling, 5-layer domain guardrails, digital forensics, and privacy protection. |
+
+---
+
+## Repository Structure
+
+```text
+ProjectTrack/
+├── README.md                            <-- Landing Page & Pitch (Current Document)
+├── CONTRIBUTING.md                      <-- Contribution workflow and coding standards
+├── CODE_OF_CONDUCT.md                   <-- Contributor Covenant community standards
+├── SECURITY.md                          <-- Vulnerability reporting and threat policy
+├── LICENSE                              <-- MIT Open-Source License
+├── .github/                             <-- GitHub issue and pull request templates
+├── docs/                                <-- Central technical documentation
+│   ├── 01-getting-started.md
+│   ├── 02-architecture.md
+│   ├── 03-tech-stack.md
+│   ├── 04-setup-guide.md
+│   ├── 05-api-reference.md
+│   ├── 06-roadmap.md
+│   └── 07-security.md
+├── Website/                             <-- React 19 + Leaflet geospatial web platform
+├── mobile/                              <-- Planned React Native Expo field auditor app
+└── backend/                             <-- FastAPI, Neo4j GraphRAG, and scraping pipeline
 ```
 
-### Frontend Code Quality
-Validate React & Tailwind code formatting:
+---
 
-```powershell
-cd Website
-npm run lint
-```
+## Open-Source Community and Governance
+
+ProjectTrack is maintained under an open-source model to advance civic technology, data transparency, and public accountability.
+
+* **Contributing**: Review [CONTRIBUTING.md](CONTRIBUTING.md) for pull request workflows and development guidelines.
+* **Code of Conduct**: Adherence to the [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) is expected across all project channels.
+* **Security & Responsible Disclosure**: Read [SECURITY.md](SECURITY.md) before reporting vulnerabilities.
+* **Issue Tracking**: Report technical defects or submit architectural proposals through our [GitHub Issue Templates](.github/ISSUE_TEMPLATE/).
 
 ---
 
-## 🛡️ Security & Privacy
+## License
 
-* Sensitive API keys, database credentials, and service tokens are kept strictly in `.env` files and excluded via `.gitignore`.
-* Never commit `.env` or production credentials to any repository branch. A template is provided in `backend/.env.example`.
-
----
-
-## 📄 License
-MIT License. Open-source for civic transparency and public infrastructure research.
+This project is licensed under the **MIT License**. Refer to the [LICENSE](LICENSE) file for complete terms and copyright notices.

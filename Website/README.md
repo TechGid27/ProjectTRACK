@@ -1,95 +1,65 @@
-# ProjectTRACK — Web GIS Frontend
+# ProjectTrack Web Platform
 
-An interactive geospatial intelligence interface for exploring **DPWH civil works infrastructure projects** across Cebu Province. 
-
-Built with **React 19**, **Vite**, **Leaflet**, and **Tailwind CSS 4**, the web interface features a custom vector map of Cebu with zero external satellite tile dependencies, zoom-responsive administrative boundaries, and glowing project pins.
+The web presentation tier of ProjectTrack provides an interactive, low-latency geospatial dashboard for monitoring DPWH civil works projects across the Province of Cebu, Philippines.
 
 ---
 
-## 🌟 Key Features
-
-* **🗺️ Flat Vector Geospatial Rendering**: Renders the complete province of Cebu as styled GeoJSON vector polygons over a deep-canvas water background, eliminating tile server latency.
-* **📍 Glowing Project Pins**: Custom animated `divIcon` markers with status-based ambient glow highlighting infrastructure project sites.
-* **🏷️ Zoom-Gated Municipality Labels**: Dynamic SVG text labels positioned at computed surface centroids across all 53 LGUs of Cebu, progressively visible upon zooming.
-* **📊 LGU & Infrastructure Statistics**: Real-time KPI summary bar displaying active municipality counts, surveyed sites, and regional breakdown.
-* **⚡ Seamless Backend Integration**: Built to interface with the ProjectTRACK FastAPI backend (`/api/projects`, `/api/analytics`, `/api/chat/stream`).
-
----
-
-## 🛠️ Tech Stack
+## Technical Stack
 
 * **UI Framework**: [React 19](https://react.dev)
 * **Build Tool**: [Vite 8](https://vite.dev)
-* **Mapping Engine**: [Leaflet](https://leafletjs.com) via [react-leaflet 5](https://react-leaflet.vercel.app)
-* **Styling**: [Tailwind CSS 4](https://tailwindcss.com) (theme variables inlined in `src/index.css`)
-* **Linting**: ESLint (flat config)
+* **Cartography & GIS**: [Leaflet](https://leafletjs.com) via [react-leaflet 5](https://react-leaflet.vercel.app)
+* **Styling**: [Tailwind CSS 4](https://tailwindcss.com) (color palettes configured in `src/index.css`)
+* **Linting**: ESLint (Flat Configuration)
 
 ---
 
-## 🚀 Getting Started
+## Key Capabilities
 
-### Prerequisites
-* **Node.js**: v18.0.0 or higher
-* **npm**: v9.0.0 or higher
+* **Vector Boundary Rendering**: Renders all 53 Local Government Units (LGUs) of Cebu Province (44 municipalities and 9 cities) as styled vector polygons without requiring external raster satellite tile services.
+* **Barangay Zoom Intelligence**: Dynamic polygon rendering for barangay boundaries at high zoom levels (~Zoom 12+).
+* **Project Status Markers**: Interactive spatial markers with detailed status, budget, and contractor inspection panels.
+* **GraphRAG Client**: Connects to the backend REST and SSE endpoints for natural language question answering and instant Cypher search cards.
+* **Resilient Offline / Mock Fallbacks**: Includes static GeoJSON fixtures and mock data providers in `src/data/mockApi.js` for standalone evaluation.
 
-### Installation & Development
+---
+
+## Local Development
+
+### 1. Installation
 ```bash
 # Navigate to Website directory
 cd Website
 
 # Install dependencies
 npm install
-
-# Start development server (runs on http://localhost:5173)
-npm run dev
 ```
 
-### Production Build & Preview
+### 2. Environment Configuration
+Copy the sample environment file:
 ```bash
-# Build optimized production bundle
-npm run build
-
-# Preview production build locally
-npm run preview
-
-# Run linter
-npm run lint
+cp .env.example .env
 ```
+Ensure `VITE_API_URL` points to your backend instance (default: `http://localhost:8000`).
+
+### 3. Execution Commands
+```bash
+npm run dev      # Launch Vite development server (http://localhost:5173)
+npm run lint     # Run ESLint validation
+npm run build    # Compile production bundle to dist/
+npm run preview  # Locally preview production build
+```
+
+---
+
+## Spatial Data Sources
+
+* `src/assets/cebuMunicipalities.json`: GeoJSON `FeatureCollection` covering the 53 LGUs of Cebu Province (mainland, Bantayan, Camotes, Mactan, Olango). Sourced from [geoBoundaries](https://www.geoboundaries.org) `PHL/ADM3` (gbOpen), based on NAMRIA/PSA data.
+* `public/data/cebu-barangays.json`: High-resolution administrative polygon boundaries for all Cebu barangays.
+* `src/data/pins.js`: Baseline project coordinates and status markers.
 
 ---
 
 ## 📁 Project Structure
 
-```text
-Website/
-├── public/                 # Static assets (favicons, manifest)
-├── src/
-│   ├── app/                # Root App component and routing
-│   ├── assets/             # GeoJSON boundary data
-│   │   └── cebuMunicipalities.json # 53 LGU boundaries (NAMRIA/PSA via geoBoundaries)
-│   ├── data/               # Static dataset & seed pins
-│   │   ├── pins.js         # Site coordinates, tones, and project metadata
-│   │   └── site.js         # Site configuration and branding
-│   ├── features/
-│   │   └── map/            # CebuMap vector rendering engine & controls
-│   ├── layout/             # Header, Footer, and Navigation wrappers
-│   ├── pages/              # Views (HomePage, Project Explorer)
-│   ├── index.css           # Tailwind CSS 4 theme scales & custom pin keyframes
-│   └── main.jsx            # Application entry point
-├── package.json
-└── vite.config.js
-```
-
----
-
-## 🗺️ Geospatial Dataset & Attributions
-
-* **Administrative Boundaries**: `src/assets/cebuMunicipalities.json` contains 53 LGUs (44 municipalities + 9 component/HUC cities), clipped to the Cebu archipelago (mainland, Bantayan, Camotes, Mactan, Olango).
-  * **Source**: [geoBoundaries](https://www.geoboundaries.org) `PHL/ADM3` (gbOpen), simplified from NAMRIA / PSA open data under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-* **Project Pins**: Seeded in `src/data/pins.js` with `{ id, name, position: [lat, lng], tone }`, populated from DPWH civil works registry and geocoded locations.
-
----
-
-## 📄 License
-
-See [LICENSE](LICENSE). Part of the ProjectTRACK open-source civic initiative.
+This package is part of the ProjectTrack open-source monorepo, licensed under the MIT License.

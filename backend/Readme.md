@@ -1,4 +1,4 @@
-# DPWH Cebu Infrastructure Knowledge Graph & QA System
+# DPWH Cebu Infrastructure Knowledge Graph and QA System
 
 An end-to-end GraphRAG pipeline for scraping, ingesting, analyzing, and querying **4,370+ DPWH civil works projects** across Cebu Province (2022 – Present).
 
@@ -6,7 +6,7 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 * **⚡ Sub-20ms Graph Traversal**: Direct Cypher queries and full-text index lookups across 4,370+ DPWH projects, contractors, budgets, and locations in Cebu.
 * **🛡️ 5-Layer Domain Guardrails**: Bulletproof domain lock that intercepts programming questions, generic dictionary definitions, persona overrides (`act as a teacher`), and off-topic queries in `<0.1ms` before hitting Neo4j or the LLM.
@@ -25,7 +25,7 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 backend/
@@ -58,11 +58,9 @@ backend/
 
 ---
 
-## 🛠️ Prerequisites
+## Prerequisites
 
-Before installing, ensure you have:
-
-1. **Python 3.10+** (Tested on Python 3.10, 3.11, 3.12, 3.14)
+1. **Python 3.10+** (Tested on Python 3.10, 3.11, 3.12)
 2. **Git**
 3. Free Accounts / Services for:
    * **[Neo4j AuraDB](https://neo4j.com/cloud/platform/aura-graph-database/)** (Free cloud graph database instance)
@@ -76,15 +74,15 @@ Before installing, ensure you have:
 
 ---
 
-## 🚀 Step-by-Step Installation
+## Step-by-Step Installation
 
-### Step 1: Clone the Repository
+### Step 1: Navigate to Backend
 ```bash
 git clone https://github.com/ThirdTempest/ProjectTRACK.git
 cd ProjectTRACK/backend
 ```
 
-### Step 2: Create and Activate a Virtual Environment
+### Step 2: Create and Activate Virtual Environment
 
 **Windows (PowerShell):**
 ```powershell
@@ -121,10 +119,10 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-Open `.env` and fill in your credentials:
+Review and update `.env`:
 
 ```dotenv
-# --- Neo4j Graph Database (Required) ---
+# Neo4j Graph Database
 NEO4J_URI="neo4j+s://your-instance.databases.neo4j.io"
 NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="your_neo4j_password"
@@ -136,7 +134,7 @@ LLM_MODEL="qwen/qwen3.8-27b"
 GROQ_API_KEY="gsk_your_groq_api_key"
 LLM_MAX_TOKENS="2048"
 
-# --- Apify & Supabase (Optional: only for scraper/sync) ---
+# Apify & Supabase (Optional)
 APIFY_TOKEN="your_apify_api_token"
 SUPABASE_URL="https://your-project-id.supabase.co"
 SUPABASE_SERVICE_KEY="your_supabase_service_role_key"
@@ -167,32 +165,30 @@ Everything is executed through [`main.py`](file:///C:/Users/User/VSCode_Programm
 ```powershell
 python main.py
 ```
-Automatically connects to Neo4j Aura and launches the interactive console:
+Connects to Neo4j Aura and launches the interactive query environment:
 ```text
 ⚡ Neo4j Knowledge Graph Console (DPWH Cebu Infrastructure)
 Connected to Neo4j Aura + Groq LPU Engine (qwen/qwen3.8-27b)
 =================================================================
-Quick Commands:
-  • Type any project ID (e.g. '24HH0043') for instant project card (<10ms)
-  • Type '/search <term>' or '/fts <term>' for full-text search (<20ms)
-  • Type '/top-contractors' to see top contractors by awarded budget
-  • Type '/top-budgets' to see the largest projects
-  • Type '/summary' for dataset totals
-  • Type '/instant' for sub-second database mode (skips LLM wait)
-  • Type '/ai' for grounded AI streaming summary mode
-  • Ask any question for streaming grounded answer
-  • Type '/clear' to reset conversation memory
-  • Type 'exit' to quit
+Commands:
+  Type any project ID (e.g. '24HH0043') for instant project card (<10ms)
+  Type '/search <term>' or '/fts <term>' for full-text search (<20ms)
+  Type '/top-contractors' to see top contractors by awarded budget
+  Type '/top-budgets' to see the largest projects
+  Type '/summary' for dataset totals
+  Type '/instant' for sub-second database mode (skips LLM wait)
+  Type '/ai' for grounded AI streaming summary mode
+  Type '/clear' to reset conversation memory
+  Type 'exit' to quit
 =================================================================
 ```
 
 ---
 
-### 2. Direct Command-Line Lookups & Questions
+### 2. Direct Command-Line Lookups
 ```powershell
 # Instant project card (<10ms lookup directly from graph)
 python main.py 24HH0043
-python main.py 25H00064
 
 # Natural language query (streams grounded answer in ~500 tok/s)
 python main.py "any projects in bogo?"
@@ -205,7 +201,7 @@ python main.py --instant
 
 ---
 
-### 3. Analytics & Graph Insights
+### 3. Analytics and Graph Insights
 ```powershell
 # Top 10 Contractors by Total Awarded Budget
 python main.py --top-contractors
@@ -213,7 +209,7 @@ python main.py --top-contractors
 # Top 10 Largest Infrastructure Projects by Budget
 python main.py --top-budgets
 
-# Overall Dataset Summary (projects, contractors, total budget)
+# Overall Dataset Summary
 python main.py --summary
 ```
 
@@ -221,7 +217,7 @@ python main.py --summary
 
 ### 4. Data Scraping, Neo4j Ingestion & Geocoding
 ```powershell
-# Ingest/Sync Supabase projects into Neo4j Aura (with full relationships)
+# Ingest Supabase projects into Neo4j Aura
 python main.py --sync
 
 # Scrape projects from BetterGov into Apify & Supabase
@@ -241,14 +237,14 @@ python main.py --setup-local-ai
 
 ### 5. Launch FastAPI Backend Server (REST & SSE Streaming)
 ```powershell
-# Option A: From root using master runner
+# Option A: From backend root using master runner
 python main.py --api
 
-# Option B: Using the backend runner
+# Option B: Using backend runner
 python backend/run.py
 
 # Option C: Using Uvicorn directly
-uvicorn backend.main:app --reload --port 8000
+python -m uvicorn backend.main:create_app --factory --reload --port 8000
 ```
 
 * **Interactive Swagger UI**: `http://localhost:8000/docs`
@@ -257,16 +253,16 @@ uvicorn backend.main:app --reload --port 8000
 
 ---
 
-## 🛡️ Domain Guardrail Architecture
+## Domain Guardrail Architecture
 
-To prevent off-topic prompts, jailbreaks, and hallucinations, the system implements **Defense in Depth**:
+The system implements defensive layers to isolate legitimate infrastructure inquiries from off-topic requests:
 
 ```mermaid
 flowchart TD
     UserQuery["User Query"] --> L1{"Layer 1: Pre-Retrieval Intent Gating (<0.1ms)"}
-    L1 -- "Off-topic (code, trivia, persona)" --> Reject["⚠️ Out of Scope Notice"]
+    L1 -- "Off-topic (code, trivia, persona)" --> Reject["Out of Scope Notice"]
     L1 -- "Valid domain query" --> L2{"Layer 2: Conjunctive Full-Text Search (Neo4j)"}
-    L2 -- "Conjunctive AND (no false hits)" --> L3{"Layer 3: Post-Retrieval Relevance Filter"}
+    L2 -- "Conjunctive AND" --> L3{"Layer 3: Post-Retrieval Relevance Filter"}
     L3 -- "Zero matching domain records" --> Reject
     L3 -- "Valid records found" --> L4{"Layer 4: Context Gating & Task Isolation"}
     L4 -- "Follow-up query" --> ContextInject["Inherit prior context"]
@@ -327,5 +323,6 @@ The test suite validates:
 
 ---
 
-## 📄 License
-MIT License. Open-source for public transparency and civic infrastructure research.
+## License
+
+This project is licensed under the MIT License.

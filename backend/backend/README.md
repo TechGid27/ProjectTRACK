@@ -6,7 +6,7 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 * **⚡ Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
 * **🛡️ 5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
@@ -22,7 +22,7 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 ---
 
-## 📁 Backend Architecture
+## Backend Architecture
 
 ```text
 backend/
@@ -63,7 +63,7 @@ backend/
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### 1. Install Dependencies
 
@@ -75,7 +75,7 @@ pip install -r backend/requirements.txt
 
 ### 2. Configure Environment Variables
 
-The backend automatically reads from your `.env` file in the project root:
+The backend automatically reads from your `.env` file in the project root or backend directory:
 
 ```env
 # Neo4j Database
@@ -104,7 +104,7 @@ Start the development server with auto-reload:
 python backend/run.py
 
 # Option B: Using Uvicorn directly
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn backend.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 Once running:
@@ -114,7 +114,7 @@ Once running:
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
 Run the full automated test suite (18 unit & integration tests):
 
@@ -134,9 +134,9 @@ The test suite validates:
 
 ---
 
-## 📡 API Reference & Endpoints
+## API Reference and Endpoints
 
-### 🩺 Health & Diagnostics
+### Health and Diagnostics
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -146,7 +146,7 @@ The test suite validates:
 
 ---
 
-### 🏗️ Projects
+### Projects
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -156,7 +156,7 @@ The test suite validates:
 
 ---
 
-### 📊 Analytics
+### Analytics
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -166,7 +166,7 @@ The test suite validates:
 
 ---
 
-### 💬 Chat & GraphRAG QA
+### Chat and GraphRAG QA
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -198,6 +198,6 @@ The test suite validates:
 
 ---
 
-## 🛡️ License
+## License
 
 MIT License. Designed for DPWH civil engineering data transparency and infrastructure analytics.

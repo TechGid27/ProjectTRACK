@@ -63,11 +63,99 @@
   fill: #8cae90;
   stroke: #2c3d36;
   stroke-width: 1;
+  cursor: pointer;
   transition: fill 0.15s ease;
 }
 
 .land:hover {
   fill: #9db99c;
+}
+
+.land.land--selected {
+  fill: #6f9c78;
+  stroke: #0c1418;
+  stroke-width: 2;
+}
+
+.bgy {
+  fill: rgba(255, 255, 255, 0.07);
+  stroke: #4b6355;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  cursor: pointer;
+  transition: fill 0.15s ease;
+}
+
+.bgy:hover {
+  fill: rgba(255, 255, 255, 0.16);
+}
+
+.bgy-label {
+  display: block;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #22332b;
+  font-size: 8.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.55);
+}
+
+.bgy-label--place {
+  top: 10px;
+  transform: translate(-50%, 0);
+}
+
+.bgy-dot {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(34, 51, 43, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.road {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.road--major {
+  stroke: #e8b04b;
+  stroke-width: 2;
+}
+
+.road--primary {
+  stroke: #e8c268;
+  stroke-width: 1.8;
+}
+
+.road--secondary {
+  stroke: #f0e6b0;
+  stroke-width: 1.5;
+}
+
+.road--tertiary {
+  stroke: rgba(255, 255, 255, 0.65);
+  stroke-width: 1.2;
+}
+
+.road--minor {
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 0.8;
+}
+
+.project-pin {
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: #0f766e;
+  border: 1.5px solid rgba(255, 244, 232, 0.9);
+  transform: rotate(45deg);
+  animation: pin-glow 2.8s ease-in-out infinite;
 }
 
 .pin {

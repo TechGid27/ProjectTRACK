@@ -1,10 +1,10 @@
-# 📌 ProjectTRACK – Task Reminders & Development Roadmap
+# ProjectTrack – Task Reminders & Development Roadmap
 
-> **Note:** This `INDEX.md` is exclusively for tracking active tasks, feature priorities, and development goals for ProjectTRACK.
+> **Note:** This `Index.md` is exclusively for tracking active tasks, feature priorities, and development goals for ProjectTrack.
 
 ---
 
-## 🔴 High Priority
+## High Priority
 
 - [ ] **2x Zoom Barangay Display & Labels**
   - [ ] Implement dynamic layer switching to show all Barangay boundaries and labels at 2x zoom level (~Zoom 12+).
@@ -16,7 +16,7 @@
 
 ---
 
-## 🟡 Medium Priority
+## Medium Priority
 
 - [ ] **User Authentication**
   - [ ] Integrate **Google OAuth**.
@@ -27,7 +27,7 @@
 
 ---
 
-## 🗺️ Core Map Logic & Interaction Rules
+## Core Map Logic & Interaction Rules
 
 - [ ] **Pinpoint Click Behavior (District & Municipal Level)**
   - [ ] Apply the same project display logic used in Barangays to District and Municipal levels.
@@ -35,7 +35,7 @@
 
 ---
 
-## 🧪 Quality Assurance & Final Phase
+## Quality Assurance & Final Phase
 
 - [ ] **End-to-End System Testing**
   - [ ] Test zoom-based layer switching smoothness and boundary accuracy.

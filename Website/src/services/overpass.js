@@ -7,6 +7,8 @@ const OVERPASS_USER_AGENT = 'ProjectTRACK/1.0 (Cebu infrastructure map)'
 const BARANGAY_MIN_ZOOM = 12
 
 const cache = new Map()
+const FAILURE_TTL = 5 * 60 * 1000
+const failureUntil = new Map()
 
 function pointInRing(point, ring) {
   let inside = false
@@ -84,8 +86,14 @@ export function featureCentroid(feature) {
 }
 
 async function fetchOverpass(query) {
+  const blockedUntil = failureUntil.get('all')
+  if (blockedUntil && Date.now() < blockedUntil) {
+    throw new Error('Overpass cooling down')
+  }
   let lastError = null
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 6000)
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -94,17 +102,22 @@ async function fetchOverpass(query) {
           'User-Agent': OVERPASS_USER_AGENT,
         },
         body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
       })
       if (!res.ok) throw new Error(`Overpass HTTP ${res.status}`)
       const data = await res.json()
       if (!Array.isArray(data.elements)) {
         throw new Error('Overpass returned unexpected payload')
       }
+      failureUntil.delete('all')
       return data
     } catch (error) {
       lastError = error
+    } finally {
+      clearTimeout(timer)
     }
   }
+  failureUntil.set('all', Date.now() + FAILURE_TTL)
   throw lastError ?? new Error('All Overpass endpoints failed')
 }
 

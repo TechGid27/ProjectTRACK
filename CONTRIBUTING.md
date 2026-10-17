@@ -39,8 +39,8 @@ Refer to our modular guides based on your area of contribution:
 * **Architecture & Data Pipeline**: [docs/02-architecture.md](docs/02-architecture.md)
 * **Docker & Local Deployment**: [docs/04-setup-guide.md](docs/04-setup-guide.md)
 * **Web Frontend (React 19 + Leaflet)**: [Website/README.md](Website/README.md)
-* **Mobile Field Client (React Native Expo)**: [Mobile/Readme.md](Mobile/Readme.md)
-* **Backend & Scraper Pipelines**: [backend/README.md](backend/README.md)
+* **Mobile Field Client (React Native Expo)**: [mobile/Readme.md](mobile/Readme.md)
+* **Backend & Scraper Pipelines**: [backend/Readme.md](backend/Readme.md)
 
 ---
 

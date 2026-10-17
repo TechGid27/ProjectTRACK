@@ -70,3 +70,15 @@ export interface LguSummary {
   totalBudget: number;
   activeProjects: number;
 }
+
+export interface Contractor {
+  contractor: string;
+  code?: string;
+  total_budget: number;
+  project_count: number;
+}
+
+export interface FaqItem {
+  q: string;
+  a: string;
+}

@@ -4,71 +4,102 @@ import SignInScreen from '../src/ui/screens/SignInScreen';
 
 describe('SignInScreen Component', () => {
   const mockOnSuccess = jest.fn();
+  const mockOnNavigateToSignUp = jest.fn();
   const mockOnBack = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders sign in fields, roles, and back button', () => {
-    const { getByText, getByPlaceholderText } = render(
-      <SignInScreen onSuccess={mockOnSuccess} onBack={mockOnBack} />,
+  test('renders sign in fields, OAuth options, and strictly lacks role-based "I AM A" selector', () => {
+    const { getByText, getByPlaceholderText, queryByText, getByTestId } = render(
+      <SignInScreen
+        onSuccess={mockOnSuccess}
+        onNavigateToSignUp={mockOnNavigateToSignUp}
+        onBack={mockOnBack}
+      />,
     );
 
-    expect(getByText('ProjectTRACK')).toBeTruthy();
-    expect(getByText('Public Infrastructure Verification')).toBeTruthy();
-    expect(getByPlaceholderText('Enter email or username')).toBeTruthy();
-    expect(getByPlaceholderText('Enter password')).toBeTruthy();
-    expect(getByText('Citizen Verifier')).toBeTruthy();
-    expect(getByText('COA / Auditor')).toBeTruthy();
-    expect(getByText('Contractor')).toBeTruthy();
+    // Header & Brand
+    expect(getByText('Sign in')).toBeTruthy();
+    expect(getByTestId('google-signin-btn')).toBeTruthy();
+    expect(getByTestId('facebook-signin-btn')).toBeTruthy();
+    expect(getByPlaceholderText('you@example.com')).toBeTruthy();
+    expect(getByPlaceholderText('••••••••')).toBeTruthy();
+
+    // STRICT PENTEST / SECURITY CHECK: Confirm role selector is removed
+    expect(queryByText('I AM A')).toBeNull();
+    expect(queryByText('Citizen Verifier')).toBeNull();
+    expect(queryByText('COA / Auditor')).toBeNull();
+    expect(queryByText('Contractor')).toBeNull();
   });
 
   test('shows validation error when submitting with empty credentials', () => {
-    const { getByText } = render(
-      <SignInScreen onSuccess={mockOnSuccess} onBack={mockOnBack} />,
+    const { getByText, getByTestId } = render(
+      <SignInScreen
+        onSuccess={mockOnSuccess}
+        onNavigateToSignUp={mockOnNavigateToSignUp}
+        onBack={mockOnBack}
+      />,
     );
 
-    const signInBtn = getByText('Sign In to Account');
-    fireEvent.press(signInBtn);
+    const submitBtn = getByTestId('submit-signin-btn');
+    fireEvent.press(submitBtn);
 
     expect(getByText('Please enter your email and password.')).toBeTruthy();
     expect(mockOnSuccess).not.toHaveBeenCalled();
   });
 
-  test('calls onSuccess with credentials and selected role when valid', () => {
-    const { getByText, getByPlaceholderText } = render(
-      <SignInScreen onSuccess={mockOnSuccess} onBack={mockOnBack} />,
+  test('calls onSuccess with credentials when valid', () => {
+    const { getByPlaceholderText, getByTestId } = render(
+      <SignInScreen
+        onSuccess={mockOnSuccess}
+        onNavigateToSignUp={mockOnNavigateToSignUp}
+        onBack={mockOnBack}
+      />,
     );
 
-    // Select role "COA / Auditor"
-    const roleBtn = getByText('COA / Auditor');
-    fireEvent.press(roleBtn);
+    const emailInput = getByPlaceholderText('you@example.com');
+    const passInput = getByPlaceholderText('••••••••');
 
-    // Enter email and password
-    const emailInput = getByPlaceholderText('Enter email or username');
-    const passInput = getByPlaceholderText('Enter password');
-
-    fireEvent.changeText(emailInput, 'auditor@coa.gov.ph');
+    fireEvent.changeText(emailInput, 'citizen@cebu.gov.ph');
     fireEvent.changeText(passInput, 'securepassword123');
 
-    const signInBtn = getByText('Sign In to Account');
-    fireEvent.press(signInBtn);
+    const submitBtn = getByTestId('submit-signin-btn');
+    fireEvent.press(submitBtn);
 
     expect(mockOnSuccess).toHaveBeenCalledWith({
-      email: 'auditor@coa.gov.ph',
-      role: 'COA / Auditor',
+      email: 'citizen@cebu.gov.ph',
     });
   });
 
-  test('calls onBack when back button is pressed', () => {
-    const { getByText } = render(
-      <SignInScreen onSuccess={mockOnSuccess} onBack={mockOnBack} />,
+  test('pressing back button triggers onBack callback', () => {
+    const { getByTestId } = render(
+      <SignInScreen
+        onSuccess={mockOnSuccess}
+        onNavigateToSignUp={mockOnNavigateToSignUp}
+        onBack={mockOnBack}
+      />,
     );
 
-    const backBtn = getByText('← Back to Map');
+    const backBtn = getByTestId('back-to-map-btn');
     fireEvent.press(backBtn);
 
     expect(mockOnBack).toHaveBeenCalledTimes(1);
+  });
+
+  test('pressing "Create an account" triggers onNavigateToSignUp callback', () => {
+    const { getByTestId } = render(
+      <SignInScreen
+        onSuccess={mockOnSuccess}
+        onNavigateToSignUp={mockOnNavigateToSignUp}
+        onBack={mockOnBack}
+      />,
+    );
+
+    const signUpLink = getByTestId('navigate-to-signup-btn');
+    fireEvent.press(signUpLink);
+
+    expect(mockOnNavigateToSignUp).toHaveBeenCalledTimes(1);
   });
 });

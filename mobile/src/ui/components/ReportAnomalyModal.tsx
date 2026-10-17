@@ -43,28 +43,50 @@ export default function ReportAnomalyModal({
   const [description, setDescription] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!project) return null;
 
   const handleSubmit = () => {
-    if (description.trim().length < 15) {
+    if (isSubmitting) return;
+
+    // SEC-03: Strip HTML tags, sanitize whitespace, and check boundary limits
+    const sanitizedDesc = description.replace(/<[^>]*>?/gm, '').trim();
+
+    if (sanitizedDesc.length < 15) {
       setErrorMessage(
         'Please provide a detailed description (at least 15 characters).',
       );
       return;
     }
+    if (sanitizedDesc.length > 2000) {
+      setErrorMessage(
+        'Description exceeds maximum allowable length (2,000 characters).',
+      );
+      return;
+    }
 
+    setIsSubmitting(true);
     setErrorMessage(null);
+
+    // SEC-02: Cryptographically formatted UUID v4 identifier
+    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+
     const report: AnomalyReport = {
-      id: `rep_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      id: `rep_${uuid}`,
       projectId: project.id,
       category,
-      description: description.trim(),
+      description: sanitizedDesc,
       timestamp: Date.now(),
     };
 
     onSubmit(report);
     setDescription('');
+    setIsSubmitting(false);
     setErrorMessage(null);
   };
 

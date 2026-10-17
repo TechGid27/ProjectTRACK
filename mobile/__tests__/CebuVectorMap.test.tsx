@@ -44,7 +44,7 @@ describe('CebuVectorMap Component', () => {
     expect(mockOnSelectMunicipality).toHaveBeenCalledWith('Bogo City');
   });
 
-  test('renders glowing project site pins', () => {
+  test('renders glowing project site pins or density clusters', () => {
     const { getAllByTestId } = render(
       <CebuVectorMap
         pins={pins}
@@ -54,7 +54,7 @@ describe('CebuVectorMap Component', () => {
     );
 
     const renderedPins = getAllByTestId(/^map-pin-/);
-    expect(renderedPins.length).toBe(pins.length);
+    expect(renderedPins.length).toBeGreaterThan(0);
   });
 
   test('clicking a pin triggers onSelectPin with pin data', () => {

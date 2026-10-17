@@ -10,8 +10,10 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/ui/screens/HomeScreen';
 import SignInScreen from './src/ui/screens/SignInScreen';
+import SignUpScreen from './src/ui/screens/SignUpScreen';
+import ContractorRankingScreen from './src/ui/screens/ContractorRankingScreen';
 
-type ScreenName = 'home' | 'signin';
+type ScreenName = 'home' | 'contractors' | 'signin' | 'signup';
 
 const isWeb = Platform.OS === 'web';
 
@@ -88,14 +90,17 @@ export class ErrorBoundary extends React.Component<
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('home');
-  const [, setCurrentUser] = useState<{
+  const [currentUser, setCurrentUser] = useState<{
     email: string;
-    role: string;
   } | null>(null);
 
-  const handleSignInSuccess = (user: { email: string; role: string }) => {
+  const handleSignInSuccess = (user: { email: string }) => {
     setCurrentUser(user);
     setCurrentScreen('home');
+  };
+
+  const handleSignOut = () => {
+    setCurrentUser(null);
   };
 
   const initialMetrics = isWeb
@@ -110,14 +115,31 @@ export default function App() {
       <SafeAreaProvider initialMetrics={initialMetrics} style={styles.safeArea}>
         <View style={styles.container}>
           <StatusBar barStyle="light-content" backgroundColor="#1f3d3c" />
-          {currentScreen === 'home' ? (
+          {currentScreen === 'home' && (
             <HomeScreen
+              currentUser={currentUser}
               onNavigateToSignIn={() => setCurrentScreen('signin')}
+              onNavigateToContractors={() => setCurrentScreen('contractors')}
+              onSignOut={handleSignOut}
             />
-          ) : (
+          )}
+          {currentScreen === 'contractors' && (
+            <ContractorRankingScreen
+              onBackToMap={() => setCurrentScreen('home')}
+            />
+          )}
+          {currentScreen === 'signin' && (
             <SignInScreen
               onSuccess={handleSignInSuccess}
+              onNavigateToSignUp={() => setCurrentScreen('signup')}
               onBack={() => setCurrentScreen('home')}
+            />
+          )}
+          {currentScreen === 'signup' && (
+            <SignUpScreen
+              onSuccess={handleSignInSuccess}
+              onNavigateToSignIn={() => setCurrentScreen('signin')}
+              onBackToMap={() => setCurrentScreen('home')}
             />
           )}
         </View>

@@ -142,4 +142,51 @@ describe('LocationIntelSheet Component', () => {
 
     expect(getByText('No civil works projects recorded for this area.')).toBeTruthy();
   });
+
+  test('tapping field audit button triggers onFieldAuditPress with selected project', () => {
+    const mockOnFieldAuditPress = jest.fn();
+    const { getByTestId } = render(
+      <LocationIntelSheet
+        lguName="Bogo City"
+        projects={sampleProjects}
+        onSelectProject={mockOnSelectProject}
+        onReportAnomaly={mockOnReportAnomaly}
+        onFieldAuditPress={mockOnFieldAuditPress}
+        onClose={mockOnClose}
+      />,
+    );
+
+    const auditBtn = getByTestId('field-audit-btn-24HD0012');
+    fireEvent.press(auditBtn);
+
+    expect(mockOnFieldAuditPress).toHaveBeenCalledWith(sampleProjects[0]);
+  });
+
+  test('tapping confirm and dispute crowdsource buttons updates counters', () => {
+    const { getByTestId, getByText } = render(
+      <LocationIntelSheet
+        lguName="Bogo City"
+        projects={sampleProjects}
+        onSelectProject={mockOnSelectProject}
+        onReportAnomaly={mockOnReportAnomaly}
+        onClose={mockOnClose}
+      />,
+    );
+
+    const confirmBtn = getByTestId('confirm-vote-btn-24HD0012');
+    const disputeBtn = getByTestId('dispute-vote-btn-24HD0012');
+
+    // Default confirm vote is 14
+    expect(getByText('👍 14')).toBeTruthy();
+
+    fireEvent.press(confirmBtn);
+    expect(getByText('👍 15')).toBeTruthy();
+
+    // Default dispute vote is 1
+    expect(getByText('👎 1')).toBeTruthy();
+
+    fireEvent.press(disputeBtn);
+    expect(getByText('👎 2')).toBeTruthy();
+  });
 });
+

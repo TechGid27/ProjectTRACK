@@ -113,3 +113,111 @@ export function normalizeLguName(name: string): string {
   }
   return trimmed;
 }
+
+export interface GeofenceResult {
+  isInside: boolean;
+  distanceMeters: number;
+}
+
+/**
+ * Checks if a user's location is within a defined geofence radius (default 150m) of a target coordinate.
+ */
+export function checkGeofenceProximity(
+  targetLat: number,
+  targetLng: number,
+  userLat: number,
+  userLng: number,
+  maxRadiusMeters: number = 150,
+): GeofenceResult {
+  const distanceKm = haversineDistance(userLat, userLng, targetLat, targetLng);
+  const distanceMeters = Math.round(distanceKm * 1000);
+  return {
+    isInside: distanceMeters <= maxRadiusMeters,
+    distanceMeters,
+  };
+}
+
+export interface ClusteredPinItem {
+  id: string;
+  isCluster: boolean;
+  count: number;
+  pinIds: string[];
+  x: number;
+  y: number;
+  pins: any[];
+}
+
+/**
+ * Clusters rendered SVG pins based on pixel proximity when map zoom scale is low.
+ */
+export function clusterPins(
+  renderedPins: any[],
+  scale: number,
+  distanceThreshold: number = 28,
+): ClusteredPinItem[] {
+  if (scale > 1.25 || renderedPins.length <= 4) {
+    return renderedPins.map((p) => ({
+      id: p.id,
+      isCluster: false,
+      count: 1,
+      pinIds: [p.id],
+      x: p.x,
+      y: p.y,
+      pins: [p],
+    }));
+  }
+
+  const clusters: ClusteredPinItem[] = [];
+  const visited = new Set<string>();
+
+  for (let i = 0; i < renderedPins.length; i++) {
+    const current = renderedPins[i];
+    if (visited.has(current.id)) continue;
+
+    const clusterGroup = [current];
+    visited.add(current.id);
+
+    for (let j = i + 1; j < renderedPins.length; j++) {
+      const other = renderedPins[j];
+      if (visited.has(other.id)) continue;
+
+      const dx = current.x - other.x;
+      const dy = current.y - other.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist <= distanceThreshold) {
+        clusterGroup.push(other);
+        visited.add(other.id);
+      }
+    }
+
+    if (clusterGroup.length > 1) {
+      const avgX =
+        clusterGroup.reduce((sum, p) => sum + p.x, 0) / clusterGroup.length;
+      const avgY =
+        clusterGroup.reduce((sum, p) => sum + p.y, 0) / clusterGroup.length;
+
+      clusters.push({
+        id: `cluster-${clusterGroup.map((p) => p.id).join('-')}`,
+        isCluster: true,
+        count: clusterGroup.length,
+        pinIds: clusterGroup.map((p) => p.id),
+        x: avgX,
+        y: avgY,
+        pins: clusterGroup,
+      });
+    } else {
+      clusters.push({
+        id: current.id,
+        isCluster: false,
+        count: 1,
+        pinIds: [current.id],
+        x: current.x,
+        y: current.y,
+        pins: [current],
+      });
+    }
+  }
+
+  return clusters;
+}

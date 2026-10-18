@@ -16,6 +16,8 @@ import {
   fetchOsmContextCached,
   featureCentroid,
 } from '../../services/overpass'
+import { useMapContext } from './MapContext'
+import MapLegend from './MapLegend'
 
 const BOUNDS = [
   [9.32, 123.2],
@@ -68,6 +70,31 @@ const projectPinCompletedIcon = divIcon({
   iconAnchor: [6, 6],
 })
 
+function getSpatialPinIcon(status, isHighlighted) {
+  const s = (status || '').toLowerCase()
+  let toneClass = 'pin--slate'
+  if (s.includes('complete') || s.includes('100%')) {
+    toneClass = 'pin--emerald'
+  } else if (s.includes('ongoing') || s.includes('on-going')) {
+    toneClass = 'pin--amber'
+  } else if (
+    s.includes('bidding') ||
+    s.includes('procurement') ||
+    s.includes('planning')
+  ) {
+    toneClass = 'pin--cyan'
+  }
+
+  const highlightClass = isHighlighted ? ' pin--highlighted' : ''
+
+  return divIcon({
+    className: '',
+    html: `<span class="project-pin ${toneClass}${highlightClass}"></span>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  })
+}
+
 function haversineKm(a, b) {
   const R = 6371
   const toRad = (deg) => (deg * Math.PI) / 180
@@ -107,6 +134,21 @@ function MapLabels() {
       container.classList.remove('show-labels')
     }
   }, [map])
+
+  return null
+}
+
+function MapContextCameraController() {
+  const map = useMap()
+  const { cameraTarget } = useMapContext()
+
+  useEffect(() => {
+    if (!cameraTarget?.center) return
+    map.flyTo(cameraTarget.center, cameraTarget.zoom ?? 13, {
+      duration: 1.5,
+      easeLinearity: 0.25,
+    })
+  }, [map, cameraTarget])
 
   return null
 }
@@ -1549,6 +1591,14 @@ function MapControls() {
 }
 
 function CebuMap() {
+  const {
+    activeLocation: spatialLocation,
+    clearSpatialData,
+    projectDots,
+    activeStatusFilter,
+    highlightedProjectId,
+  } = useMapContext()
+
   const [intelOpen, setIntelOpen] = useState(true)
   const [selected, setSelected] = useState(null)
   const [zoom, setZoom] = useState(8)
@@ -1565,6 +1615,78 @@ function CebuMap() {
     error: false,
   })
 
+  const filteredSpatialDots = useMemo(() => {
+    if (!projectDots || projectDots.length === 0) return []
+    if (activeStatusFilter === 'all') return projectDots
+    return projectDots.filter((d) => {
+      const s = (d.status || '').toLowerCase()
+      if (activeStatusFilter === 'completed') {
+        return s.includes('complete') || s.includes('100%')
+      }
+      if (activeStatusFilter === 'ongoing') {
+        return s.includes('ongoing') || s.includes('on-going')
+      }
+      if (activeStatusFilter === 'procurement') {
+        return (
+          s.includes('bidding') ||
+          s.includes('procurement') ||
+          s.includes('planning')
+        )
+      }
+      return true
+    })
+  }, [projectDots, activeStatusFilter])
+
+  // Deterministic micro-dispersion for projects sharing exact coordinates
+  const displaySpatialDots = useMemo(() => {
+    if (!filteredSpatialDots || filteredSpatialDots.length === 0) return []
+
+    const coordGroups = new Map()
+    for (const dot of filteredSpatialDots) {
+      if (dot.latitude == null || dot.longitude == null) continue
+      const key = `${Number(dot.latitude).toFixed(4)},${Number(dot.longitude).toFixed(4)}`
+      if (!coordGroups.has(key)) coordGroups.set(key, [])
+      coordGroups.get(key).push(dot)
+    }
+
+    const dispersed = []
+    for (const [, group] of coordGroups) {
+      if (group.length === 1) {
+        dispersed.push({
+          ...group[0],
+          displayLat: group[0].latitude,
+          displayLng: group[0].longitude,
+        })
+      } else {
+        // Spread colliding points in a ~30m radius fan-out
+        const radiusMeters = 30
+        const dLat = radiusMeters / 111111
+        group.forEach((dot, idx) => {
+          const angle = (idx * 2 * Math.PI) / group.length
+          const cosLat = Math.cos((dot.latitude * Math.PI) / 180) || 1
+          const dLng = dLat / cosLat
+          dispersed.push({
+            ...dot,
+            displayLat: dot.latitude + dLat * Math.sin(angle),
+            displayLng: dot.longitude + dLng * Math.cos(angle),
+          })
+        })
+      }
+    }
+    return dispersed
+  }, [filteredSpatialDots])
+
+  const isSpatialActive = useMemo(() => {
+    if (!displaySpatialDots || displaySpatialDots.length === 0) return false
+    if (!spatialLocation) return false
+    if (selected?.kind === 'lgu') {
+      const sName = selected.name.toLowerCase()
+      const spName = spatialLocation.toLowerCase()
+      return sName.includes(spName) || spName.includes(sName)
+    }
+    return !selected
+  }, [displaySpatialDots, spatialLocation, selected])
+
   const onZoom = useCallback((value) => setZoom(value), [])
 
   useEffect(() => {
@@ -1577,23 +1699,45 @@ function CebuMap() {
     }
   }, [])
 
+  const lastRequestedLguRef = useRef(null)
+
   useEffect(() => {
     function onSelectLgu(event) {
-      const name = event.detail
-      if (!name || !municipalities) return
-      const feature = municipalities.features.find(
-        (f) => f.properties.name === name,
-      )
+      const name = event?.detail
+      if (!name) return
+      lastRequestedLguRef.current = name
+      if (!municipalities) return
+      const target = String(name).trim().toLowerCase()
+      const feature = municipalities.features.find((f) => {
+        const fn = f.properties.name.toLowerCase()
+        return fn === target || target.includes(fn) || fn.includes(target)
+      })
       if (!feature) return
       const [lng, lat] = feature.properties.label
       setHighlightEntity(null)
-      setSelected({ kind: 'lgu', name, lat, lng, feature })
+      setSelected({ kind: 'lgu', name: feature.properties.name, lat, lng, feature })
       setIntelOpen(true)
     }
     window.addEventListener('projecttrack:select-lgu', onSelectLgu)
+    if (municipalities && lastRequestedLguRef.current) {
+      onSelectLgu({ detail: lastRequestedLguRef.current })
+      lastRequestedLguRef.current = null
+    }
     return () =>
       window.removeEventListener('projecttrack:select-lgu', onSelectLgu)
   }, [municipalities])
+
+  useEffect(() => {
+    function onOpenProject(event) {
+      const pid = event.detail
+      if (!pid) return
+      setHighlightEntity(pid)
+      setDetailEntity(pid)
+    }
+    window.addEventListener('projecttrack:open-project', onOpenProject)
+    return () =>
+      window.removeEventListener('projecttrack:open-project', onOpenProject)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -1674,12 +1818,14 @@ function CebuMap() {
       lng: pin.position[1],
     })
     setIntelOpen(true)
+    clearSpatialData()
   }
 
   function selectLgu(feature) {
     const name = feature.properties.name
     if (selected?.kind === 'lgu' && selected.name === name) {
       setSelected(null)
+      clearSpatialData()
       return
     }
     const [lng, lat] = feature.properties.label
@@ -1692,6 +1838,13 @@ function CebuMap() {
       feature,
     })
     setIntelOpen(true)
+    if (
+      spatialLocation &&
+      !name.toLowerCase().includes(spatialLocation.toLowerCase()) &&
+      !spatialLocation.toLowerCase().includes(name.toLowerCase())
+    ) {
+      clearSpatialData()
+    }
   }
 
   const showDetail =
@@ -1755,11 +1908,14 @@ function CebuMap() {
       >
         {municipalities && (
           <GeoJSON
+            key={`munis-${selected?.name || spatialLocation || 'none'}`}
             data={municipalities}
             style={(feature) => ({
               className:
-                feature.properties.name === selected?.name &&
-                selected?.kind === 'lgu'
+                (feature.properties.name === selected?.name &&
+                selected?.kind === 'lgu') ||
+                (spatialLocation &&
+                  feature.properties.name.toLowerCase().includes(spatialLocation.toLowerCase()))
                   ? 'land land--selected'
                   : 'land',
               fillOpacity: 1,
@@ -1785,55 +1941,100 @@ function CebuMap() {
         <MapLabels />
         <MapControls />
         <MapCamera target={selected} />
-        <MapBackgroundClick onClear={() => setSelected(null)} />
+        <MapContextCameraController />
+        <MapBackgroundClick
+          onClear={() => {
+            setSelected(null)
+            clearSpatialData()
+          }}
+        />
         <ZoomWatcher onZoom={onZoom} />
         <BarangayLayer target={selected} visible={showDetail} zoom={zoom} />
-        {showProjectPins &&
-          selectedProjects.map((project) => {
-            const pct = parseStatus(project.status).pct
-            return (
-              <Marker
-                key={project.entity}
-                position={[project.displayLat, project.displayLng]}
-                icon={
-                  isCompletedStatus(project.status)
-                    ? projectPinCompletedIcon
-                    : projectPinIcon
-                }
-                alt={project.entity}
-                eventHandlers={{
-                  click(event) {
-                    DomEvent.stopPropagation(event.originalEvent)
-                    setIntelOpen(true)
-                    if (project.count > 1) {
-                      setCoordGroup({
-                        key: project.key,
-                        projects: project.group,
-                      })
-                    } else {
-                      setHighlightEntity(project.entity)
-                      openProjectDetail(project.entity)
-                    }
-                  },
-                }}
-              >
-                <Tooltip
-                  direction="top"
-                  offset={[0, -8]}
-                  opacity={1}
-                  className="pin-label"
+        
+        {/* Synchronized AI Copilot Spatial Dots */}
+        {isSpatialActive
+          ? displaySpatialDots.map((dot) => {
+              const isHighlighted = highlightedProjectId === dot.id
+              const bStr =
+                dot.budget ||
+                (dot.budget_numeric != null
+                  ? `₱${(dot.budget_numeric / 1e6).toFixed(1)}M`
+                  : '')
+              return (
+                <Marker
+                  key={`spatial-${dot.id}`}
+                  position={[dot.displayLat, dot.displayLng]}
+                  icon={getSpatialPinIcon(dot.status, isHighlighted)}
+                  alt={dot.id}
+                  eventHandlers={{
+                    click(event) {
+                      DomEvent.stopPropagation(event.originalEvent)
+                      setHighlightEntity(dot.id)
+                      openProjectDetail(dot.id)
+                    },
+                  }}
                 >
-                  {project.count > 1
-                    ? `${project.count} projects · ${project.entity}+`
-                    : project.entity}
-                  {pct != null ? ` · ${pct}%` : ''}
-                  {project.budgetNum != null
-                    ? ` · ₱${(project.budgetNum / 1e6).toFixed(1)}M`
-                    : ''}
-                </Tooltip>
-              </Marker>
-            )
-          })}
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -8]}
+                    opacity={1}
+                    className="pin-label"
+                  >
+                    <strong>{dot.id}</strong>
+                    {bStr ? ` · ${bStr}` : ''}
+                    {dot.barangay ? ` · Brgy. ${dot.barangay}` : ''}
+                    {dot.status ? ` · ${dot.status}` : ''}
+                  </Tooltip>
+                </Marker>
+              )
+            })
+          : showProjectPins &&
+            selectedProjects.map((project) => {
+              const pct = parseStatus(project.status).pct
+              return (
+                <Marker
+                  key={project.entity}
+                  position={[project.displayLat, project.displayLng]}
+                  icon={
+                    isCompletedStatus(project.status)
+                      ? projectPinCompletedIcon
+                      : projectPinIcon
+                  }
+                  alt={project.entity}
+                  eventHandlers={{
+                    click(event) {
+                      DomEvent.stopPropagation(event.originalEvent)
+                      setIntelOpen(true)
+                      if (project.count > 1) {
+                        setCoordGroup({
+                          key: project.key,
+                          projects: project.group,
+                        })
+                      } else {
+                        setHighlightEntity(project.entity)
+                        openProjectDetail(project.entity)
+                      }
+                    },
+                  }}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -8]}
+                    opacity={1}
+                    className="pin-label"
+                  >
+                    {project.count > 1
+                      ? `${project.count} projects · ${project.entity}+`
+                      : project.entity}
+                    {pct != null ? ` · ${pct}%` : ''}
+                    {project.budgetNum != null
+                      ? ` · ₱${(project.budgetNum / 1e6).toFixed(1)}M`
+                      : ''}
+                  </Tooltip>
+                </Marker>
+              )
+            })}
+        <MapLegend />
         {intelOpen ? (
           <LocationIntelPanel
             key={selected ? `${selected.kind}:${selected.name}` : 'overview'}

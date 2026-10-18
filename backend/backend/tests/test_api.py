@@ -232,6 +232,29 @@ class TestBackendAPI(unittest.TestCase):
             self.assertIn("latitude", breakdown[0])
             self.assertIn("longitude", breakdown[0])
 
+    def test_chat_spatial_context(self):
+        """Verify chat returns spatial context and coordinates for location query."""
+        resp = self.client.post("/api/chat", json={
+            "message": "What are the projects in Cordova?",
+            "mode": "instant"
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("spatial", data)
+        self.assertIsNotNone(data["spatial"])
+        spatial = data["spatial"]
+        self.assertEqual(spatial["target_location"], "Cordova")
+        self.assertIsNotNone(spatial["center"])
+        self.assertEqual(len(spatial["center"]), 2)
+        self.assertGreater(spatial["total_count"], 0)
+        self.assertIsInstance(spatial["projects"], list)
+        if spatial["projects"]:
+            p = spatial["projects"][0]
+            self.assertIn("id", p)
+            self.assertIn("latitude", p)
+            self.assertIn("longitude", p)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -3,8 +3,10 @@ import Layout from '../layout/Layout'
 import { fetchSummary } from '../services/api'
 import { CEBU_LGU_NAMES } from '../data/cebuLguNames'
 
+import { MapProvider } from '../features/map/MapContext'
+
 const CebuMap = lazy(() => import('../features/map/CebuMap'))
-const ChatBot = lazy(() => import('../features/chat/ChatBot'))
+const ChatCopilot = lazy(() => import('../features/chat/ChatCopilot'))
 
 const CITY_RE = /^(City of |.* City$)/
 
@@ -123,7 +125,8 @@ function HomePage() {
   const townCount = names.length - cities
 
   return (
-    <Layout>
+    <MapProvider>
+      <Layout>
       <Suspense
         fallback={
           <div className="grid h-[80vh] min-h-96 w-full place-items-center bg-gray-a2 lg:h-[91vh]">
@@ -234,11 +237,12 @@ function HomePage() {
         </div>
       </section>
       <Suspense fallback={null}>
-        <ChatBot />
+        <ChatCopilot />
       </Suspense>
       {aboutOpen && <AboutMapModal onClose={() => setAboutOpen(false)} />}
     </Layout>
-  )
+  </MapProvider>
+)
 }
 
 export default HomePage

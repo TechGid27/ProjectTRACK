@@ -170,17 +170,22 @@ class Neo4jService:
             return [], 0, 0.0
 
         cypher_count = """
-        MATCH (p:Project)-[:LOCATED_IN]->(loc:Location)
-        WHERE toLower(loc.name) CONTAINS toLower($loc)
+        MATCH (p:Project)
+        WHERE toLower(p.municipality) = toLower($loc)
+           OR toLower($loc) CONTAINS toLower(p.municipality)
+           OR toLower(p.municipality) CONTAINS toLower($loc)
         RETURN count(DISTINCT p) AS cnt, sum(p.budget_numeric) AS total_budget
         """
         cypher_samples = """
-        MATCH (p:Project)-[:LOCATED_IN]->(loc:Location)
-        WHERE toLower(loc.name) CONTAINS toLower($loc)
-        WITH DISTINCT p, loc
+        MATCH (p:Project)
+        WHERE toLower(p.municipality) = toLower($loc)
+           OR toLower($loc) CONTAINS toLower(p.municipality)
+           OR toLower(p.municipality) CONTAINS toLower($loc)
+        WITH DISTINCT p
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
         OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
+        OPTIONAL MATCH (p)-[:LOCATED_IN]->(loc:Location)
         RETURN p.project_id AS entity,
                ['Project'] AS labels,
                p.description AS description,
@@ -188,14 +193,14 @@ class Neo4jService:
                p.budget_numeric AS budget_num,
                p.status AS status,
                p.url AS url,
-               coalesce(p.latitude, loc.latitude) AS latitude,
-               coalesce(p.longitude, loc.longitude) AS longitude,
-               coalesce(p.municipality, loc.municipality) AS municipality,
-               coalesce(p.barangay, loc.barangay) AS barangay,
+               p.latitude AS latitude,
+               p.longitude AS longitude,
+               p.municipality AS municipality,
+               p.barangay AS barangay,
                coalesce(p.formatted_address, loc.formatted_address) AS formatted_address,
                1.0 AS score,
                [
-                   {rel: 'LOCATED_IN', target: loc.name, desc: loc.name},
+                   {rel: 'LOCATED_IN', target: coalesce(loc.name, p.municipality), desc: coalesce(loc.name, p.municipality)},
                    {rel: 'CONTRACTED_TO', target: coalesce(c.name, 'N/A'), desc: coalesce(c.name, 'N/A')}
                ] AS relations
         """
@@ -307,7 +312,12 @@ class Neo4jService:
         cypher = """
         MATCH (p:Project)
         WHERE p.latitude IS NOT NULL
-          AND ($muni IS NULL OR toLower(p.municipality) CONTAINS toLower($muni) OR toLower(p.location) CONTAINS toLower($muni))
+          AND (
+            $muni IS NULL
+            OR toLower(p.municipality) = toLower($muni)
+            OR toLower($muni) CONTAINS toLower(p.municipality)
+            OR toLower(p.municipality) CONTAINS toLower($muni)
+          )
         OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
         RETURN p.project_id AS id,
                p.latitude AS latitude,
@@ -315,6 +325,7 @@ class Neo4jService:
                p.municipality AS municipality,
                p.barangay AS barangay,
                p.formatted_address AS formatted_address,
+               p.description AS description,
                p.category AS category,
                p.status AS status,
                p.budget_raw AS budget,

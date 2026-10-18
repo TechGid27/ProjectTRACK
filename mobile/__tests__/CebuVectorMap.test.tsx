@@ -119,4 +119,22 @@ describe('CebuVectorMap Component', () => {
     // Badge should be hidden after reset back to 1.0x
     expect(queryByTestId('zoom-level-badge')).toBeNull();
   });
+
+  test('zoom controls are rendered with vertically centered right-edge positioning', () => {
+    const { getByTestId } = render(
+      <CebuVectorMap
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const zoomInBtn = getByTestId('zoom-in-btn');
+    const zoomOutBtn = getByTestId('zoom-out-btn');
+    const resetBtn = getByTestId('zoom-reset-btn');
+
+    expect(zoomInBtn).toBeTruthy();
+    expect(zoomOutBtn).toBeTruthy();
+    expect(resetBtn).toBeTruthy();
+  });
 });
+

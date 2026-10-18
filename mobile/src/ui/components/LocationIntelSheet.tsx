@@ -6,14 +6,19 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { ProjectDetail, ProjectStatus } from '../../core/types';
 import { formatCurrencyPHP } from '../../core/geoUtils';
 import { haptics } from '../../services/haptics';
 
-interface LocationIntelSheetProps {
+export type SheetDisplayState = 'expanded' | 'minimized' | 'hidden';
+
+export interface LocationIntelSheetProps {
   lguName: string;
   projects: ProjectDetail[];
+  sheetState?: SheetDisplayState;
+  onStateChange?: (state: SheetDisplayState) => void;
   onSelectProject: (project: ProjectDetail) => void;
   onReportAnomaly: (lguName: string) => void;
   onFieldAuditPress?: (project: ProjectDetail) => void;
@@ -25,15 +30,29 @@ type FilterOption = 'All' | ProjectStatus;
 export default function LocationIntelSheet({
   lguName,
   projects = [],
+  sheetState,
+  onStateChange,
   onSelectProject,
   onReportAnomaly,
   onFieldAuditPress,
   onClose,
 }: LocationIntelSheetProps) {
+  const [internalState, setInternalState] = useState<SheetDisplayState>('expanded');
+  const currentState = sheetState ?? internalState;
+
   const [selectedFilter, setSelectedFilter] = useState<FilterOption>('All');
   const [votesState, setVotesState] = useState<
     Record<string, { confirm: number; dispute: number; userVoted?: 'confirm' | 'dispute' }>
   >({});
+
+  const handleStateChange = (nextState: SheetDisplayState) => {
+    haptics.triggerLightImpact();
+    setInternalState(nextState);
+    onStateChange?.(nextState);
+    if (nextState === 'hidden') {
+      onClose?.();
+    }
+  };
 
   // Compute summary stats
   const totalBudget = useMemo(() => {
@@ -69,37 +88,163 @@ export default function LocationIntelSheet({
     }
   };
 
+  const handleVote = (
+    projectId: string,
+    voteType: 'confirm' | 'dispute',
+  ) => {
+    haptics.triggerSelection();
+    setVotesState((prev) => {
+      const current = prev[projectId] || { confirm: 14, dispute: 1 };
+      if (current.userVoted === voteType) {
+        return {
+          ...prev,
+          [projectId]: {
+            ...current,
+            [voteType]: current[voteType] - 1,
+            userVoted: undefined,
+          },
+        };
+      }
+
+      const prevVote = current.userVoted;
+      let newConfirm = current.confirm;
+      let newDispute = current.dispute;
+
+      if (prevVote === 'confirm') newConfirm -= 1;
+      if (prevVote === 'dispute') newDispute -= 1;
+
+      if (voteType === 'confirm') newConfirm += 1;
+      if (voteType === 'dispute') newDispute += 1;
+
+      return {
+        ...prev,
+        [projectId]: {
+          confirm: newConfirm,
+          dispute: newDispute,
+          userVoted: voteType,
+        },
+      };
+    });
+  };
+
   const { height: windowHeight } = useWindowDimensions();
   const sheetMaxHeight = Math.max(260, (windowHeight || 600) * 0.48);
 
+  // 1. If Hidden, do not render sheet
+  if (currentState === 'hidden') {
+    return null;
+  }
+
+  // 2. If Minimized, render compact bottom peek bar
+  if (currentState === 'minimized') {
+    return (
+      <View
+        style={styles.minimizedContainer}
+        testID="location-intel-sheet-minimized"
+      >
+        <TouchableOpacity
+          style={styles.handleBarContainer}
+          onPress={() => handleStateChange('expanded')}
+          activeOpacity={0.7}
+          accessibilityLabel="Expand details sheet"
+        >
+          <View style={styles.handleBar} />
+        </TouchableOpacity>
+
+        <View style={styles.minimizedRow}>
+          <TouchableOpacity
+            style={styles.minimizedTextGroup}
+            onPress={() => handleStateChange('expanded')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.minimizedLguTitle} numberOfLines={1}>
+              📍 {lguName}
+            </Text>
+            <Text style={styles.minimizedStatsSubtitle} numberOfLines={1}>
+              {projects.length} Projects · {formatCurrencyPHP(totalBudget).split('.')[0]} · {delayedCount} Delayed
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.minimizedActions}>
+            <TouchableOpacity
+              style={styles.expandPillBtn}
+              onPress={() => handleStateChange('expanded')}
+              activeOpacity={0.8}
+              testID="sheet-expand-btn"
+              accessibilityLabel="Expand details sheet"
+            >
+              <Text style={styles.expandPillText}>▲ Expand</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sheetCloseBtn}
+              onPress={() => handleStateChange('hidden')}
+              activeOpacity={0.8}
+              testID="sheet-hide-btn"
+              accessibilityLabel="Hide details"
+            >
+              <Text style={styles.sheetCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // 3. Expanded Sheet
   return (
     <View
       style={[styles.container, { maxHeight: sheetMaxHeight }]}
       testID="location-intel-sheet"
     >
-      {/* Draggable Handle Bar */}
+      {/* Draggable Handle Bar (toggles minimize) */}
       <TouchableOpacity
         style={styles.handleBarContainer}
-        onPress={onClose}
+        onPress={() => handleStateChange('minimized')}
         activeOpacity={0.7}
+        accessibilityLabel="Minimize details sheet"
       >
         <View style={styles.handleBar} />
       </TouchableOpacity>
 
-      {/* Header with Title and Anomaly Action */}
+      {/* Header with Title and Actions */}
       <View style={styles.headerRow}>
         <View style={styles.titleArea}>
           <Text style={styles.subTitle}>LOCATION INTEL</Text>
-          <Text style={styles.lguTitle}>{lguName}</Text>
+          <Text style={styles.lguTitle} numberOfLines={1}>
+            {lguName}
+          </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.anomalyButton}
-          onPress={() => onReportAnomaly(lguName)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.anomalyButtonText}>⚠️ Report Anomaly</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            style={styles.anomalyButton}
+            onPress={() => onReportAnomaly(lguName)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.anomalyButtonText}>⚠️ Report Anomaly</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.minimizeBtn}
+            onPress={() => handleStateChange('minimized')}
+            activeOpacity={0.8}
+            testID="sheet-minimize-btn"
+            accessibilityLabel="Minimize sheet"
+          >
+            <Text style={styles.minimizeBtnText}>▼</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.sheetCloseBtn}
+            onPress={() => handleStateChange('hidden')}
+            activeOpacity={0.8}
+            testID="sheet-close-btn"
+            accessibilityLabel="Close sheet"
+          >
+            <Text style={styles.sheetCloseText}>✕</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Key Metric Stats Grid */}
@@ -200,13 +345,14 @@ export default function LocationIntelSheet({
         {filteredProjects.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              No civil works projects recorded for this area.
+              No infrastructure projects found for this filter in {lguName}.
             </Text>
           </View>
         ) : (
           filteredProjects.map((project) => {
             const statusStyle = getStatusColor(project.status);
-            const cardVotes = votesState[project.id] || { confirm: 14, dispute: 1 };
+            const votes = votesState[project.id] || { confirm: 14, dispute: 1 };
+
             return (
               <TouchableOpacity
                 key={project.id}
@@ -226,7 +372,10 @@ export default function LocationIntelSheet({
                     ]}
                   >
                     <Text
-                      style={[styles.statusBadgeText, { color: statusStyle.text }]}
+                      style={[
+                        styles.statusBadgeText,
+                        { color: statusStyle.text },
+                      ]}
                     >
                       {project.status}
                     </Text>
@@ -237,27 +386,25 @@ export default function LocationIntelSheet({
                   {project.title}
                 </Text>
 
-                <View style={styles.cardFooter}>
-                  <Text style={styles.contractorName} numberOfLines={1}>
-                    🏢 {project.contractor}
-                  </Text>
-                  <Text style={styles.projectBudget}>
-                    {formatCurrencyPHP(project.budget)}
-                  </Text>
-                </View>
-
-                {/* Milestone Stepper */}
+                {/* Milestone Progress Indicator */}
                 <View style={styles.milestoneRow}>
-                  <View style={[styles.milestoneDot, styles.milestoneDone]} />
-                  <View style={styles.milestoneLine} />
-                  <View style={[styles.milestoneDot, styles.milestoneDone]} />
-                  <View style={styles.milestoneLine} />
                   <View
                     style={[
                       styles.milestoneDot,
                       project.status === 'Completed'
                         ? styles.milestoneDone
                         : styles.milestoneActive,
+                    ]}
+                  />
+                  <View style={styles.milestoneLine} />
+                  <View
+                    style={[
+                      styles.milestoneDot,
+                      project.status === 'Completed'
+                        ? styles.milestoneDone
+                        : project.status === 'Ongoing'
+                        ? styles.milestoneActive
+                        : styles.milestonePending,
                     ]}
                   />
                   <View style={styles.milestoneLine} />
@@ -273,62 +420,53 @@ export default function LocationIntelSheet({
                     {project.status === 'Completed'
                       ? '100% Completed'
                       : project.status === 'Delayed'
-                      ? 'Delayed (45%)'
-                      : 'Active (65%)'}
+                      ? 'Delay Alert'
+                      : 'In Progress'}
                   </Text>
                 </View>
 
-                {/* Crowdsourced Verification Votes & Field Audit */}
+                <View style={styles.cardFooter}>
+                  <Text style={styles.contractorName} numberOfLines={1}>
+                    🏢 {project.contractor}
+                  </Text>
+                  <Text style={styles.projectBudget}>
+                    {formatCurrencyPHP(project.budget)}
+                  </Text>
+                </View>
+
+                {/* Crowdsourced Verification & Audit Action */}
                 <View style={styles.cardActionsRow}>
                   <View style={styles.voteGroup}>
                     <TouchableOpacity
                       style={[
                         styles.voteBtn,
-                        cardVotes.userVoted === 'confirm' && styles.voteBtnActive,
+                        votes.userVoted === 'confirm' && styles.voteBtnActive,
                       ]}
                       onPress={(e) => {
-                        e.stopPropagation();
-                        haptics.triggerSelection();
-                        setVotesState((prev) => {
-                          const cur = prev[project.id] || { confirm: 14, dispute: 1 };
-                          return {
-                            ...prev,
-                            [project.id]: {
-                              ...cur,
-                              confirm: cur.confirm + 1,
-                              userVoted: 'confirm',
-                            },
-                          };
-                        });
+                        e.stopPropagation?.();
+                        handleVote(project.id, 'confirm');
                       }}
                       testID={`confirm-vote-btn-${project.id}`}
                     >
-                      <Text style={styles.voteBtnText}>👍 {cardVotes.confirm}</Text>
+                      <Text style={styles.voteBtnText}>
+                        👍 {votes.confirm}
+                      </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={[
                         styles.voteBtn,
-                        cardVotes.userVoted === 'dispute' && styles.voteBtnActive,
+                        votes.userVoted === 'dispute' && styles.voteBtnActive,
                       ]}
                       onPress={(e) => {
-                        e.stopPropagation();
-                        haptics.triggerSelection();
-                        setVotesState((prev) => {
-                          const cur = prev[project.id] || { confirm: 14, dispute: 1 };
-                          return {
-                            ...prev,
-                            [project.id]: {
-                              ...cur,
-                              dispute: cur.dispute + 1,
-                              userVoted: 'dispute',
-                            },
-                          };
-                        });
+                        e.stopPropagation?.();
+                        handleVote(project.id, 'dispute');
                       }}
                       testID={`dispute-vote-btn-${project.id}`}
                     >
-                      <Text style={styles.voteBtnText}>👎 {cardVotes.dispute}</Text>
+                      <Text style={styles.voteBtnText}>
+                        👎 {votes.dispute}
+                      </Text>
                     </TouchableOpacity>
                   </View>
 
@@ -336,13 +474,14 @@ export default function LocationIntelSheet({
                     <TouchableOpacity
                       style={styles.fieldAuditBtn}
                       onPress={(e) => {
-                        e.stopPropagation();
-                        haptics.triggerSelection();
+                        e.stopPropagation?.();
                         onFieldAuditPress(project);
                       }}
                       testID={`field-audit-btn-${project.id}`}
                     >
-                      <Text style={styles.fieldAuditBtnText}>📸 Field Audit</Text>
+                      <Text style={styles.fieldAuditBtnText}>
+                        📸 Audit Site
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -369,6 +508,58 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 10,
   },
+  minimizedContainer: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  minimizedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  minimizedTextGroup: {
+    flex: 1,
+    marginRight: 10,
+  },
+  minimizedLguTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1f3d3c',
+  },
+  minimizedStatsSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+    fontWeight: '600',
+  },
+  minimizedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expandPillBtn: {
+    backgroundColor: '#e6fffa',
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  expandPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0d9488',
+  },
   handleBarContainer: {
     alignItems: 'center',
     paddingVertical: 6,
@@ -388,6 +579,7 @@ const styles = StyleSheet.create({
   },
   titleArea: {
     flex: 1,
+    marginRight: 8,
   },
   subTitle: {
     fontSize: 10,
@@ -396,22 +588,57 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   lguTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: '#1f3d3c',
   },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   anomalyButton: {
     backgroundColor: '#fee2e2',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#fca5a5',
   },
   anomalyButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#b91c1c',
+  },
+  minimizeBtn: {
+    backgroundColor: '#f1f5f9',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  minimizeBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  sheetCloseBtn: {
+    backgroundColor: '#f1f5f9',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  sheetCloseText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748b',
   },
   metricsContainer: {
     flexDirection: 'row',

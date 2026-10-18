@@ -389,8 +389,9 @@ const styles = StyleSheet.create({
   },
   controlsContainer: {
     position: 'absolute',
-    top: 14,
+    top: '50%',
     right: 14,
+    transform: [{ translateY: -55 }],
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 4,
@@ -398,8 +399,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 4,
-    zIndex: 10,
+    elevation: 5,
+    zIndex: 15,
     gap: 4,
   },
   controlBtn: {
@@ -426,13 +427,13 @@ const styles = StyleSheet.create({
   },
   zoomIndicator: {
     position: 'absolute',
-    bottom: 14,
+    top: 14,
     right: 14,
     backgroundColor: 'rgba(31, 61, 60, 0.85)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    zIndex: 10,
+    zIndex: 12,
   },
   zoomIndicatorText: {
     color: '#ffffff',

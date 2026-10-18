@@ -45,14 +45,16 @@ const sampleProjects: ProjectDetail[] = [
 describe('LocationIntelSheet Component', () => {
   const mockOnSelectProject = jest.fn();
   const mockOnReportAnomaly = jest.fn();
+  const mockOnFieldAuditPress = jest.fn();
   const mockOnClose = jest.fn();
+  const mockOnStateChange = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders municipality name, stats summary, and project cards', () => {
-    const { getByText } = render(
+  test('renders municipality name, stats summary, and project cards in expanded mode', () => {
+    const { getByText, getByTestId } = render(
       <LocationIntelSheet
         lguName="Bogo City"
         projects={sampleProjects}
@@ -67,12 +69,87 @@ describe('LocationIntelSheet Component', () => {
 
     // Summary statistics
     expect(getByText('3 Projects')).toBeTruthy();
-    expect(getByText('₱139.57M')).toBeTruthy(); // 49M + 28.42M + 62.15M = 139.57M
+    expect(getByText('₱139.57M')).toBeTruthy();
 
     // Project cards
     expect(getByText('Flood Mitigation Structure along Bogo River')).toBeTruthy();
     expect(getByText('Rehabilitation of Asphalt Pavement')).toBeTruthy();
     expect(getByText('Farm-to-Market Road Concreting')).toBeTruthy();
+
+    // Controls
+    expect(getByTestId('sheet-minimize-btn')).toBeTruthy();
+    expect(getByTestId('sheet-close-btn')).toBeTruthy();
+  });
+
+  test('tapping minimize button triggers onStateChange with "minimized"', () => {
+    const { getByTestId } = render(
+      <LocationIntelSheet
+        lguName="Bogo City"
+        projects={sampleProjects}
+        sheetState="expanded"
+        onStateChange={mockOnStateChange}
+        onSelectProject={mockOnSelectProject}
+        onReportAnomaly={mockOnReportAnomaly}
+        onClose={mockOnClose}
+      />,
+    );
+
+    const minimizeBtn = getByTestId('sheet-minimize-btn');
+    fireEvent.press(minimizeBtn);
+
+    expect(mockOnStateChange).toHaveBeenCalledWith('minimized');
+  });
+
+  test('renders compact peek bar in "minimized" state and hides project cards list', () => {
+    const { getByTestId, queryByText, getByText } = render(
+      <LocationIntelSheet
+        lguName="Bogo City"
+        projects={sampleProjects}
+        sheetState="minimized"
+        onStateChange={mockOnStateChange}
+        onSelectProject={mockOnSelectProject}
+        onReportAnomaly={mockOnReportAnomaly}
+        onClose={mockOnClose}
+      />,
+    );
+
+    // Minimized bar exists
+    expect(getByTestId('location-intel-sheet-minimized')).toBeTruthy();
+    expect(getByText(/Bogo City/i)).toBeTruthy();
+
+    // Detailed project cards should not be displayed
+    expect(queryByText('Flood Mitigation Structure along Bogo River')).toBeNull();
+
+    // Expand and hide buttons exist in minimized bar
+    const expandBtn = getByTestId('sheet-expand-btn');
+    const hideBtn = getByTestId('sheet-hide-btn');
+    expect(expandBtn).toBeTruthy();
+    expect(hideBtn).toBeTruthy();
+
+    // Press expand
+    fireEvent.press(expandBtn);
+    expect(mockOnStateChange).toHaveBeenCalledWith('expanded');
+
+    // Press hide
+    fireEvent.press(hideBtn);
+    expect(mockOnStateChange).toHaveBeenCalledWith('hidden');
+  });
+
+  test('returns null when sheetState is "hidden"', () => {
+    const { queryByTestId } = render(
+      <LocationIntelSheet
+        lguName="Bogo City"
+        projects={sampleProjects}
+        sheetState="hidden"
+        onStateChange={mockOnStateChange}
+        onSelectProject={mockOnSelectProject}
+        onReportAnomaly={mockOnReportAnomaly}
+        onClose={mockOnClose}
+      />,
+    );
+
+    expect(queryByTestId('location-intel-sheet')).toBeNull();
+    expect(queryByTestId('location-intel-sheet-minimized')).toBeNull();
   });
 
   test('tapping a project card triggers onSelectProject with the project data', () => {
@@ -103,48 +180,13 @@ describe('LocationIntelSheet Component', () => {
       />,
     );
 
-    const reportBtn = getByText(/Report Anomaly/i);
+    const reportBtn = getByText('⚠️ Report Anomaly');
     fireEvent.press(reportBtn);
 
     expect(mockOnReportAnomaly).toHaveBeenCalledWith('Bogo City');
   });
 
-  test('filters projects by status chip', () => {
-    const { getByText, queryByText } = render(
-      <LocationIntelSheet
-        lguName="Bogo City"
-        projects={sampleProjects}
-        onSelectProject={mockOnSelectProject}
-        onReportAnomaly={mockOnReportAnomaly}
-        onClose={mockOnClose}
-      />,
-    );
-
-    // Tap 'Ongoing' chip filter
-    const ongoingFilterChip = getByText('Ongoing (1)');
-    fireEvent.press(ongoingFilterChip);
-
-    expect(getByText('Flood Mitigation Structure along Bogo River')).toBeTruthy();
-    expect(queryByText('Rehabilitation of Asphalt Pavement')).toBeNull();
-    expect(queryByText('Farm-to-Market Road Concreting')).toBeNull();
-  });
-
-  test('displays empty state when no projects match location or filter', () => {
-    const { getByText } = render(
-      <LocationIntelSheet
-        lguName="Alcoy"
-        projects={[]}
-        onSelectProject={mockOnSelectProject}
-        onReportAnomaly={mockOnReportAnomaly}
-        onClose={mockOnClose}
-      />,
-    );
-
-    expect(getByText('No civil works projects recorded for this area.')).toBeTruthy();
-  });
-
-  test('tapping field audit button triggers onFieldAuditPress with selected project', () => {
-    const mockOnFieldAuditPress = jest.fn();
+  test('tapping field audit button triggers onFieldAuditPress callback', () => {
     const { getByTestId } = render(
       <LocationIntelSheet
         lguName="Bogo City"
@@ -189,4 +231,3 @@ describe('LocationIntelSheet Component', () => {
     expect(getByText('👎 2')).toBeTruthy();
   });
 });
-

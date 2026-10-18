@@ -2,35 +2,52 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import HomeScreen from '../src/ui/screens/HomeScreen';
 
-describe('HomeScreen Component', () => {
+describe('HomeScreen Component (Mobile Redesign)', () => {
   const mockOnNavigateToSignIn = jest.fn();
   const mockOnNavigateToContractors = jest.fn();
+  const mockOnNavigateToMap = jest.fn();
   const mockOnSignOut = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders header, map, "Cebu in text", stats, and location intel sheet', () => {
+  test('renders mobile app header, KPI vital stats, quick actions, and map teaser', () => {
     const { getByText, getByTestId } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
         onSignOut={mockOnSignOut}
       />,
     );
 
     // Header elements
-    expect(getByText('Reyal Or Pake')).toBeTruthy();
-    expect(getByTestId('cebu-vector-map')).toBeTruthy();
-    expect(getByTestId('location-intel-sheet')).toBeTruthy();
+    expect(getByText('ProjectTRACK')).toBeTruthy();
+    expect(getByTestId('mobile-app-header')).toBeTruthy();
 
-    // Website parity sections
-    expect(getByText('Cebu, in text')).toBeTruthy();
-    expect(getByText('Browse by municipality')).toBeTruthy();
-    expect(getByText('Frequently asked questions')).toBeTruthy();
-    expect(getByTestId('open-about-map-btn')).toBeTruthy();
+    // KPI stats section
+    expect(getByTestId('kpi-vital-stats')).toBeTruthy();
+    expect(getByText('Tracked Projects')).toBeTruthy();
+    expect(getByText('Monitored Budget')).toBeTruthy();
+    expect(getByText('Delayed / Flagged')).toBeTruthy();
+    expect(getByText('LGUs Monitored')).toBeTruthy();
+
+    // Quick action shortcuts
+    expect(getByTestId('quick-actions-section')).toBeTruthy();
+    expect(getByText('Explore Map')).toBeTruthy();
+    expect(getByText('Field Audit')).toBeTruthy();
+    expect(getByText('Contractors')).toBeTruthy();
+
+    // Map teaser card
+    expect(getByTestId('map-teaser-card')).toBeTruthy();
+    expect(getByTestId('open-full-map-btn')).toBeTruthy();
+
+    // Floating AI button
     expect(getByTestId('open-chat-bot-btn')).toBeTruthy();
+
+    // FAQs section
+    expect(getByTestId('faqs-section')).toBeTruthy();
   });
 
   test('tapping sign in in header triggers onNavigateToSignIn callback', () => {
@@ -38,7 +55,7 @@ describe('HomeScreen Component', () => {
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
-        onSignOut={mockOnSignOut}
+        onNavigateToMap={mockOnNavigateToMap}
       />,
     );
 
@@ -48,49 +65,80 @@ describe('HomeScreen Component', () => {
     expect(mockOnNavigateToSignIn).toHaveBeenCalledTimes(1);
   });
 
-  test('tapping contractors button triggers onNavigateToContractors callback', () => {
+  test('tapping "Explore Map" quick action triggers onNavigateToMap', () => {
     const { getByTestId } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
-        onSignOut={mockOnSignOut}
+        onNavigateToMap={mockOnNavigateToMap}
       />,
     );
 
-    const contractorsNavBtn = getByTestId('nav-contractors-btn');
-    fireEvent.press(contractorsNavBtn);
+    const mapActionBtn = getByTestId('quick-action-map');
+    fireEvent.press(mapActionBtn);
+
+    expect(mockOnNavigateToMap).toHaveBeenCalledTimes(1);
+  });
+
+  test('tapping "Full Map →" in map teaser triggers onNavigateToMap', () => {
+    const { getByTestId } = render(
+      <HomeScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
+      />,
+    );
+
+    const fullMapBtn = getByTestId('open-full-map-btn');
+    fireEvent.press(fullMapBtn);
+
+    expect(mockOnNavigateToMap).toHaveBeenCalledTimes(1);
+  });
+
+  test('tapping Contractors in quick actions triggers onNavigateToContractors callback', () => {
+    const { getByTestId } = render(
+      <HomeScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
+      />,
+    );
+
+    const contractorsActionBtn = getByTestId('quick-action-contractors');
+    fireEvent.press(contractorsActionBtn);
 
     expect(mockOnNavigateToContractors).toHaveBeenCalledTimes(1);
   });
 
-  test('selecting a municipality on the map updates the active location sheet', () => {
-    const { getByTestId, getAllByText } = render(
+  test('tapping a popular LGU pill triggers onNavigateToMap with normalized LGU', () => {
+    const { getByTestId } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
       />,
     );
 
-    // Find Bogo City path
-    const bogoPath = getByTestId('muni-path-City of Bogo');
-    fireEvent.press(bogoPath);
+    const bogoPill = getByTestId('muni-grid-btn-City of Bogo');
+    fireEvent.press(bogoPill);
 
-    // Bogo City should now be displayed in Location Intel sheet
-    expect(getAllByText(/Bogo/i).length).toBeGreaterThan(0);
+    expect(mockOnNavigateToMap).toHaveBeenCalledWith('City of Bogo');
   });
 
-  test('tapping an LGU chip in the "Browse by municipality" grid selects that municipality', () => {
-    const { getByTestId, getAllByText } = render(
+  test('opening and closing All 53 LGUs modal', () => {
+    const { getByTestId, getByText } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
       />,
     );
 
-    const carcarBtn = getByTestId('muni-grid-btn-Carcar City');
-    fireEvent.press(carcarBtn);
+    const viewAllBtn = getByTestId('view-all-53-lgus-btn');
+    fireEvent.press(viewAllBtn);
 
-    expect(getAllByText(/Carcar/i).length).toBeGreaterThan(0);
+    expect(getByText('All 53 Cebu LGUs')).toBeTruthy();
+    expect(getByTestId('all-lgus-search-input')).toBeTruthy();
   });
 
   test('expanding and collapsing FAQ accordion item', () => {
@@ -98,114 +146,55 @@ describe('HomeScreen Component', () => {
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
       />,
     );
 
-    const faqToggle = getByTestId('faq-toggle-btn-0');
-    // Initially not showing answer
-    expect(queryByText(/ProjectTRACK loads DPWH public-works projects/)).toBeNull();
+    const firstFaqBtn = getByTestId('faq-toggle-btn-0');
+    fireEvent.press(firstFaqBtn);
 
-    // Tap to expand
-    fireEvent.press(faqToggle);
-    expect(getByText(/ProjectTRACK loads DPWH public-works projects/)).toBeTruthy();
+    // Answer should be visible
+    expect(
+      getByText(/ProjectTRACK aggregates official data/i),
+    ).toBeTruthy();
 
-    // Tap again to collapse
-    fireEvent.press(faqToggle);
-    expect(queryByText(/ProjectTRACK loads DPWH public-works projects/)).toBeNull();
+    // Toggle again to collapse
+    fireEvent.press(firstFaqBtn);
+    expect(
+      queryByText(/ProjectTRACK aggregates official data/i),
+    ).toBeNull();
   });
 
-  test('opens and closes AboutMapModal', () => {
-    const { getByTestId, queryByTestId } = render(
-      <HomeScreen
-        onNavigateToSignIn={mockOnNavigateToSignIn}
-        onNavigateToContractors={mockOnNavigateToContractors}
-      />,
-    );
-
-    const openAboutBtn = getByTestId('open-about-map-btn');
-    fireEvent.press(openAboutBtn);
-
-    expect(getByTestId('about-map-modal')).toBeTruthy();
-
-    const closeBtn = getByTestId('close-about-map-btn');
-    fireEvent.press(closeBtn);
-
-    expect(queryByTestId('about-map-modal')).toBeNull();
-  });
-
-  test('opens and closes ChatBotModal', () => {
-    const { getByTestId, queryByTestId } = render(
-      <HomeScreen
-        onNavigateToSignIn={mockOnNavigateToSignIn}
-        onNavigateToContractors={mockOnNavigateToContractors}
-      />,
-    );
-
-    const openChatBtn = getByTestId('open-chat-bot-btn');
-    fireEvent.press(openChatBtn);
-
-    expect(getByTestId('chatbot-modal')).toBeTruthy();
-
-    const closeBtn = getByTestId('close-chat-btn');
-    fireEvent.press(closeBtn);
-
-    expect(queryByTestId('chatbot-modal')).toBeNull();
-  });
-
-  test('selecting a project card opens the ProjectDetailModal', () => {
-    const { getByText, getByTestId } = render(
-      <HomeScreen
-        onNavigateToSignIn={mockOnNavigateToSignIn}
-        onNavigateToContractors={mockOnNavigateToContractors}
-      />,
-    );
-
-    // Bogo River project
-    const projectCard = getByText(
-      'Construction of Flood Mitigation Structure along Bogo River, Bogo City, Cebu',
-    );
-    fireEvent.press(projectCard);
-
-    // Modal should be visible
-    expect(getByTestId('project-detail-modal')).toBeTruthy();
-  });
-
-  test('renders MapFilterBar and allows toggling status filters', () => {
+  test('filtering projects via home search bar', () => {
     const { getByTestId } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
       />,
     );
 
-    expect(getByTestId('map-filter-bar')).toBeTruthy();
-    const ongoingFilter = getByTestId('filter-btn-ongoing');
-    fireEvent.press(ongoingFilter);
+    const searchInput = getByTestId('home-search-input');
+    fireEvent.changeText(searchInput, 'Flood Control');
 
-    const delayedFilter = getByTestId('filter-btn-delayed');
-    fireEvent.press(delayedFilter);
+    expect(getByTestId('clear-home-search')).toBeTruthy();
+    fireEvent.press(getByTestId('clear-home-search'));
   });
 
-  test('tapping field audit button on a project card opens FieldAuditorModal', () => {
-    const { getByTestId, queryByTestId } = render(
+  test('renders user avatar when currentUser is provided and triggers onSignOut', () => {
+    const { getByTestId } = render(
       <HomeScreen
+        currentUser={{ email: 'auditor@dpwh.gov.ph' }}
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
+        onSignOut={mockOnSignOut}
       />,
     );
 
-    // Initial project 24HD0012 should have a field audit button
-    const auditBtn = getByTestId('field-audit-btn-24HD0012');
-    fireEvent.press(auditBtn);
+    const signOutBtn = getByTestId('sign-out-btn');
+    fireEvent.press(signOutBtn);
 
-    // FieldAuditorModal should now be open
-    expect(getByTestId('field-auditor-modal')).toBeTruthy();
-
-    // Close FieldAuditorModal
-    const closeBtn = getByTestId('close-auditor-btn');
-    fireEvent.press(closeBtn);
-
-    expect(queryByTestId('field-auditor-modal')).toBeNull();
+    expect(mockOnSignOut).toHaveBeenCalledTimes(1);
   });
 });
-

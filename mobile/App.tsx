@@ -9,11 +9,13 @@ import {
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './src/ui/screens/HomeScreen';
+import MapScreen from './src/ui/screens/MapScreen';
+import ContractorRankingScreen from './src/ui/screens/ContractorRankingScreen';
 import SignInScreen from './src/ui/screens/SignInScreen';
 import SignUpScreen from './src/ui/screens/SignUpScreen';
-import ContractorRankingScreen from './src/ui/screens/ContractorRankingScreen';
+import BottomTabBar, { TabName } from './src/ui/components/BottomTabBar';
 
-type ScreenName = 'home' | 'contractors' | 'signin' | 'signup';
+type AuthScreenName = 'signin' | 'signup' | null;
 
 const isWeb = Platform.OS === 'web';
 
@@ -32,7 +34,7 @@ if (isWeb && typeof document !== 'undefined') {
         padding: 0;
         display: flex;
         flex-direction: column;
-        background-color: #1f3d3c;
+        background-color: #0f2423;
         overflow: hidden;
       }
     `;
@@ -89,14 +91,16 @@ export class ErrorBoundary extends React.Component<
 }
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<ScreenName>('home');
+  const [activeTab, setActiveTab] = useState<TabName>('home');
+  const [authScreen, setAuthScreen] = useState<AuthScreenName>(null);
+  const [focusedLgu, setFocusedLgu] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<{
     email: string;
   } | null>(null);
 
   const handleSignInSuccess = (user: { email: string }) => {
     setCurrentUser(user);
-    setCurrentScreen('home');
+    setAuthScreen(null);
   };
 
   const handleSignOut = () => {
@@ -114,33 +118,67 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider initialMetrics={initialMetrics} style={styles.safeArea}>
         <View style={styles.container}>
-          <StatusBar barStyle="light-content" backgroundColor="#1f3d3c" />
-          {currentScreen === 'home' && (
-            <HomeScreen
-              currentUser={currentUser}
-              onNavigateToSignIn={() => setCurrentScreen('signin')}
-              onNavigateToContractors={() => setCurrentScreen('contractors')}
-              onSignOut={handleSignOut}
-            />
-          )}
-          {currentScreen === 'contractors' && (
-            <ContractorRankingScreen
-              onBackToMap={() => setCurrentScreen('home')}
-            />
-          )}
-          {currentScreen === 'signin' && (
+          <StatusBar barStyle="light-content" backgroundColor="#162e2d" />
+
+          {/* If user is in an authentication flow */}
+          {authScreen === 'signin' && (
             <SignInScreen
               onSuccess={handleSignInSuccess}
-              onNavigateToSignUp={() => setCurrentScreen('signup')}
-              onBack={() => setCurrentScreen('home')}
+              onNavigateToSignUp={() => setAuthScreen('signup')}
+              onBack={() => setAuthScreen(null)}
             />
           )}
-          {currentScreen === 'signup' && (
+
+          {authScreen === 'signup' && (
             <SignUpScreen
               onSuccess={handleSignInSuccess}
-              onNavigateToSignIn={() => setCurrentScreen('signin')}
-              onBackToMap={() => setCurrentScreen('home')}
+              onNavigateToSignIn={() => setAuthScreen('signin')}
+              onBackToMap={() => setAuthScreen(null)}
             />
+          )}
+
+          {/* Main Tab Views with Persistent Bottom Navigation */}
+          {authScreen === null && (
+            <>
+              <View style={styles.screenContent}>
+                {activeTab === 'home' && (
+                  <HomeScreen
+                    currentUser={currentUser}
+                    onNavigateToSignIn={() => setAuthScreen('signin')}
+                    onNavigateToContractors={() => setActiveTab('contractors')}
+                    onNavigateToMap={(lgu) => {
+                      setFocusedLgu(lgu || null);
+                      setActiveTab('map');
+                    }}
+                    onSignOut={handleSignOut}
+                  />
+                )}
+
+                {activeTab === 'map' && (
+                  <MapScreen
+                    currentUser={currentUser}
+                    initialLgu={focusedLgu}
+                    onNavigateToSignIn={() => setAuthScreen('signin')}
+                    onNavigateToContractors={() => setActiveTab('contractors')}
+                    onSignOut={handleSignOut}
+                  />
+                )}
+
+                {activeTab === 'contractors' && (
+                  <ContractorRankingScreen
+                    onBackToMap={() => setActiveTab('map')}
+                  />
+                )}
+              </View>
+
+              {/* Persistent Bottom Tab Bar with Center Elevated Map Button */}
+              <BottomTabBar
+                activeTab={activeTab}
+                onSelectTab={(tab) => {
+                  setActiveTab(tab);
+                }}
+              />
+            </>
           )}
         </View>
       </SafeAreaProvider>
@@ -151,13 +189,18 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#1f3d3c',
+    backgroundColor: '#0f2423',
     height: '100%',
     width: '100%',
   },
   container: {
     flex: 1,
-    backgroundColor: '#1f3d3c',
+    backgroundColor: '#0f2423',
+    height: '100%',
+    width: '100%',
+  },
+  screenContent: {
+    flex: 1,
     height: '100%',
     width: '100%',
   },
@@ -166,7 +209,7 @@ const styles = StyleSheet.create({
 const errorStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1f3d3c',
+    backgroundColor: '#0f2423',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,

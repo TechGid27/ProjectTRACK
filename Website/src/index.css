@@ -155,36 +155,13 @@
   background: #0f766e;
   border: 1.5px solid rgba(255, 244, 232, 0.9);
   transform: rotate(45deg);
-  animation: pin-glow 2.8s ease-in-out infinite;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-.pin {
-  display: block;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #5d1b22;
-  border: 1.5px solid rgba(255, 244, 232, 0.85);
-  animation: pin-glow 2.8s ease-in-out infinite;
+.project-pin--completed {
+  background: #0369a1;
 }
 
-.pin--amber {
-  background: #a85b1c;
-}
-
-@keyframes pin-glow {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 4px rgba(255, 236, 214, 0.16),
-      0 0 10px 2px rgba(255, 228, 200, 0.4);
-  }
-  50% {
-    box-shadow:
-      0 0 0 7px rgba(255, 236, 214, 0.06),
-      0 0 14px 3px rgba(255, 228, 200, 0.55);
-  }
-}
 .muni-label {
   display: none;
   position: absolute;

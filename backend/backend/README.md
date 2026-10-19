@@ -16,6 +16,7 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
   * **Deterministic Graph Synthesizer**: Sub-5ms zero-token factual synthesizer ensuring zero failures on rate limits (HTTP 429).
 * **⚡ Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
 * **🌊 Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
+* **Conversational Memory & Spatial Targeting**: Follow-ups remember the prior location or project; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying DB-locked and injection-safe. Chat answers carry map coordinates that fly to an LGU or zoom to a single project.
 * **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
 * **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
 * **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
@@ -55,9 +56,9 @@ backend/
 │   ├── llm_service.py       # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   ├── graph_synthesizer.py # Deterministic Graph Synthesizer (<5ms)
 │   └── pipeline_service.py  # Background job execution & state tracker
-└── tests/                   # Test suite (18 unit & integration tests)
+└── tests/                   # Test suite (38 unit & integration tests)
     ├── __init__.py
-    ├── test_api.py          # API endpoints & guardrails tests (13 tests)
+    ├── test_api.py          # API endpoints & guardrails tests (33 tests)
     └── test_fallback.py     # Fallback resilience & synthesizer tests (5 tests)
 ```
 
@@ -116,7 +117,7 @@ Once running:
 
 ## Running Tests
 
-Run the full automated test suite (18 unit & integration tests):
+Run the full automated test suite (38 unit & integration tests):
 
 ```bash
 python -m unittest discover -s backend/tests -p "test_*.py"
@@ -153,6 +154,8 @@ The test suite validates:
 | `GET` | `/api/projects/{project_id}` | Look up DPWH project by ID (e.g. `24HH0043`) |
 | `GET` | `/api/projects/search?q=...` | Full-text search across projects, contractors, locations |
 | `GET` | `/api/projects/by-location?location=...` | Aggregate projects, total count & budget for a municipality |
+
+> Location matching is exact and canonicalized: `Cebu City`, `City of Bogo`/`Bogo City`, and hyphenated names like `Lapu-Lapu City` resolve to a single LGU without cross-LGU leakage.
 
 ---
 

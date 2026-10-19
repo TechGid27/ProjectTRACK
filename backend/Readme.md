@@ -20,7 +20,8 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 * **📍 Batch Geocoding & Mapping**:
   * Run `python main.py --geocode` to batch-geocode all Neo4j location and project nodes with verified WGS84 coordinates.
 * **⚡ Instant Cypher Mode (Zero AI Needed)**: Full instant lookup cards, analytics, and full-text search run purely on Neo4j Aura in `<10ms`—no local LLM or API keys required.
-* **💬 Conversational Memory**: Context-aware follow-ups (e.g. asking *"who is the contractor?"* or *"what was the budget for it?"* after viewing a project).
+* **Conversational Memory**: Context-aware follow-ups that remember the prior topic (a location, e.g. "tell me more about it" after "projects in Cordova", or a project). A deterministic heuristic handles common cues; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying strictly DB-locked and injection-safe.
+* **Spatial Answer Targeting**: Location questions fly the map to the LGU; singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Superlative intent is inherited across location switches ("what about in Cordova?").
 * **📊 Instant Graph Analytics**: Sub-millisecond aggregation calculates total budget, contractor rankings, project counts, and sector breakdowns directly from graph relationships.
 
 ---
@@ -42,14 +43,18 @@ backend/
 │   │   ├── llm_service.py      # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   │   ├── graph_synthesizer.py# Instant Graph Deterministic Synthesizer (<5ms)
 │   │   └── pipeline_service.py # Background job execution & state tracker
-│   └── tests/                  # Test suite (18 unit & integration tests)
-│       ├── test_api.py         # API endpoints & guardrails tests (13 tests)
+│   └── tests/                  # Test suite (38 unit & integration tests)
+│       ├── test_api.py         # API endpoints & guardrails tests (33 tests)
 │       └── test_fallback.py    # LLM fallback & synthesizer tests (5 tests)
 ├── main.py                     # ⚡ Master CLI runner (interactive menu, CLI queries, analytics, --api)
 ├── pipeline/                   # 📦 Core modular pipeline package
 │   ├── __init__.py             # Unified package exports
 │   ├── scrape_cebu_dpwh.py     # BetterGov scraper -> Apify & Supabase
 │   ├── sync_to_neo4j.py        # Paginated batch ingestion -> Neo4j Aura
+│   ├── geocoding.py            # Deterministic WGS84 geocoding engine
+│   ├── enrich_neo4j_gps.py     # Authentic DPWH/BetterGov GPS enrichment
+│   ├── lgu_boundaries.py       # Point-in-polygon LGU reverse-geocoder
+│   ├── correct_municipalities.py # Reassign projects to the LGU that contains their coordinates
 │   └── query_graph.py          # Cypher queries, Guardrails, Instant Insights & Streaming QA
 ├── .env.example                # Template for required environment variables
 ├── requirements.txt            # Python dependencies (includes FastAPI, Uvicorn, Neo4j, HTTPX)
@@ -291,7 +296,7 @@ flowchart TD
 
 ## 🧪 Running Unit & Integration Tests
 
-Run the full automated test suite (18 unit & integration tests):
+Run the full automated test suite (38 unit & integration tests):
 
 ```powershell
 python -m unittest discover -s backend/tests -p "test_*.py"

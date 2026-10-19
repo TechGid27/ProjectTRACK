@@ -10,6 +10,8 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 
 * **⚡ Sub-20ms Graph Traversal**: Direct Cypher queries and full-text index lookups across 4,370+ DPWH projects, contractors, budgets, and locations in Cebu.
 * **🛡️ 5-Layer Domain Guardrails**: Bulletproof domain lock that intercepts programming questions, generic dictionary definitions, persona overrides (`act as a teacher`), and off-topic queries in `<0.1ms` before hitting Neo4j or the LLM.
+* **🧼 Prompt-Injection Hardening**: Every user message and client-supplied history turn is normalized before the guardrail (NFKC folding, zero-width / bidi / control-character stripping, whitespace de-flooding, length cap). The intent gate blocks common injection phrasings (ignore/disregard/forget previous instructions, persona and developer-mode jailbreaks, prompt exfiltration, and chat-template delimiters like `</system>` or `<|im_start|>`), and instruction-override content planted in history is rejected too.
+* **🔐 Supabase Authentication (Backend-Managed)**: Ready-to-use `/api/auth` endpoints (OAuth URL, callback, session, sign-in, sign-up, sign-out) backed by Supabase GoTrue. Tokens are kept in an HTTP-only session cookie and auto-refreshed; a `get_current_user` dependency guards protected routes.
 * **🤖 Multi-Tier Fallback Resilience (100% Uptime / Zero Crash)**:
   * **Tier 0 (Primary Cloud AI)**: Groq LPU running `qwen/qwen3.8-27b` delivering ~500+ tok/s response speed with situational token budgeting.
   * **Tier 1 (Offline Local AI Fallback)**: Lightweight local model **`qwen2.5:0.5b` (~398 MB)** via Ollama, accessible via 1-command installer (`python main.py --setup-local-ai`).
@@ -35,10 +37,11 @@ backend/
 │   ├── run.py                  # Server runner CLI (python backend/run.py)
 │   ├── config.py               # Pydantic Settings configuration
 │   ├── setup_local_ai.py       # 1-command permission-gated local AI installer (qwen2.5:0.5b)
-│   ├── api/                    # Modular routes (projects, analytics, chat, pipeline, health)
+│   ├── api/                    # Modular routes (auth, projects, analytics, chat, pipeline, health)
 │   ├── models/                 # Pydantic data schemas
 │   ├── services/               # Services:
 │   │   ├── neo4j_service.py    # Connection pool & Cypher queries
+│   │   ├── supabase_auth.py # Supabase GoTrue auth client (OAuth/password/session)
 │   │   ├── guardrail_service.py# Pre-retrieval classifier & stream rail
 │   │   ├── llm_service.py      # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   │   ├── graph_synthesizer.py# Instant Graph Deterministic Synthesizer (<5ms)
@@ -46,6 +49,7 @@ backend/
 │   └── tests/                  # Test suite (55 unit & integration tests)
 │       ├── test_api.py         # API endpoints & guardrails tests (33 tests)
 │       └── test_fallback.py    # LLM fallback & synthesizer tests (5 tests)
+│       └── test_auth.py         # Supabase auth endpoint tests (12 tests)
 ├── main.py                     # ⚡ Master CLI runner (interactive menu, CLI queries, analytics, --api)
 ├── pipeline/                   # 📦 Core modular pipeline package
 │   ├── __init__.py             # Unified package exports

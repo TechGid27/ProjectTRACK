@@ -10,6 +10,7 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 * **⚡ Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
 * **🛡️ 5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
+* **🧼 Prompt-Injection Hardening**: User messages and client-supplied history are normalized (NFKC, zero-width/control-char stripping, whitespace de-flooding, length cap) and screened for common injection phrasings (instruction-override, persona/developer-mode jailbreaks, prompt exfiltration, chat-template delimiters). Instruction-override content planted in history is also rejected.
 * **🤖 Multi-Tier Fallback Resilience**:
   * **Groq LPU**: Primary high-speed cloud generation at ~500+ tok/s.
   * **Local Ollama Fallback**: Lightweight `qwen2.5:0.5b` (~398 MB) offline fallback via `python main.py --setup-local-ai`.
@@ -60,6 +61,7 @@ backend/
     ├── __init__.py
     ├── test_api.py          # API endpoints & guardrails tests (33 tests)
     └── test_fallback.py     # Fallback resilience & synthesizer tests (5 tests)
+    └── test_auth.py          # Supabase auth endpoint tests (12 tests)
 ```
 
 ---

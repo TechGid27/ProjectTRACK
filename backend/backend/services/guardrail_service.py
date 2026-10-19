@@ -7,6 +7,7 @@ budgets, and locations.
 """
 
 import re
+import unicodedata
 from typing import Tuple, Optional
 
 
@@ -73,6 +74,54 @@ def sanitize_search_query(query: str) -> str:
     return " ".join(words) if words else q.strip()
 
 
+# Characters commonly abused to smuggle hidden instructions past text filters:
+# zero-width spaces/joiners, bidi overrides, BOM, and other invisibles.
+_INVISIBLE_CHARS = (
+    "\u200b\u200c\u200d\u200e\u200f"  # zero-width + LTR/RTL marks
+    "\u202a\u202b\u202c\u202d\u202e"  # bidi embedding/override
+    "\u2060\u2061\u2062\u2063\u2064"  # word joiner / invisible operators
+    "\ufeff"                              # BOM / zero-width no-break space
+)
+_INVISIBLE_RE = re.compile("[" + _INVISIBLE_CHARS + "]")
+# ASCII/C1 control characters except tab/newline/carriage-return.
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+# Defensive hard cap mirroring the ChatRequest max_length so oversized history
+# items (which skip request-model validation) cannot balloon the prompt.
+MAX_INPUT_CHARS = 2000
+
+
+def sanitize_user_input(text: Optional[str], max_chars: int = MAX_INPUT_CHARS) -> str:
+    """
+    Normalize untrusted user/history text before it reaches the guardrail or LLM.
+
+    Defends against common prompt-injection smuggling techniques:
+      * Unicode normalization (NFKC) folds homoglyph / full-width look-alikes
+        back to canonical ASCII so "?????????????????" style tricks are detectable.
+      * Strips zero-width, bidi-override and other invisible characters used to
+        hide instructions inside otherwise innocent text.
+      * Strips control characters (keeping tab/newline).
+      * Collapses runs of >2 blank lines and very long whitespace runs that are
+        used to push a system prompt out of view ("prompt flooding").
+      * Enforces a hard length cap.
+
+    This is normalization, not blocking: the intent classifier (check_guardrail)
+    still decides whether the cleaned text is in scope.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    t = unicodedata.normalize("NFKC", text)
+    t = _INVISIBLE_RE.sub("", t)
+    t = _CONTROL_RE.sub("", t)
+    # Collapse excessive blank lines and horizontal whitespace.
+    t = re.sub(r"[ \t]{4,}", " ", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    t = t.strip()
+    if len(t) > max_chars:
+        t = t[:max_chars].rstrip()
+    return t
+
+
 def check_guardrail(query: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Sub-millisecond Pre-Retrieval Intent Classifier.
@@ -121,14 +170,41 @@ def check_guardrail(query: str) -> Tuple[bool, Optional[str], Optional[str]]:
             return True, f"Generic concept definitions outside DPWH civil engineering ('{target}') are outside system scope.", "generic_definition"
 
     # Layer 6: Persona adoption or prompt jailbreak attempts
-    is_persona_override = bool(re.search(
-        r'\b(?:act\s+as\s+(?:a|an)|you\s+are\s+now\s+(?:a|an)|pretend\s+to\s+be|'
-        r'ignore\s+(?:all\s+)?(?:previous\s+)?instructions|jailbreak|dan\s+mode|'
-        r'bypass\s+(?:rules|filters))\b',
+    # Word-boundary anchored natural-language injection phrases.
+    persona_phrase = bool(re.search(
+        r'\b(?:'
+        r'act\s+as\s+(?:a|an|the)?|you\s+are\s+(?:now|henceforth|from\s+now\s+on)|'
+        r'pretend\s+(?:to\s+be|you\s+are)|roleplay|role-play|simulate\s+(?:a|an|being)|'
+        # ignore / disregard / forget prior instructions or context (optional noun)
+        r'(?:ignore|disregard|forget|override|bypass|reset|erase)\s+'
+        r'(?:all\s+|everything\s+|any\s+)?(?:the\s+)?'
+        r'(?:previous|prior|above|earlier|preceding|former|system|initial|original)'
+        r'(?:\s+(?:instructions?|prompts?|rules?|guidelines?|constraints?|context|messages?))?|'
+        r'(?:ignore|disregard|forget|override|bypass)\s+'
+        r'(?:all\s+|everything\s+|any\s+)?(?:the\s+)?'
+        r'(?:instructions?|prompts?|rules?|guidelines?|constraints?|context|messages?)|'
+        r'ignore\s+everything|forget\s+(?:what|everything|all)|'
+        # persona / mode jailbreaks
+        r'jailbreak|dan\s+mode|do\s+anything\s+now|developer\s+mode|god\s+mode|'
+        r'unfiltered\s+mode|no\s+restrictions|without\s+(?:any\s+)?restrictions|'
+        # prompt / instruction exfiltration
+        r'(?:reveal|show|print|repeat|output|display|tell\s+me)\s+'
+        r'(?:your|the)\s+(?:system\s+)?(?:prompt|instructions?|rules?|guidelines?|configuration)|'
+        r'what\s+(?:is|are)\s+your\s+(?:system\s+)?(?:prompt|instructions?)|'
+        r'repeat\s+the\s+(?:words|text)\s+above|'
+        r'new\s+(?:instructions?|rules?|system\s+prompt)'
+        r')\b',
         q_lower
     ))
-    if is_persona_override:
-        return True, "Persona adoption and roleplaying prompts are outside system scope.", "persona_override"
+    # Delimiter / fake-role / chat-template injection markers (no word boundary).
+    delimiter_inject = bool(re.search(
+        r'(?:</?\s*(?:system|assistant|user|im_start|im_end)\s*>|'
+        r'\[/?\s*inst\s*\]|<\|\s*(?:im_start|im_end|system|user|assistant)|'
+        r'```\s*system|^\s*system\s*:)',
+        q_lower
+    ))
+    if persona_phrase or delimiter_inject:
+        return True, "Persona adoption, instruction-override, and prompt-injection attempts are outside system scope.", "persona_override"
 
     return False, None, None
 

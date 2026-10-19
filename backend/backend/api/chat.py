@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from backend.config import settings
 from backend.models.chat import (
     ChatRequest,
+    ChatMessage,
     ChatResponse,
     GuardrailStatus,
     SpatialContext,
@@ -24,6 +25,7 @@ from backend.services.guardrail_service import (
     check_guardrail,
     clean_location,
     clean_description,
+    sanitize_user_input,
     CEBU_MUNICIPALITIES,
     STOP_WORDS,
 )
@@ -473,6 +475,39 @@ async def resolve_project_context(
     return None, matched_projects, graph_context, spatial_context
 
 
+def _sanitize_request(request: ChatRequest) -> Tuple[str, List[ChatMessage]]:
+    """
+    Normalize the incoming message and every history turn before they reach the
+    guardrail or the LLM. History is client-supplied and therefore untrusted, so
+    it is sanitized the same way as the live message (strips invisible/control
+    chars, NFKC-normalizes homoglyphs, collapses prompt-flooding whitespace, and
+    caps length). Returns the cleaned message and a cleaned history list.
+    """
+    clean_message = sanitize_user_input(request.message)
+    clean_history: List[ChatMessage] = []
+    for h in (request.history or []):
+        role = h.role if hasattr(h, "role") else h.get("role", "user")
+        content = h.content if hasattr(h, "content") else h.get("content", "")
+        clean_history.append(ChatMessage(role=role, content=sanitize_user_input(content)))
+    return clean_message, clean_history
+
+
+def _history_has_injection(history: List[ChatMessage]) -> bool:
+    """
+    Treat instruction-override / prompt-injection content planted in prior turns
+    as off-topic too, so it cannot ride along into the generation prompt. Only
+    the jailbreak/persona layer is applied to history (domain-scope checks stay
+    on the live message, since legitimate past turns may be terse).
+    """
+    for h in history:
+        if h.role not in ("user", "assistant"):
+            continue
+        blocked, _, rule = check_guardrail(h.content)
+        if blocked and rule == "persona_override":
+            return True
+    return False
+
+
 @router.post("", response_model=ChatResponse, summary="Grounded GraphRAG QA")
 async def chat_endpoint(request: ChatRequest):
     """
@@ -483,8 +518,15 @@ async def chat_endpoint(request: ChatRequest):
     """
     start_time = time.perf_counter()
 
-    # Step 1: Pre-retrieval Intent Gate
-    is_off_topic, reason, rule = check_guardrail(request.message)
+    # Step 0: Normalize untrusted input (message + history) against injection smuggling.
+    clean_message, clean_history = _sanitize_request(request)
+
+    # Step 1: Pre-retrieval Intent Gate (live message + planted-injection in history)
+    is_off_topic, reason, rule = check_guardrail(clean_message)
+    if not is_off_topic and _history_has_injection(clean_history):
+        is_off_topic, reason, rule = True, (
+            "A prior conversation turn contained an instruction-override attempt."
+        ), "persona_override"
     if is_off_topic:
         duration = (time.perf_counter() - start_time) * 1000
         return ChatResponse(
@@ -508,8 +550,8 @@ async def chat_endpoint(request: ChatRequest):
 
     # Step 2: Knowledge Graph Retrieval
     targeted_project, matched_projects, graph_context, spatial_context = await resolve_project_context(
-        question=request.message,
-        history=request.history
+        question=clean_message,
+        history=clean_history
     )
 
     # Step 3: Handle Instant Mode (Zero LLM latency)
@@ -574,9 +616,9 @@ async def chat_endpoint(request: ChatRequest):
             model=settings.LLM_MODEL
         )
 
-    history_payload = [{"role": h.role, "content": h.content} for h in request.history]
+    history_payload = [{"role": h.role, "content": h.content} for h in clean_history]
     messages = llm_service.construct_messages(
-        question=request.message,
+        question=clean_message,
         graph_context=graph_context,
         history=history_payload,
         is_single_project=bool(targeted_project)
@@ -607,8 +649,15 @@ async def chat_stream_endpoint(request: ChatRequest):
     async def event_generator():
         start_time = time.perf_counter()
 
-        # Step 1: Pre-retrieval Intent Gate
-        is_off_topic, reason, rule = check_guardrail(request.message)
+        # Step 0: Normalize untrusted input (message + history).
+        clean_message, clean_history = _sanitize_request(request)
+
+        # Step 1: Pre-retrieval Intent Gate (live message + planted-injection in history)
+        is_off_topic, reason, rule = check_guardrail(clean_message)
+        if not is_off_topic and _history_has_injection(clean_history):
+            is_off_topic, reason, rule = True, (
+                "A prior conversation turn contained an instruction-override attempt."
+            ), "persona_override"
         if is_off_topic:
             payload = {
                 "event": "guardrail_blocked",
@@ -624,8 +673,8 @@ async def chat_stream_endpoint(request: ChatRequest):
 
         # Step 2: Knowledge Graph Retrieval & Spatial Targeting
         targeted_project, matched_projects, graph_context, spatial_context = await resolve_project_context(
-            question=request.message,
-            history=request.history
+            question=clean_message,
+            history=clean_history
         )
 
         spatial_dict = (
@@ -656,9 +705,9 @@ async def chat_stream_endpoint(request: ChatRequest):
             return
 
         # Step 3: Stream tokens from LLM
-        history_payload = [{"role": h.role, "content": h.content} for h in request.history]
+        history_payload = [{"role": h.role, "content": h.content} for h in clean_history]
         messages = llm_service.construct_messages(
-            question=request.message,
+            question=clean_message,
             graph_context=graph_context,
             history=history_payload,
             is_single_project=bool(targeted_project)

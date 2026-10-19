@@ -358,6 +358,43 @@ class TestBackendAPI(unittest.TestCase):
         data = resp.json()
         self.assertFalse(data["graph_context"])
 
+    def test_chat_followup_superlative_with_terms(self):
+        """A follow-up with real terms + a cue ('most expensive one on it?') keeps context."""
+        history = [
+            {"role": "user", "content": "What are the projects in Cordova?"},
+            {"role": "assistant",
+             "content": "There are 80 DPWH projects in Cordova."},
+            {"role": "user", "content": "tell me more about it"},
+            {"role": "assistant",
+             "content": "They focus on access roads and bridges."},
+        ]
+        resp = self.client.post("/api/chat", json={
+            "message": "what's the most expensive one on it?",
+            "mode": "instant",
+            "history": history,
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data["spatial"])
+        self.assertEqual(data["spatial"]["target_location"], "Cordova")
+        self.assertTrue(data["graph_context"])
+
+    def test_chat_new_location_overrides_memory(self):
+        """A standalone location query must switch topic, not stick to the remembered one."""
+        history = [
+            {"role": "user", "content": "What are the projects in Cordova?"},
+            {"role": "assistant", "content": "80 projects in Cordova."},
+        ]
+        resp = self.client.post("/api/chat", json={
+            "message": "What about Toledo City?",
+            "mode": "instant",
+            "history": history,
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data["spatial"])
+        self.assertEqual(data["spatial"]["target_location"], "Toledo City")
+
 
 if __name__ == "__main__":
     unittest.main()

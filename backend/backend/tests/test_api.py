@@ -453,6 +453,54 @@ class TestBackendAPI(unittest.TestCase):
         self.assertIsNone(sp)
         self.assertFalse(gc)
 
+    def test_single_project_intent_detection(self):
+        """Superlative / locating cues are classified as single-project intent."""
+        from backend.api.chat import _detect_single_project_intent, _select_project_for_intent
+        self.assertEqual(_detect_single_project_intent("what is the most expensive one?"), "max_budget")
+        self.assertEqual(_detect_single_project_intent("which is the cheapest?"), "min_budget")
+        self.assertEqual(_detect_single_project_intent("show the latest project"), "latest")
+        self.assertEqual(_detect_single_project_intent("where is it located?"), "locate")
+        self.assertEqual(_detect_single_project_intent("show it on the map"), "locate")
+        self.assertIsNone(_detect_single_project_intent("tell me more about it"))
+
+        projects = [
+            {"entity": "24AA0001", "budget_num": 100.0, "latitude": 10.1, "longitude": 123.9,
+             "budget": "P100 (Year: 2022)"},
+            {"entity": "24AA0002", "budget_num": 500.0, "latitude": 10.2, "longitude": 123.8,
+             "budget": "P500 (Year: 2024)"},
+            {"entity": "24AA0003", "budget_num": 50.0, "latitude": 10.3, "longitude": 123.7,
+             "budget": "P50 (Year: 2023)"},
+        ]
+        self.assertEqual(_select_project_for_intent("max_budget", projects, None)["entity"], "24AA0002")
+        self.assertEqual(_select_project_for_intent("min_budget", projects, None)["entity"], "24AA0003")
+        self.assertEqual(_select_project_for_intent("latest", projects, None)["entity"], "24AA0002")
+        # 'locate' prefers the previously-focused project id when provided.
+        self.assertEqual(_select_project_for_intent("locate", projects, "24AA0001")["entity"], "24AA0001")
+
+    def test_chat_most_expensive_focuses_single_project(self):
+        """A 'most expensive one' follow-up focuses the map on ONE project (zoom-in)."""
+        history = [
+            {"role": "user", "content": "What are the projects in Cordova?"},
+            {"role": "assistant", "content": "80 projects in Cordova."},
+            {"role": "user", "content": "tell me more about it"},
+            {"role": "assistant", "content": "Several road and bridge projects."},
+        ]
+        resp = self.client.post("/api/chat", json={
+            "message": "what's the most expensive one?",
+            "mode": "instant",
+            "history": history,
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIsNotNone(data["spatial"])
+        spatial = data["spatial"]
+        # Narrowed to a single project, zoomed in on its exact coordinates.
+        self.assertEqual(spatial["total_count"], 1)
+        self.assertEqual(len(spatial["projects"]), 1)
+        self.assertGreaterEqual(spatial["zoom"], 15)
+        self.assertIsNotNone(spatial["center"])
+        self.assertEqual(len(spatial["center"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

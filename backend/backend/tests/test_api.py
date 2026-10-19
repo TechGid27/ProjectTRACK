@@ -85,6 +85,69 @@ class TestBackendAPI(unittest.TestCase):
         blocked, _, _ = check_guardrail("Who is the top contractor in Cebu?")
         self.assertFalse(blocked)
 
+    def test_guardrail_procurement_vocabulary(self):
+        """Procurement/funding queries must pass the domain lock."""
+        for q in [
+            "Which contractors won procurement in Cebu?",
+            "Show the PhilGEPS awards for Mandaue",
+            "What is the GAA appropriation for the Cebu 2nd district office?",
+            "How much was disbursed for the Bogo road project?",
+        ]:
+            blocked, _, _ = check_guardrail(q)
+            self.assertFalse(blocked, f"Query wrongly blocked: {q}")
+
+    def test_project_detail_model_has_enrichment_fields(self):
+        """ProjectDetail must expose the new procurement/funding/expenditure fields."""
+        from backend.models.project import ProjectDetail, ProcurementAward
+        fields = ProjectDetail.model_fields
+        for f in [
+            "amount_paid", "source_of_funds", "funding_source", "program_name",
+            "component_categories", "region", "report_count",
+            "has_satellite_image", "gps_source", "procurements",
+        ]:
+            self.assertIn(f, fields, f"Missing field {f}")
+        # Submodel instantiation with a confidence flag.
+        award = ProcurementAward(reference_id="R-1", match_confidence="exact_name_cebu")
+        self.assertEqual(award.match_confidence, "exact_name_cebu")
+
+    def test_map_and_search_models_expose_expenditure(self):
+        """Map pins and search results must carry amount_paid + source_of_funds."""
+        from backend.models.project import ProjectMapPoint, ProjectSearchResult
+        for model in (ProjectMapPoint, ProjectSearchResult):
+            self.assertIn("amount_paid", model.model_fields)
+            self.assertIn("source_of_funds", model.model_fields)
+
+    def test_analytics_new_models(self):
+        """AppropriationSummary and ProcurementAwardItem expose the expected fields."""
+        from backend.models.analytics import AppropriationSummary, ProcurementAwardItem
+        appr = AppropriationSummary(
+            office="Cebu 6th District Engineering Office",
+            line_count=627, total_amount=8299116.0,
+            total_amount_formatted="\u20b1 8.30M", years=[2023, 2024],
+        )
+        self.assertEqual(appr.line_count, 627)
+        self.assertEqual(appr.years, [2023, 2024])
+        proc = ProcurementAwardItem(
+            contractor="DT&C CONSTRUCTION", contract_amount=8956655.6,
+            match_confidence="exact_name_cebu",
+        )
+        self.assertEqual(proc.match_confidence, "exact_name_cebu")
+
+    def test_appropriations_endpoint(self):
+        """GET /api/analytics/appropriations returns a list."""
+        resp = self.client.get("/api/analytics/appropriations?limit=5")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.json(), list)
+
+    def test_procurement_endpoint(self):
+        """GET /api/analytics/procurement returns a list (with and without filter)."""
+        resp = self.client.get("/api/analytics/procurement?limit=5")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.json(), list)
+        resp2 = self.client.get("/api/analytics/procurement?contractor=construction&limit=3")
+        self.assertEqual(resp2.status_code, 200)
+        self.assertIsInstance(resp2.json(), list)
+
     def test_chat_guardrail_rejection(self):
         """Test POST /api/chat intercepts off-topic query without calling LLM."""
         resp = self.client.post("/api/chat", json={

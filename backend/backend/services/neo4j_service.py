@@ -213,7 +213,11 @@ class Neo4jService:
         if not clean_loc or len(clean_loc) < 3:
             return [], 0, 0.0
 
-        loc_token = canonical_municipality(clean_loc)
+        # Canonicalize the RAW location name, not the FTS-sanitized form.
+        # sanitize_search_query collapses e.g. "Lapu-Lapu City" -> "Lapu City",
+        # which would then canonicalize to "lapu" and never match the stored
+        # "Lapu-Lapu City" (canonical "lapu-lapu").
+        loc_token = canonical_municipality(location_name)
         if not loc_token:
             return [], 0, 0.0
 

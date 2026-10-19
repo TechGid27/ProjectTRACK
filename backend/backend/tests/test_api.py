@@ -566,6 +566,35 @@ class TestBackendAPI(unittest.TestCase):
             self.assertEqual(data["spatial"]["target_location"], "Cordova")
             self.assertGreater(data["spatial"]["total_count"], 1)
 
+    def test_output_rail_allows_for_in_prose(self):
+        """The output rail must not suppress natural prose like 'for traffic in ...'."""
+        from backend.services.guardrail_service import is_prohibited_stream_chunk
+        allowed = [
+            "a safer route for traffic in Lapu-Lapu City",
+            "budget for repairs in Toledo City",
+            "funding for schools in Cebu City",
+            "the plan for drainage in Mandaue",
+        ]
+        for text in allowed:
+            self.assertFalse(is_prohibited_stream_chunk(text),
+                             f"False positive suppressed valid prose: {text!r}")
+
+    def test_output_rail_still_blocks_code(self):
+        """The output rail must still catch real code constructs."""
+        from backend.services.guardrail_service import is_prohibited_stream_chunk
+        blocked = [
+            "for x in range(10):",
+            "for item in [1, 2, 3]:",
+            "console.log(value)",
+            "def compute(x):",
+            "while (true) {",
+            "```python",
+            "this is a programming construct",
+        ]
+        for text in blocked:
+            self.assertTrue(is_prohibited_stream_chunk(text),
+                            f"Failed to block code: {text!r}")
+
 
 if __name__ == "__main__":
     unittest.main()

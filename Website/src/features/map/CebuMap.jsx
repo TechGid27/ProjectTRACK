@@ -17,6 +17,7 @@ import {
   featureCentroid,
 } from '../../services/overpass'
 import { useMapContext } from './MapContext'
+import { clusterByProximity } from './cluster'
 import MapLegend from './MapLegend'
 
 const BOUNDS = [
@@ -971,7 +972,7 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Projects at shared coordinate`}
+      aria-label={`Projects in this area`}
       className="fixed inset-0 z-[2000] flex items-center justify-center p-4"
     >
       <button
@@ -984,10 +985,10 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
         <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div>
             <p className="text-[10px] font-semibold tracking-widest text-white/40">
-              SHARED LOCATION
+              NEARBY PROJECTS
             </p>
             <h2 className="mt-1 font-serif text-lg font-bold text-white">
-              {count} project{count !== 1 ? 's' : ''} at this coordinate
+              {count} project{count !== 1 ? 's' : ''} in this area
             </h2>
             <p className="mt-0.5 text-[11px] text-white/50">
               {top?.position?.[0]?.toFixed(4)}, {top?.position?.[1]?.toFixed(4)}
@@ -1642,16 +1643,19 @@ function CebuMap() {
   const displaySpatialDots = useMemo(() => {
     if (!filteredSpatialDots || filteredSpatialDots.length === 0) return []
 
-    const coordGroups = new Map()
-    for (const dot of filteredSpatialDots) {
-      if (dot.latitude == null || dot.longitude == null) continue
-      const key = `${Number(dot.latitude).toFixed(4)},${Number(dot.longitude).toFixed(4)}`
-      if (!coordGroups.has(key)) coordGroups.set(key, [])
-      coordGroups.get(key).push(dot)
-    }
+    // Cluster markers that are close ON SCREEN at the current zoom (not just
+    // those sharing an exact coordinate), then fan out each cluster so every
+    // project stays individually visible and clickable. As the user zooms in,
+    // the pixel threshold covers less ground, so clusters separate naturally.
+    const clusters = clusterByProximity(
+      filteredSpatialDots.filter((d) => d.latitude != null && d.longitude != null),
+      zoom,
+      (d) => [Number(d.latitude), Number(d.longitude)],
+    )
 
     const dispersed = []
-    for (const [, group] of coordGroups) {
+    for (const cluster of clusters) {
+      const group = cluster.items
       if (group.length === 1) {
         dispersed.push({
           ...group[0],
@@ -1659,9 +1663,10 @@ function CebuMap() {
           displayLng: group[0].longitude,
         })
       } else {
-        // Spread colliding points in a ~30m radius fan-out
-        const radiusMeters = 30
-        const dLat = radiusMeters / 111111
+        // Fan the colliding points out around the cluster anchor. The radius is
+        // scaled to the current zoom so the spread stays visually consistent.
+        const spreadPx = 16
+        const dLat = spreadPx * (360 / (256 * Math.pow(2, zoom)))
         group.forEach((dot, idx) => {
           const angle = (idx * 2 * Math.PI) / group.length
           const cosLat = Math.cos((dot.latitude * Math.PI) / 180) || 1
@@ -1675,7 +1680,7 @@ function CebuMap() {
       }
     }
     return dispersed
-  }, [filteredSpatialDots])
+  }, [filteredSpatialDots, zoom])
 
   const isSpatialActive = useMemo(() => {
     if (!displaySpatialDots || displaySpatialDots.length === 0) return false
@@ -1872,18 +1877,23 @@ function CebuMap() {
       (a, b) => (b.budgetNum ?? 0) - (a.budgetNum ?? 0),
     )
 
-    const groups = new Map()
-    for (const pin of sorted) {
-      const key = `${pin.position[0].toFixed(4)},${pin.position[1].toFixed(4)}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key).push(pin)
-    }
+    // Group pins that overlap ON SCREEN at the current zoom (projects that are
+    // close, not only those at an identical coordinate). Each cluster renders
+    // as a single pin with a count badge; clicking it opens the group list.
+    // Pins are pre-sorted by budget desc, so the cluster anchor/representative
+    // is the most prominent project in that cluster.
+    const clusters = clusterByProximity(
+      sorted,
+      zoom,
+      (pin) => pin.position,
+    )
 
-    return [...groups.entries()].map(([key, group]) => {
+    return clusters.map((cluster, idx) => {
+      const group = cluster.items
       const top = group[0]
       const [lat, lng] = top.position
       return {
-        key,
+        key: `${lat.toFixed(5)},${lng.toFixed(5)}-${idx}`,
         entity: top.id,
         latitude: lat,
         longitude: lng,
@@ -1895,7 +1905,7 @@ function CebuMap() {
         group,
       }
     })
-  }, [lguPinState, queryName, selected])
+  }, [lguPinState, queryName, selected, zoom])
 
   return (
     <section className="w-full">

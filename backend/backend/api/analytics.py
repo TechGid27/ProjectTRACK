@@ -4,7 +4,7 @@ Analytics API Endpoints
 Graph metrics, contractor leaderboards, and dataset statistics.
 """
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Query
 
 from backend.models.analytics import (
@@ -12,6 +12,8 @@ from backend.models.analytics import (
     ContractorLeaderboardItem,
     TopProjectItem,
     MunicipalityGeoSummary,
+    AppropriationSummary,
+    ProcurementAwardItem,
 )
 from backend.services.neo4j_service import neo4j_service
 
@@ -60,3 +62,28 @@ async def get_top_projects(
 async def get_location_breakdown():
     """Geographic breakdown of total projects, cumulative budget, and centroid coordinates by municipality."""
     return neo4j_service.get_location_breakdown()
+
+
+@router.get(
+    "/appropriations",
+    response_model=List[AppropriationSummary],
+    summary="GAA Appropriations by DPWH District Office"
+)
+async def get_appropriations(
+    limit: int = Query(default=50, ge=1, le=100, description="Number of district offices to retrieve")
+):
+    """General Appropriations Act (GAA) budget totals aggregated per DPWH Cebu district engineering office."""
+    return neo4j_service.get_appropriations_by_office(limit=limit)
+
+
+@router.get(
+    "/procurement",
+    response_model=List[ProcurementAwardItem],
+    summary="PhilGEPS Procurement Awards"
+)
+async def get_procurement(
+    contractor: Optional[str] = Query(default=None, description="Filter by contractor name (partial, case-insensitive)"),
+    limit: int = Query(default=50, ge=1, le=200, description="Max procurement awards to return")
+):
+    """List PhilGEPS procurement/bidding awards conservatively linked to DPWH Cebu contractors."""
+    return neo4j_service.get_procurement_awards(contractor=contractor, limit=limit)

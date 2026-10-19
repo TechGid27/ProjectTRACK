@@ -64,6 +64,27 @@ def synthesize_graph_response(
             f"It has an allocated budget of {budget} awarded to {contractor} (Status: {status})."
         )
 
+        # Expenditure transparency: contrast allocated budget vs. amount disbursed.
+        amount_paid = card.get("amount_paid")
+        if amount_paid:
+            try:
+                summary += f" Recorded disbursement to date is \u20b1 {float(amount_paid):,.2f}."
+            except (TypeError, ValueError):
+                pass
+
+        # Funding source / program provenance.
+        funding = card.get("funding_source") or card.get("source_of_funds")
+        if funding:
+            summary += f" It is funded under {funding}."
+
+        # Linked PhilGEPS procurement awards (conservative match).
+        procurements = card.get("procurements") or []
+        if procurements:
+            summary += (
+                f" {len(procurements)} related PhilGEPS procurement "
+                f"record(s) are linked to the contractor."
+            )
+
     # 2. Multi-project / Location Synthesis
     else:
         # Extract location label

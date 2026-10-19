@@ -30,7 +30,7 @@ logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
-logger = logging.getLogger("backend.main")
+logger = logging.getLogger("backend.app")
 
 
 @asynccontextmanager
@@ -136,7 +136,7 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "backend.main:app",
+        "backend.app:app",
         host=settings.HOST,
         port=settings.PORT,
         reload=True

@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi.testclient import TestClient
-from backend.main import app
+from backend.app import app
 from backend.services.guardrail_service import check_guardrail
 from backend.services.neo4j_service import neo4j_service
 

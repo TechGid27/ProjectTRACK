@@ -158,10 +158,32 @@ class Neo4jService:
         OPTIONAL MATCH (p)-[:LOCATED_IN]->(loc:Location)
         OPTIONAL MATCH (p)-[:SUPERVISED_BY]->(off:Office)
         OPTIONAL MATCH (p)-[:CATEGORIZED_AS]->(cat:Category)
+        OPTIONAL MATCH (p)-[:FUNDED_BY]->(fund:FundingSource)
+        OPTIONAL MATCH (c)-[:AWARDED]->(pr:Procurement)
+        WITH p, c, loc, off, cat, fund,
+             collect(DISTINCT CASE WHEN pr IS NULL THEN NULL ELSE {
+                 reference_id: pr.reference_id,
+                 award_title: pr.award_title,
+                 notice_title: pr.notice_title,
+                 organization: pr.organization_name,
+                 business_category: pr.business_category,
+                 contract_amount: pr.contract_amount,
+                 award_date: pr.award_date,
+                 award_status: pr.award_status,
+                 match_confidence: pr.match_confidence
+             } END) AS procurement_raw
         RETURN p.project_id AS id,
                p.description AS description,
                p.budget_raw AS budget,
                p.budget_numeric AS budget_num,
+               p.amount_paid AS amount_paid,
+               p.source_of_funds AS source_of_funds,
+               p.program_name AS program_name,
+               p.component_categories AS component_categories,
+               p.region AS region,
+               p.report_count AS report_count,
+               p.has_satellite_image AS has_satellite_image,
+               p.gps_source AS gps_source,
                p.status AS status,
                p.timeline AS timeline,
                p.url AS url,
@@ -174,7 +196,9 @@ class Neo4jService:
                coalesce(p.barangay, loc.barangay) AS barangay,
                coalesce(p.formatted_address, loc.formatted_address) AS formatted_address,
                off.name AS office,
-               cat.name AS category
+               cat.name AS category,
+               coalesce(fund.name, p.source_of_funds) AS funding_source,
+               [x IN procurement_raw WHERE x IS NOT NULL] AS procurements
         LIMIT 1
         """
         try:
@@ -292,6 +316,8 @@ class Neo4jService:
                node.description AS description,
                node.budget_raw AS budget,
                node.budget_numeric AS budget_num,
+               node.amount_paid AS amount_paid,
+               node.source_of_funds AS source_of_funds,
                node.status AS status,
                node.url AS url,
                node.latitude AS latitude,
@@ -330,6 +356,8 @@ class Neo4jService:
                node.description AS description,
                node.budget_raw AS budget,
                node.budget_numeric AS budget_num,
+               node.amount_paid AS amount_paid,
+               node.source_of_funds AS source_of_funds,
                node.status AS status,
                node.url AS url,
                node.latitude AS latitude,
@@ -376,6 +404,8 @@ class Neo4jService:
                p.status AS status,
                p.budget_raw AS budget,
                p.budget_numeric AS budget_num,
+               p.amount_paid AS amount_paid,
+               p.source_of_funds AS source_of_funds,
                c.name AS contractor
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
@@ -416,6 +446,72 @@ class Neo4jService:
                 return rows
         except Exception as e:
             logger.error(f"Error fetching location breakdown: {e}")
+            return []
+
+    def get_appropriations_by_office(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """GAA appropriations aggregated per DPWH Cebu district engineering office."""
+        driver = self.get_driver()
+        if not driver:
+            return []
+
+        cypher = """
+        MATCH (o:Office)-[:APPROPRIATED_UNDER]->(a:Appropriation)
+        RETURN o.name AS office,
+               count(a) AS line_count,
+               sum(a.amount) AS total_amount,
+               [y IN collect(DISTINCT a.year) WHERE y IS NOT NULL] AS years
+        ORDER BY total_amount DESC
+        LIMIT $limit
+        """
+        try:
+            with driver.session() as s:
+                rows = s.run(cypher, limit=limit).data()
+                for r in rows:
+                    r["total_amount"] = float(r.get("total_amount") or 0.0)
+                    r["total_amount_formatted"] = format_currency(r["total_amount"])
+                    r["years"] = sorted([int(y) for y in (r.get("years") or [])])
+                return rows
+        except Exception as e:
+            logger.error(f"Error fetching appropriations: {e}")
+            return []
+
+    def get_procurement_awards(
+        self, contractor: Optional[str] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List PhilGEPS procurement awards linked to DPWH Cebu contractors.
+
+        Optionally filter by (partial, case-insensitive) contractor name.
+        """
+        driver = self.get_driver()
+        if not driver:
+            return []
+
+        cypher = """
+        MATCH (c:Contractor)-[:AWARDED]->(pr:Procurement)
+        WHERE $contractor IS NULL OR toLower(c.name) CONTAINS toLower($contractor)
+        OPTIONAL MATCH (pr)-[:PROCURED_BY]->(org:Organization)
+        RETURN c.name AS contractor,
+               pr.reference_id AS reference_id,
+               pr.award_title AS award_title,
+               pr.notice_title AS notice_title,
+               coalesce(org.name, pr.organization_name) AS organization,
+               pr.business_category AS business_category,
+               pr.contract_amount AS contract_amount,
+               pr.award_date AS award_date,
+               pr.award_status AS award_status,
+               pr.match_confidence AS match_confidence
+        ORDER BY pr.contract_amount DESC
+        LIMIT $limit
+        """
+        try:
+            with driver.session() as s:
+                rows = s.run(cypher, contractor=contractor, limit=limit).data()
+                for r in rows:
+                    r["contract_amount"] = float(r.get("contract_amount") or 0.0)
+                    r["contract_amount_formatted"] = format_currency(r["contract_amount"])
+                return rows
+        except Exception as e:
+            logger.error(f"Error fetching procurement awards: {e}")
             return []
 
     def get_top_contractors(self, limit: int = 10) -> List[Dict[str, Any]]:

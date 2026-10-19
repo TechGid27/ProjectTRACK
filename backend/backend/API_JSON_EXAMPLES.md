@@ -25,6 +25,8 @@ This document provides complete, copy-pasteable JSON examples for all request pa
    - [Geographic & Municipality Breakdown](#32-geographic--municipality-breakdown-get-apianalyticslocations)
    - [Top Contractors Leaderboard](#33-top-contractors-leaderboard-get-apianalyticstop-contractors)
    - [Top Infrastructure Projects](#34-top-infrastructure-projects-get-apianalyticstop-projects)
+   - [GAA Appropriations by Office](#35-gaa-appropriations-by-office-get-apianalyticsappropriations)
+   - [PhilGEPS Procurement Awards](#36-philgeps-procurement-awards-get-apianalyticsprocurement)
 4. [Pipeline Administration (`/api/pipeline`)](#4-pipeline-administration-apipipeline)
    - [Trigger Supabase to Neo4j Sync](#41-trigger-batch-sync-post-apipelinesync)
    - [Trigger Apify Web Scraper](#42-trigger-scraper-post-apipelinescrape)
@@ -498,6 +500,57 @@ Returns aggregate project counts and budgets per Cebu city/municipality along wi
     "description": "Construction of 4-Lane Flyover along UN Avenue, Mandaue City, Cebu",
     "contractor": "QM BUILDERS",
     "location": "Mandaue City"
+  }
+]
+```
+
+---
+
+### 3.5 GAA Appropriations by Office (`GET /api/analytics/appropriations`)
+
+`GET /api/analytics/appropriations?limit=2`
+
+#### **Response (Returned by Backend)**
+```json
+[
+  {
+    "office": "Cebu 6th District Engineering Office",
+    "line_count": 627,
+    "total_amount": 8299116.0,
+    "total_amount_formatted": "₱ 8.30M",
+    "years": [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+  },
+  {
+    "office": "Cebu 4th District Engineering Office",
+    "line_count": 609,
+    "total_amount": 7864096.0,
+    "total_amount_formatted": "₱ 7.86M",
+    "years": [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+  }
+]
+```
+
+---
+
+### 3.6 PhilGEPS Procurement Awards (`GET /api/analytics/procurement`)
+
+`GET /api/analytics/procurement?contractor=construction&limit=1`
+
+#### **Response (Returned by Backend)**
+```json
+[
+  {
+    "contractor": "RCV VILLAMOR CONSTRUCTION",
+    "reference_id": "",
+    "award_title": "Construction Project",
+    "notice_title": "Construction of Multi-Purpose Building",
+    "organization": "DEPARTMENT OF PUBLIC WORKS AND HIGHWAYS - CEBU 5TH DEO",
+    "business_category": "Construction Projects",
+    "contract_amount": 38420000.0,
+    "contract_amount_formatted": "₱ 38.42M",
+    "award_date": "2024-06-12 00:00:00",
+    "award_status": "active",
+    "match_confidence": "exact_name_cebu"
   }
 ]
 ```

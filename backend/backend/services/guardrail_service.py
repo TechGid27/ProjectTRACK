@@ -31,7 +31,11 @@ INFRA_DOMAIN_KEYWORDS = {
     "borbon", "sogod", "catmon", "carmen", "camotes", "pilar", "poro", "san francisco",
     "tudela", "road", "roads", "highway", "bridge", "bridges", "flyover", "drainage",
     "flood", "river", "seawall", "building", "hall", "school", "slope", "deo", "status",
-    "civil", "works", "engineering", "asphalt", "concrete", "paving", "rehabilitation"
+    "civil", "works", "engineering", "asphalt", "concrete", "paving", "rehabilitation",
+    "procurement", "procurements", "bidding", "bid", "bids", "award", "awards", "awarded",
+    "awardee", "awardees", "philgeps", "appropriation", "appropriations", "gaa",
+    "disbursed", "disbursement", "paid", "funding", "funded", "fund", "funds",
+    "source", "program", "amount"
 }
 
 CEBU_MUNICIPALITIES = {

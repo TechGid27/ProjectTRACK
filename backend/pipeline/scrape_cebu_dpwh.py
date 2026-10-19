@@ -58,6 +58,57 @@ CEBU_DEO_MAP = {
     "Cebu 7th DEO": "Dumanjug, Ronda, Alcantara, Moalboal, Badian, Alegria, Malabuyoc, Ginatilan",
 }
 
+def build_project_metadata(p: dict) -> dict:
+    """Map a raw BetterGov DPWH hit to the structured Supabase metadata JSON.
+
+    This structured dict is the source of truth consumed by the Neo4j sync
+    (pipeline/sync_to_neo4j.py), replacing fragile Markdown re-parsing for the
+    enriched fields. Keys mirror the DPWH search index field names where
+    practical so the sync layer can read them directly.
+    """
+    loc_obj = p.get("location") or {}
+
+    def _num(val, default=0):
+        try:
+            return float(val) if val is not None else default
+        except (TypeError, ValueError):
+            return default
+
+    lat = p.get("latitude")
+    lng = p.get("longitude")
+    try:
+        lat = float(lat) if lat is not None else None
+    except (TypeError, ValueError):
+        lat = None
+    try:
+        lng = float(lng) if lng is not None else None
+    except (TypeError, ValueError):
+        lng = None
+
+    return {
+        "contractId": p.get("contractId"),
+        "infraYear": p.get("infraYear"),
+        "category": p.get("category") or p.get("componentCategories") or "Infrastructure",
+        "componentCategories": p.get("componentCategories") or p.get("category") or "",
+        "status": p.get("status"),
+        "progress": _num(p.get("progress"), 0.0),
+        "budget": _num(p.get("budget"), 0.0),
+        "amountPaid": _num(p.get("amountPaid"), 0.0),
+        "deo": loc_obj.get("province", "Cebu DEO"),
+        "region": loc_obj.get("region") or "",
+        "contractor": p.get("contractor") or "",
+        "startDate": p.get("startDate") or "",
+        "completionDate": p.get("completionDate") or "",
+        "programName": p.get("programName") or "",
+        "sourceOfFunds": p.get("sourceOfFunds") or "",
+        "latitude": lat,
+        "longitude": lng,
+        "reportCount": int(_num(p.get("reportCount"), 0)),
+        "hasSatelliteImage": bool(p.get("hasSatelliteImage", False)),
+        "source": "bettergov_dpwh",
+    }
+
+
 def extract_location_from_description(desc: str, default_deo: str) -> str:
     """Extract barangay, city, or municipal name from the project description."""
     m = re.search(
@@ -171,15 +222,25 @@ def main():
             continue
 
         desc = p.get("description", "DPWH Infrastructure Project")
-        deo = p.get("location", {}).get("province", "Cebu DEO")
+        loc_obj = p.get("location") or {}
+        deo = loc_obj.get("province", "Cebu DEO")
+        region = loc_obj.get("region") or ""
         category = p.get("category") or p.get("componentCategories") or "Infrastructure"
+        component_categories = p.get("componentCategories") or category
         contractor = p.get("contractor") or "Unspecified Contractor"
-        budget = p.get("budget", 0)
+        budget = p.get("budget", 0) or 0
+        amount_paid = p.get("amountPaid", 0) or 0
         status = p.get("status", "Completed")
         progress = p.get("progress", 100.0)
         year = p.get("infraYear", "2024")
         start = p.get("startDate") or "N/A"
         end = p.get("completionDate") or "N/A"
+        program_name = p.get("programName") or ""
+        source_of_funds = p.get("sourceOfFunds") or ""
+        latitude = p.get("latitude")
+        longitude = p.get("longitude")
+        report_count = p.get("reportCount", 0) or 0
+        has_satellite_image = bool(p.get("hasSatelliteImage", False))
         url = f"https://transparency.bettergov.ph/dpwh/projects/{cid}"
 
         loc_str = extract_location_from_description(desc, deo)
@@ -193,6 +254,9 @@ def main():
             f"- **Implementing Office:** {office_str}\n"
             f"- **Contractor:** {contractor}\n"
             f"- **Budget:** ₱{budget:,.2f} (Year: {year})\n"
+            f"- **Amount Paid:** ₱{amount_paid:,.2f}\n"
+            f"- **Source of Funds:** {source_of_funds or 'N/A'}\n"
+            f"- **Program:** {program_name or 'N/A'}\n"
             f"- **Status:** {status} ({progress:.1f}% complete)\n"
             f"- **Timeline:** {start} to {end}\n"
             f"- **Description:** {desc}\n"
@@ -203,16 +267,9 @@ def main():
             "url": url,
             "title": f"DPWH Project {cid} - {category}",
             "markdown": markdown_content,
-            "metadata": {
-                "contractId": cid,
-                "infraYear": year,
-                "budget": budget,
-                "status": status,
-                "progress": progress,
-                "deo": deo,
-                "contractor": contractor,
-                "source": "bettergov_dpwh"
-            },
+            # Structured metadata is the source of truth for the Neo4j sync
+            # (see pipeline/sync_to_neo4j.py). Markdown is kept for RAG readability.
+            "metadata": build_project_metadata(p),
             "content_hash": content_hash,
             "graph_synced": False
         }

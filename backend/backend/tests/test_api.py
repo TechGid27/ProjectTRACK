@@ -325,6 +325,39 @@ class TestBackendAPI(unittest.TestCase):
             self.assertIn("latitude", p)
             self.assertIn("longitude", p)
 
+    def test_chat_followup_location_memory(self):
+        """Follow-up like 'tell me more about it' must reuse the prior location topic."""
+        history = [
+            {"role": "user", "content": "What are the projects in Cordova?"},
+            {"role": "assistant",
+             "content": "Cordova has several DPWH road and flood control projects."},
+        ]
+        resp = self.client.post("/api/chat", json={
+            "message": "Tell me more about it",
+            "mode": "instant",
+            "history": history,
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # The follow-up must resolve back to Cordova via conversational memory,
+        # not return an empty / not-found result.
+        self.assertFalse(data["guardrail"]["is_off_topic"])
+        self.assertIsNotNone(data["spatial"])
+        self.assertEqual(data["spatial"]["target_location"], "Cordova")
+        self.assertGreater(data["spatial"]["total_count"], 0)
+        self.assertTrue(data["graph_context"])
+
+    def test_chat_followup_without_history_is_empty(self):
+        """A bare follow-up with no history must not fabricate a location."""
+        resp = self.client.post("/api/chat", json={
+            "message": "Tell me more about it",
+            "mode": "instant",
+            "history": [],
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["graph_context"])
+
 
 if __name__ == "__main__":
     unittest.main()

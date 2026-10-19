@@ -48,13 +48,16 @@ backend/
 │   └── tests/                  # Test suite (55 unit & integration tests)
 │       ├── test_api.py         # API, guardrails & chat tests (33 tests)
 │       ├── test_auth.py        # Supabase auth endpoint tests (12 tests)
+│       ├── test_pipeline_enrichment.py # DPWH metadata, PhilGEPS & GAA ingestion tests (13 tests)
 │       └── test_fallback.py    # LLM fallback & synthesizer tests (5 tests)
 ├── run.py                      # Start the web API server: `python run.py`
 ├── cli.py                      # Master CLI (interactive menu, queries, analytics, --sync, --scrape)
 ├── pipeline/                   # 📦 Core modular pipeline package
 │   ├── __init__.py             # Unified package exports
-│   ├── scrape_cebu_dpwh.py     # BetterGov scraper -> Apify & Supabase
-│   ├── sync_to_neo4j.py        # Paginated batch ingestion -> Neo4j Aura
+│   ├── scrape_cebu_dpwh.py     # BetterGov scraper -> Apify & Supabase (full structured metadata)
+│   ├── sync_to_neo4j.py        # Paginated batch ingestion -> Neo4j Aura (metadata-first + FundingSource)
+│   ├── fetch_philgeps.py       # PhilGEPS procurement fetch + conservative Neo4j ingestion
+│   ├── fetch_gaa.py            # GAA (appropriations) fetch + Neo4j ingestion
 │   ├── geocoding.py            # Deterministic WGS84 geocoding engine
 │   ├── enrich_neo4j_gps.py     # Authentic DPWH/BetterGov GPS enrichment
 │   ├── lgu_boundaries.py       # Point-in-polygon LGU reverse-geocoder
@@ -235,6 +238,10 @@ python cli.py --scrape
 # Run full pipeline: Scrape -> Sync -> Open Console
 python cli.py --all
 
+# Enrich the graph with PhilGEPS procurement + GAA appropriations
+# (run after --sync so Contractor nodes exist for conservative matching)
+python cli.py --enrich
+
 # Batch geocode Neo4j graph locations & projects (WGS84 coordinates)
 python cli.py --geocode
 
@@ -295,6 +302,39 @@ flowchart TD
 | **Generic Definition** | `what is dictionary?`, `what is science?` | ❌ Blocked (`<0.1ms`) |
 | **Persona / Jailbreak** | `act as a teacher`, `ignore previous instructions` | ❌ Blocked (`<0.1ms`) |
 | **Conversational Trivia** | `tell me a joke`, `recipe for adobo` | ❌ Blocked (`<0.1ms`) |
+
+---
+
+## 🗺️ Knowledge Graph Schema (Enriched)
+
+The ingestion pipeline builds the following node and relationship model in Neo4j
+(all nodes also carry the `:base` label for LightRAG compatibility):
+
+```text
+(:Project)-[:CONTRACTED_TO]->(:Contractor)
+(:Project)-[:LOCATED_IN]->(:Location)
+(:Project)-[:SUPERVISED_BY]->(:Office)
+(:Project)-[:CATEGORIZED_AS]->(:Category)
+(:Project)-[:FUNDED_BY]->(:FundingSource)          # source of funds / program
+(:Contractor)-[:AWARDED]->(:Procurement)           # PhilGEPS award (name+Cebu match)
+(:Procurement)-[:PROCURED_BY]->(:Organization)     # procuring entity
+(:Office)-[:APPROPRIATED_UNDER]->(:Appropriation)  # GAA budget line item
+```
+
+Enriched `Project` properties sourced from the BetterGov `dpwh` index via
+structured Supabase `metadata` (not fragile Markdown parsing): `amount_paid`
+(disbursement), `source_of_funds`, `program_name`, `component_categories`,
+`region`, `report_count`, `has_satellite_image`, plus authentic
+`latitude`/`longitude` (`gps_source = "dpwh_bettergov"` when inside the Cebu
+bounding box, else `"geocoded"`).
+
+**Data sources** (BetterGov search backend, search-scoped key):
+`dpwh` (projects), `philgeps` (procurement/bidding awards), `gaa` (General
+Appropriations Act line items). PhilGEPS linkage is **conservative** — an award
+is attached only when the awardee name matches an existing `Contractor` *and*
+the `area_of_delivery` is a Cebu LGU; each `Procurement` node stores
+`match_confidence = "exact_name_cebu"` and never overwrites authoritative DPWH
+facts.
 
 ---
 

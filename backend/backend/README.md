@@ -40,7 +40,7 @@ backend/
 │   ├── router.py            # Unified API router (/api)
 │   ├── health.py            # /api/health, /api/health/neo4j, /api/health/llm
 │   ├── projects.py          # /api/projects/{id}, /api/projects/search, /api/projects/by-location
-│   ├── analytics.py         # /api/analytics/summary, /api/analytics/top-contractors, /api/analytics/top-projects
+│   ├── analytics.py         # /api/analytics/summary, /top-contractors, /top-projects, /appropriations, /procurement
 │   ├── chat.py              # /api/chat (JSON), /api/chat/stream (SSE streaming)
 │   └── pipeline.py          # /api/pipeline/sync, /api/pipeline/scrape, /api/pipeline/jobs
 ├── models/                  # Pydantic validation & response schemas
@@ -168,6 +168,8 @@ The test suite validates:
 | `GET` | `/api/analytics/summary` | Overall dataset metrics (total projects, total budget, contractors) |
 | `GET` | `/api/analytics/top-contractors?limit=10` | Ranked contractors by cumulative awarded budget |
 | `GET` | `/api/analytics/top-projects?limit=10` | Most expensive DPWH infrastructure projects in Cebu |
+| `GET` | `/api/analytics/appropriations?limit=50` | GAA appropriation totals per DPWH Cebu district office |
+| `GET` | `/api/analytics/procurement?contractor=&limit=50` | PhilGEPS procurement awards linked to Cebu contractors |
 
 ---
 

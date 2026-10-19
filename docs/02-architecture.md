@@ -73,6 +73,28 @@ The core relational backbone is implemented in **Neo4j AuraDB**, structured as a
 * **`Disbursement`**: Financial tranches, budget allocations, and audited expenditures.
   * *Properties*: `tranche_id`, `amount`, `date`, `funding_source`, `status`.
 
+#### Enriched Transparency Nodes (PhilGEPS + GAA)
+
+The ingestion pipeline augments the core graph with public procurement and
+budget provenance pulled from the BetterGov search backend (`dpwh`, `philgeps`,
+and `gaa` indexes). The implemented node labels and relationships are:
+
+* **`FundingSource`**: Source of funds / program backing a project.
+  * `(:Project)-[:FUNDED_BY]->(:FundingSource)`
+* **`Procurement`**: A PhilGEPS procurement/bidding award. Linked conservatively
+  (awardee-name match **and** Cebu `area_of_delivery`), carrying
+  `match_confidence = "exact_name_cebu"` and never overwriting DPWH facts.
+  * `(:Contractor)-[:AWARDED]->(:Procurement)-[:PROCURED_BY]->(:Organization)`
+  * *Properties*: `reference_id`, `award_title`, `notice_title`, `contract_amount`, `award_date`, `award_status`, `business_category`, `match_confidence`.
+* **`Appropriation`**: A GAA (General Appropriations Act) budget line item for a
+  DPWH Cebu district office.
+  * `(:Office)-[:APPROPRIATED_UNDER]->(:Appropriation)`
+  * *Properties*: `amount`, `year`, `sub_object`, `fund_subcat`, `expense_class`.
+
+Enriched `Project` properties: `amount_paid` (disbursement), `source_of_funds`,
+`program_name`, `component_categories`, `region`, `report_count`,
+`has_satellite_image`, and authentic `latitude`/`longitude` (`gps_source`).
+
 ### 2.2 Relationship Topology
 
 ```mermaid

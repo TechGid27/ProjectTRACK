@@ -43,7 +43,7 @@ backend/
 │   │   ├── llm_service.py      # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   │   ├── graph_synthesizer.py# Instant Graph Deterministic Synthesizer (<5ms)
 │   │   └── pipeline_service.py # Background job execution & state tracker
-│   └── tests/                  # Test suite (38 unit & integration tests)
+│   └── tests/                  # Test suite (55 unit & integration tests)
 │       ├── test_api.py         # API endpoints & guardrails tests (33 tests)
 │       └── test_fallback.py    # LLM fallback & synthesizer tests (5 tests)
 ├── main.py                     # ⚡ Master CLI runner (interactive menu, CLI queries, analytics, --api)
@@ -296,7 +296,7 @@ flowchart TD
 
 ## 🧪 Running Unit & Integration Tests
 
-Run the full automated test suite (38 unit & integration tests):
+Run the full automated test suite (55 unit & integration tests):
 
 ```powershell
 python -m unittest discover -s backend/tests -p "test_*.py"

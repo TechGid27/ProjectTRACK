@@ -56,7 +56,7 @@ backend/
 │   ├── llm_service.py       # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   ├── graph_synthesizer.py # Deterministic Graph Synthesizer (<5ms)
 │   └── pipeline_service.py  # Background job execution & state tracker
-└── tests/                   # Test suite (38 unit & integration tests)
+└── tests/                   # Test suite (55 unit & integration tests)
     ├── __init__.py
     ├── test_api.py          # API endpoints & guardrails tests (33 tests)
     └── test_fallback.py     # Fallback resilience & synthesizer tests (5 tests)
@@ -117,7 +117,7 @@ Once running:
 
 ## Running Tests
 
-Run the full automated test suite (38 unit & integration tests):
+Run the full automated test suite (55 unit & integration tests):
 
 ```bash
 python -m unittest discover -s backend/tests -p "test_*.py"
@@ -187,6 +187,39 @@ The test suite validates:
 
 * `mode="ai"`: Graph retrieval + Groq / Local Ollama / Deterministic Synthesizer.
 * `mode="instant"`: Instant Cypher lookup (`<10ms`, zero AI latency).
+
+---
+
+### Authentication (Supabase-backed)
+
+Backend-managed Supabase (GoTrue) auth. The server exchanges credentials/OAuth
+tokens with Supabase and stores the session in an **HTTP-only cookie**, so the
+browser never handles raw tokens. The web client calls these with
+`fetch(..., { credentials: 'include' })` (see `Website/src/services/auth.js`).
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET`  | `/api/auth/oauth/{provider}?redirect=...` | OAuth authorize URL for `google`, `github`, `facebook`, ... |
+| `POST` | `/api/auth/callback` | Persist `{ access_token, refresh_token }` from an OAuth redirect into the session cookie |
+| `GET`  | `/api/auth/session` | Current user (`{ user }` or `{ user: null }`); auto-refreshes an expired token |
+| `POST` | `/api/auth/signin` | Email/password sign-in; opens the session cookie |
+| `POST` | `/api/auth/signup` | Email/password registration (honors Supabase email-confirmation) |
+| `POST` | `/api/auth/signout` | Revoke the session and clear the cookie |
+
+**Setup:** add `SUPABASE_ANON_KEY` (and keep `SUPABASE_URL`) to the backend
+`.env`, and set `FRONTEND_URL` to your web origin so credentialed cookies and
+the default OAuth redirect work. For a cross-site frontend over HTTPS, set
+`AUTH_COOKIE_SECURE=true` and `AUTH_COOKIE_SAMESITE=none`.
+
+**Protecting a route (for teammates):**
+```python
+from fastapi import Depends
+from backend.api.auth import get_current_user
+
+@router.get("/private")
+async def private(user = Depends(get_current_user)):
+    return {"you_are": user.email}
+```
 
 ---
 

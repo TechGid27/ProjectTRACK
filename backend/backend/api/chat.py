@@ -307,6 +307,30 @@ async def resolve_project_context(
         single_intent = _detect_single_project_intent(question)
         if single_intent == "locate" and not is_followup:
             single_intent = None
+
+        # Inherit a superlative intent across a location switch. "what about in
+        # Cordova?" after "most expensive project in Lapu-Lapu" keeps the same
+        # question type (most expensive) applied to the new location. This is a
+        # short elliptical continuation that names a new location but omits the
+        # question itself, so we inherit the prior ranking superlative (never the
+        # referential "locate"). Gated on a continuation phrase so ordinary
+        # "projects in Cordova" queries keep the full overview.
+        _is_continuation = bool(history) and bool(
+            re.match(r'^\s*(what|how)\s+about\b', q_lower_full)
+            or re.match(r'^\s*and\b', q_lower_full)
+            or len(terms) <= 1  # essentially just a location + filler
+        )
+        if not single_intent and _is_continuation and detected_muni:
+            for h in reversed((history or [])[-6:]):
+                role = h.role if hasattr(h, "role") else h.get("role", "")
+                if role != "user":
+                    continue
+                content = h.content if hasattr(h, "content") else h.get("content", "")
+                prior = _detect_single_project_intent(content)
+                if prior and prior != "locate":
+                    single_intent = prior
+                    break
+
         if single_intent and loc_projects:
             history_text_focus = " ".join(
                 h.content if hasattr(h, "content") else h.get("content", "")

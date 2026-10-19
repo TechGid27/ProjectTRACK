@@ -74,10 +74,19 @@ def create_app() -> FastAPI:
         redoc_url="/redoc"
     )
 
-    # Configure CORS for modern web frontends (React, Next.js, Vue, Svelte)
+    # Configure CORS for modern web frontends (React, Next.js, Vue, Svelte).
+    # Cookie-based auth requires allow_credentials=True, which browsers reject
+    # together with a "*" origin. When CORS_ORIGINS is left as the permissive
+    # default, fall back to the configured FRONTEND_URL so credentialed session
+    # cookies work out of the box; otherwise honor the explicit allow-list.
+    configured_origins = settings.CORS_ORIGINS or []
+    if configured_origins in (["*"], []):
+        allowed_origins = [settings.FRONTEND_URL]
+    else:
+        allowed_origins = configured_origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -96,6 +105,7 @@ def create_app() -> FastAPI:
             "docs": "/docs",
             "redoc": "/redoc",
             "endpoints": {
+                "auth": f"{settings.API_PREFIX}/auth",
                 "health": f"{settings.API_PREFIX}/health",
                 "projects": f"{settings.API_PREFIX}/projects",
                 "analytics": f"{settings.API_PREFIX}/analytics",

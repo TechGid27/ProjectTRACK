@@ -531,6 +531,41 @@ class TestBackendAPI(unittest.TestCase):
             self.assertEqual(data["spatial"]["total_count"], 1)
             self.assertGreaterEqual(data["spatial"]["zoom"], 15)
 
+    def test_chat_superlative_inherited_across_location_switch(self):
+        """\"what about in Cordova?\" after a superlative keeps focusing one project."""
+        history = [
+            {"role": "user", "content": "most expensive project in lapu lapu"},
+            {"role": "assistant", "content": "A multi-purpose building project in Lapu-Lapu City."},
+        ]
+        resp = self.client.post("/api/chat", json={
+            "message": "what about in cordova?",
+            "mode": "instant",
+            "history": history,
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        if data.get("spatial") and data["spatial"].get("projects"):
+            self.assertEqual(data["spatial"]["total_count"], 1)
+            self.assertGreaterEqual(data["spatial"]["zoom"], 15)
+            self.assertEqual(data["spatial"]["target_location"], "Cordova")
+
+    def test_chat_plain_location_continuation_without_superlative(self):
+        """A continuation after a NON-superlative turn stays a full overview."""
+        history = [
+            {"role": "user", "content": "projects in lapu lapu"},
+            {"role": "assistant", "content": "There are many projects in Lapu-Lapu City."},
+        ]
+        resp = self.client.post("/api/chat", json={
+            "message": "what about in cordova?",
+            "mode": "instant",
+            "history": history,
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        if data.get("spatial"):
+            self.assertEqual(data["spatial"]["target_location"], "Cordova")
+            self.assertGreater(data["spatial"]["total_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

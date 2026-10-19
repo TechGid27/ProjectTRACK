@@ -47,6 +47,7 @@ def resolve_project_context(
     matched_projects = []
     graph_context = ""
     spatial_context = None
+    remembered_location = None  # last location topic recovered from history (follow-ups)
 
     # 1. Direct Project ID match in current query
     pid_match = re.search(r'\b\d{2}[A-Za-z]{1,2}\d{4,5}\b', question, re.IGNORECASE)
@@ -55,11 +56,22 @@ def resolve_project_context(
 
     # 2. Check conversation history for follow-ups
     if not targeted_project and is_followup and history:
-        history_text = " ".join([h.content if hasattr(h, "content") else h.get("content", "") for h in history[-2:]])
+        history_text = " ".join([h.content if hasattr(h, "content") else h.get("content", "") for h in history[-6:]])
         prev_pids = re.findall(r'\b\d{2}[A-Za-z]{1,2}\d{4,5}\b', history_text, re.IGNORECASE)
         if prev_pids:
             target_pid = prev_pids[-1].upper()
             targeted_project = neo4j_service.get_project_by_id(target_pid)
+
+        # If no project ID was discussed, recover the last LOCATION topic so cues
+        # like "tell me more about it" after "projects in Cordova" keep context.
+        if not targeted_project:
+            history_lower = history_text.lower()
+            last_pos = -1
+            for muni_key, geo_data in CEBU_MUNICIPALITIES_GEO.items():
+                for m in re.finditer(r'\b' + re.escape(muni_key) + r'\b', history_lower):
+                    if m.start() > last_pos:
+                        last_pos = m.start()
+                        remembered_location = geo_data["name"]
 
     # 3. If single project resolved, build single project context & spatial pin
     if targeted_project:
@@ -107,6 +119,11 @@ def resolve_project_context(
         if re.search(r'\b' + re.escape(muni_key) + r'\b', q_lower):
             detected_muni = geo_data["name"]
             break
+
+    # Follow-up without an explicit location in the current message: fall back to
+    # the location topic remembered from earlier turns (e.g. Cordova).
+    if not detected_muni and remembered_location:
+        detected_muni = remembered_location
 
     search_query = detected_muni or (" ".join(terms) if terms else question)
     loc_projects, total_cnt, total_budget = neo4j_service.search_projects_by_location(search_query)

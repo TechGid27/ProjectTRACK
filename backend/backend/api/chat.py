@@ -27,14 +27,56 @@ from backend.services.guardrail_service import (
     CEBU_MUNICIPALITIES,
     STOP_WORDS,
 )
-from backend.services.neo4j_service import neo4j_service, format_currency
+from backend.services.neo4j_service import neo4j_service, format_currency, canonical_municipality
 from backend.services.llm_service import llm_service
 from pipeline.geocoding import CEBU_MUNICIPALITIES_GEO, geocode_location
 
 router = APIRouter(prefix="/chat", tags=["Chat & GraphRAG"])
 
+# Canonical Cebu LGU display names offered to (and required back from) the LLM
+# reference resolver. The resolver may ONLY return one of these for a location;
+# anything else is rejected, keeping follow-up resolution locked to the database.
+_ALLOWED_LOCATION_NAMES = sorted({geo["name"] for geo in CEBU_MUNICIPALITIES_GEO.values()})
+_ALLOWED_LOCATION_LOOKUP = {name.lower(): name for name in _ALLOWED_LOCATION_NAMES}
+# Also index the canonical token (strips "City of " / " City" / province suffix)
+# so the resolver may answer with either city-naming convention.
+_ALLOWED_LOCATION_LOOKUP.update(
+    {canonical_municipality(name): name for name in _ALLOWED_LOCATION_NAMES}
+)
+_PROJECT_ID_RE = re.compile(r'^\d{2}[A-Za-z]{1,2}\d{4,5}$')
 
-def resolve_project_context(
+
+def _parse_validated_reference(raw: str):
+    """
+    Validate the sandboxed resolver output against a strict whitelist.
+
+    Accepts only:
+        "LOCATION: <name>"  where <name> is a known Cebu LGU (case-insensitive)
+        "PROJECT: <id>"     where <id> matches the DPWH project-id pattern
+    Returns ("location", canonical_name) | ("project", PID) | (None, None).
+
+    Any free text, injected instruction, or unknown value collapses to (None, None),
+    so a compromised/confused model cannot steer the system off-domain.
+    """
+    if not raw or not isinstance(raw, str):
+        return None, None
+    line = raw.strip().splitlines()[0].strip() if raw.strip() else ""
+    m = re.match(r'^(LOCATION|PROJECT)\s*:\s*(.+)$', line, re.IGNORECASE)
+    if not m:
+        return None, None
+    kind = m.group(1).strip().lower()
+    value = m.group(2).strip().strip('"\'').strip()
+    if kind == "location":
+        canon = (_ALLOWED_LOCATION_LOOKUP.get(value.lower())
+                 or _ALLOWED_LOCATION_LOOKUP.get(canonical_municipality(value)))
+        return ("location", canon) if canon else (None, None)
+    if kind == "project":
+        pid = value.upper()
+        return ("project", pid) if _PROJECT_ID_RE.match(pid) else (None, None)
+    return None, None
+
+
+async def resolve_project_context(
     question: str,
     history: List[Any]
 ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]], str, Optional[SpatialContext]]:
@@ -52,10 +94,25 @@ def resolve_project_context(
         "last", "same", "above",
     }
     has_cue = bool(question_words & followup_cues)
-    # A message is a follow-up when it has no standalone search terms OR it leans
-    # on a contextual cue/pronoun/superlative (which may sit alongside real terms,
-    # e.g. "what's the most expensive one on it?").
-    is_followup = bool(history) and (len(terms) == 0 or has_cue)
+
+    # Does the CURRENT message explicitly name a Cebu LGU or a project id? If it
+    # does, it is self-contained and needs no conversational memory.
+    q_lower_full = question.lower()
+    msg_has_location = any(
+        re.search(r'\b' + re.escape(k) + r'\b', q_lower_full)
+        for k in CEBU_MUNICIPALITIES_GEO
+    )
+    msg_has_project_id = bool(re.search(r'\b\d{2}[A-Za-z]{1,2}\d{4,5}\b', question, re.IGNORECASE))
+
+    # A message is treated as a context-dependent follow-up when there is prior
+    # conversation AND it does not stand on its own, i.e. it has no explicit
+    # location/project of its own, or it leans on a contextual cue/pronoun. The
+    # sandboxed LLM resolver (below) is the authority for ambiguous phrasings
+    # like "how is the funding for the area we discussed"; it fails closed to
+    # NONE, so broadening this trigger cannot invent off-domain context.
+    is_followup = bool(history) and (
+        len(terms) == 0 or has_cue or (not msg_has_location and not msg_has_project_id)
+    )
 
     targeted_project = None
     matched_projects = []
@@ -86,6 +143,27 @@ def resolve_project_context(
                     if m.start() > last_pos:
                         last_pos = m.start()
                         remembered_location = geo_data["name"]
+
+        # Robust fallback: when the cheap heuristic finds no anchor but the message
+        # is still a context-dependent follow-up, ask the sandboxed LLM resolver to
+        # identify the referenced topic. The result is validated against the Cebu
+        # LGU whitelist / project-id regex and the database before use, so prompt
+        # injection in the question or history cannot change behavior or escape the
+        # DPWH-Cebu domain.
+        if not targeted_project and not remembered_location:
+            allowed = _ALLOWED_LOCATION_NAMES
+            ref = await llm_service.resolve_reference(
+                question=question,
+                history=[{"role": (h.role if hasattr(h, "role") else h.get("role", "user")),
+                          "content": (h.content if hasattr(h, "content") else h.get("content", ""))}
+                         for h in history],
+                allowed_locations=allowed,
+            )
+            kind, value = _parse_validated_reference(ref)
+            if kind == "project":
+                targeted_project = neo4j_service.get_project_by_id(value)
+            elif kind == "location":
+                remembered_location = value
 
     # 3. If single project resolved, build single project context & spatial pin
     if targeted_project:
@@ -274,7 +352,7 @@ async def chat_endpoint(request: ChatRequest):
         )
 
     # Step 2: Knowledge Graph Retrieval
-    targeted_project, matched_projects, graph_context, spatial_context = resolve_project_context(
+    targeted_project, matched_projects, graph_context, spatial_context = await resolve_project_context(
         question=request.message,
         history=request.history
     )
@@ -390,7 +468,7 @@ async def chat_stream_endpoint(request: ChatRequest):
             return
 
         # Step 2: Knowledge Graph Retrieval & Spatial Targeting
-        targeted_project, matched_projects, graph_context, spatial_context = resolve_project_context(
+        targeted_project, matched_projects, graph_context, spatial_context = await resolve_project_context(
             question=request.message,
             history=request.history
         )

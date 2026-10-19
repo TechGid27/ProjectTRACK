@@ -31,6 +31,14 @@ export function MapProvider({ children }) {
     setDisplayMode('top50')
     setStatusFilter('all')
 
+    // When the chat narrows to a single project, highlight its pin so the
+    // zoomed-in map clearly marks the one the user is asking about.
+    if (projects.length === 1 && projects[0] && projects[0].id) {
+      setHighlightedProjectId(projects[0].id)
+    } else {
+      setHighlightedProjectId(null)
+    }
+
     if (loc) {
       setRequestedLgu(loc)
       if (typeof window !== 'undefined') {

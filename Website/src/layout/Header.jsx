@@ -118,7 +118,12 @@ function Header({ name, links }) {
           href="/"
           className="flex shrink-0 items-center gap-2.5 text-inherit no-underline"
         >
-          <span
+          <img
+            src="/image/reyalopake.png"
+            alt={`${name} logo`}
+            className="h-10 w-10 object-contain"
+          />
+          {/* <span
             aria-hidden="true"
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1f3d3c] text-sm font-bold text-white"
           >
@@ -126,7 +131,7 @@ function Header({ name, links }) {
           </span>
           <span className="text-base font-bold tracking-tight text-gray-a12">
             {name}
-          </span>
+          </span> */}
         </a>
 
         <nav aria-label="Main" className="hidden md:block">

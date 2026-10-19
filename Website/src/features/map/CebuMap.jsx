@@ -1525,7 +1525,7 @@ function MapControls() {
   const map = useMap()
 
   return (
-    <div className="absolute right-3 top-3 z-[1000] flex flex-col gap-1.5">
+    <div className="flex flex-col items-end gap-1.5">
       <button
         type="button"
         aria-label="Zoom in"
@@ -1954,7 +1954,10 @@ function CebuMap() {
         ))}
         <MapAutoResize />
         <MapLabels />
-        <MapControls />
+        <div className="absolute right-3 top-3 z-[1000] flex flex-row-reverse items-start gap-2">
+          <MapControls />
+          <MapLegend />
+        </div>
         <MapCamera target={selected} />
         <MapContextCameraController />
         <MapBackgroundClick
@@ -2054,7 +2057,6 @@ function CebuMap() {
                 </Marker>
               )
             })}
-        <MapLegend />
         {intelOpen ? (
           <LocationIntelPanel
             key={selected ? `${selected.kind}:${selected.name}` : 'overview'}

@@ -232,6 +232,77 @@ class TestBackendAPI(unittest.TestCase):
             self.assertIn("latitude", breakdown[0])
             self.assertIn("longitude", breakdown[0])
 
+    def test_municipality_canonicalization_unit(self):
+        """Canonical token unifies 'City of X' / 'X City' / bare names for exact matching."""
+        from backend.services.neo4j_service import canonical_municipality
+
+        # City-of and X-City variants collapse to the same token.
+        self.assertEqual(canonical_municipality("City of Bogo"), "bogo")
+        self.assertEqual(canonical_municipality("Bogo City"), "bogo")
+        self.assertEqual(canonical_municipality("Bogo"), "bogo")
+        self.assertEqual(
+            canonical_municipality("City of Carcar"),
+            canonical_municipality("Carcar City"),
+        )
+        # "Cebu City" reduces to "cebu" (the exact-match avoids province leakage).
+        self.assertEqual(canonical_municipality("Cebu City"), "cebu")
+        # Plain municipality and province suffix handling.
+        self.assertEqual(canonical_municipality("Minglanilla"), "minglanilla")
+        self.assertEqual(canonical_municipality("Talisay City, Cebu"), "talisay")
+        # Empty / None are safe.
+        self.assertEqual(canonical_municipality(None), "")
+        self.assertEqual(canonical_municipality("   "), "")
+
+    def test_map_municipality_isolation(self):
+        """GET /api/projects/map?municipality=Cebu City returns only Cebu City pins (no cross-LGU leakage)."""
+        resp = self.client.get("/api/projects/map?municipality=Cebu%20City&limit=5000")
+        self.assertEqual(resp.status_code, 200)
+        points = resp.json()
+        self.assertIsInstance(points, list)
+        if points:
+            from backend.services.neo4j_service import canonical_municipality
+            munis = {p.get("municipality") for p in points}
+            # Every returned pin must canonicalize to the requested LGU token.
+            for m in munis:
+                self.assertEqual(
+                    canonical_municipality(m),
+                    canonical_municipality("Cebu City"),
+                    f"Unexpected municipality leaked into Cebu City results: {m!r}",
+                )
+            # A neighboring LGU must not appear in the Cebu City result set.
+            self.assertNotIn("Mandaue City", munis)
+            self.assertNotIn("Talisay City", munis)
+
+    def test_map_city_of_prefix_variant(self):
+        """Frontend name 'City of Bogo' resolves to stored 'Bogo City' records."""
+        resp = self.client.get("/api/projects/map?municipality=City%20of%20Bogo&limit=5000")
+        self.assertEqual(resp.status_code, 200)
+        points = resp.json()
+        self.assertIsInstance(points, list)
+        if points:
+            from backend.services.neo4j_service import canonical_municipality
+            for p in points:
+                self.assertEqual(
+                    canonical_municipality(p.get("municipality")),
+                    "bogo",
+                    f"Unexpected municipality in City of Bogo results: {p.get('municipality')!r}",
+                )
+
+    def test_by_location_municipality_isolation(self):
+        """GET /api/projects/by-location?location=Cebu City aggregates only Cebu City projects."""
+        resp = self.client.get("/api/projects/by-location?location=Cebu%20City&limit=10")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("projects", data)
+        if data.get("projects"):
+            from backend.services.neo4j_service import canonical_municipality
+            for p in data["projects"]:
+                self.assertEqual(
+                    canonical_municipality(p.get("municipality")),
+                    canonical_municipality("Cebu City"),
+                    f"Unexpected municipality in Cebu City aggregation: {p.get('municipality')!r}",
+                )
+
     def test_chat_spatial_context(self):
         """Verify chat returns spatial context and coordinates for location query."""
         resp = self.client.post("/api/chat", json={

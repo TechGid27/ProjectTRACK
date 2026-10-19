@@ -136,11 +136,19 @@ def check_guardrail(query: str) -> Tuple[bool, Optional[str], Optional[str]]:
 def is_prohibited_stream_chunk(text: str) -> bool:
     """Post-generation output rail: detects programming code or generic conceptual definitions."""
     t = text.lower()
+    # NOTE: the "for <var> in <iter>" rule must require a CODE context. The
+    # bare "for \\w+ in " pattern previously matched ordinary English prose such
+    # as "for traffic in Lapu-Lapu" and wrongly suppressed valid answers. We now
+    # only flag a for/in when it is followed by a typical Python iterable
+    # (range(/enumerate(/zip(, a list/tuple literal) or ends the clause with a
+    # colon -- shapes that do not occur in natural-language sentences.
     return bool(re.search(
         r'(?:```(?:python|javascript|js|ts|cpp|java|go|html|css)?|'
-        r'\b(?:for\s+[a-zA-Z_]\w*\s+in\s+|while\s*\(|let\s+\w+\s*=|const\s+\w+\s*=|'
+        r'\bfor\s+[a-zA-Z_]\w*\s+in\s+(?:range\(|enumerate\(|zip\(|\[|\()|'
+        r'\bfor\s+[a-zA-Z_]\w*\s+in\s+[^\n:]{1,60}:\s|'
+        r'\b(?:while\s*\(|let\s+\w+\s*=|const\s+\w+\s*=|'
         r'def\s+[a-zA-Z_]\w*\(|function\s+[a-zA-Z_]\w*\(|console\.log|'
         r'System\.out\.println|printf\(|#include\s+<)|'
-        r'is\s+a\s+programming\s+construct|is\s+a\s+looping\s+construct)\b',
+        r'is\s+a\s+programming\s+construct|is\s+a\s+looping\s+construct)',
         t
     ))

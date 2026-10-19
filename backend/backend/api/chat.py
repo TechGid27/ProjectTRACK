@@ -40,8 +40,22 @@ def resolve_project_context(
 ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]], str, Optional[SpatialContext]]:
     """Identify target project ID or location matches from question and conversation history."""
     terms = [w for w in re.findall(r'[A-Za-z0-9_]+', question) if w.lower() not in STOP_WORDS and len(w) > 2]
-    followup_cues = ["it", "that", "this", "more", "contractor", "budget", "status", "timeline", "who", "cost", "when", "details"]
-    is_followup = bool(history) and (len(terms) == 0 or any(w in question.lower().split() for w in followup_cues))
+    # Tokenize the question into bare words so cue matching is not defeated by
+    # punctuation (e.g. "it?" must still match the "it" cue).
+    question_words = set(re.findall(r"[a-z]+", question.lower()))
+    followup_cues = {
+        "it", "its", "that", "this", "these", "those", "them", "their", "there",
+        "more", "one", "ones", "another", "other", "contractor", "contractors",
+        "budget", "cost", "price", "status", "timeline", "who", "when", "where",
+        "details", "detail", "expensive", "cheap", "cheapest", "biggest",
+        "largest", "smallest", "latest", "newest", "oldest", "top", "first",
+        "last", "same", "above",
+    }
+    has_cue = bool(question_words & followup_cues)
+    # A message is a follow-up when it has no standalone search terms OR it leans
+    # on a contextual cue/pronoun/superlative (which may sit alongside real terms,
+    # e.g. "what's the most expensive one on it?").
+    is_followup = bool(history) and (len(terms) == 0 or has_cue)
 
     targeted_project = None
     matched_projects = []

@@ -33,6 +33,50 @@ def format_currency(amount: Optional[float]) -> str:
     return f"₱ {amount:,.2f}"
 
 
+def canonical_municipality(name: Optional[str]) -> str:
+    """
+    Reduce an LGU name to a canonical comparison token.
+
+    Reconciles the two city-naming conventions present in the dataset and the
+    frontend (``"City of Bogo"`` vs ``"Bogo City"``) and tolerates bare names
+    (``"Bogo"``). The result is lowercased, trimmed, stripped of a leading
+    ``"city of "`` and a trailing ``" city"``, and of any ``", cebu"`` province
+    suffix so that equality comparison isolates a single municipality without
+    the substring leakage that pulled in province-wide records.
+    """
+    if not name:
+        return ""
+    token = str(name).strip().lower()
+    # Drop trailing province qualifier, e.g. "Cebu City, Cebu" -> "cebu city".
+    if token.endswith(", cebu"):
+        token = token[: -len(", cebu")].strip()
+    if token.startswith("city of "):
+        token = token[len("city of "):]
+    elif token.endswith(" city"):
+        token = token[: -len(" city")]
+    return token.strip()
+
+
+# Cypher expression mirroring :func:`canonical_municipality` so that the stored
+# ``p.municipality`` is normalized the same way as the Python-normalized
+# ``$muni_token`` parameter. Both sides are reduced to a bare token before an
+# exact equality comparison, eliminating cross-LGU substring matches.
+#
+# Built in stages for readability:
+#   base = lower(trim(municipality)) with any trailing ", cebu" removed
+#   then strip a leading "city of " or a trailing " city".
+_CYPHER_MUNI_BASE = "replace(toLower(trim(coalesce(p.municipality, ''))), ', cebu', '')"
+_CYPHER_MUNI_CANON = (
+    "CASE"
+    f"  WHEN {_CYPHER_MUNI_BASE} STARTS WITH 'city of '"
+    f"    THEN substring({_CYPHER_MUNI_BASE}, 8)"
+    f"  WHEN {_CYPHER_MUNI_BASE} ENDS WITH ' city'"
+    f"    THEN left({_CYPHER_MUNI_BASE}, size({_CYPHER_MUNI_BASE}) - 5)"
+    f"  ELSE {_CYPHER_MUNI_BASE}"
+    " END"
+)
+
+
 class Neo4jService:
     """Singleton Neo4j service for high-performance Cypher traversals."""
 
@@ -169,18 +213,18 @@ class Neo4jService:
         if not clean_loc or len(clean_loc) < 3:
             return [], 0, 0.0
 
+        loc_token = canonical_municipality(clean_loc)
+        if not loc_token:
+            return [], 0, 0.0
+
         cypher_count = """
         MATCH (p:Project)
-        WHERE toLower(p.municipality) = toLower($loc)
-           OR toLower($loc) CONTAINS toLower(p.municipality)
-           OR toLower(p.municipality) CONTAINS toLower($loc)
+        WHERE """ + _CYPHER_MUNI_CANON + """ = $loc_token
         RETURN count(DISTINCT p) AS cnt, sum(p.budget_numeric) AS total_budget
         """
         cypher_samples = """
         MATCH (p:Project)
-        WHERE toLower(p.municipality) = toLower($loc)
-           OR toLower($loc) CONTAINS toLower(p.municipality)
-           OR toLower(p.municipality) CONTAINS toLower($loc)
+        WHERE """ + _CYPHER_MUNI_CANON + """ = $loc_token
         WITH DISTINCT p
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
@@ -206,13 +250,13 @@ class Neo4jService:
         """
         try:
             with driver.session() as s:
-                cnt_row = s.run(cypher_count, loc=clean_loc).single()
+                cnt_row = s.run(cypher_count, loc_token=loc_token).single()
                 if not cnt_row or cnt_row["cnt"] == 0:
                     return [], 0, 0.0
                 total_cnt = cnt_row["cnt"]
                 total_b = float(cnt_row["total_budget"] or 0.0)
 
-                samples = s.run(cypher_samples, loc=clean_loc, limit=limit).data()
+                samples = s.run(cypher_samples, loc_token=loc_token, limit=limit).data()
                 for sample in samples:
                     sample["description"] = clean_description(sample.get("description"))
                 return samples, total_cnt, total_b
@@ -313,10 +357,8 @@ class Neo4jService:
         MATCH (p:Project)
         WHERE p.latitude IS NOT NULL
           AND (
-            $muni IS NULL
-            OR toLower(p.municipality) = toLower($muni)
-            OR toLower($muni) CONTAINS toLower(p.municipality)
-            OR toLower(p.municipality) CONTAINS toLower($muni)
+            $muni_token IS NULL
+            OR """ + _CYPHER_MUNI_CANON + """ = $muni_token
           )
         OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
         RETURN p.project_id AS id,
@@ -334,9 +376,12 @@ class Neo4jService:
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
         """
+        muni_token = canonical_municipality(municipality) if municipality else None
+        if municipality and not muni_token:
+            return []
         try:
             with driver.session() as s:
-                return s.run(cypher, muni=municipality, limit=limit).data()
+                return s.run(cypher, muni_token=muni_token, limit=limit).data()
         except Exception as e:
             logger.error(f"Error fetching map projects: {e}")
             return []

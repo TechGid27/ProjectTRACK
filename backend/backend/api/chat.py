@@ -300,7 +300,13 @@ async def resolve_project_context(
         # (e.g. "what's the most expensive one?", "where is it located?"),
         # promote that specific project so the map flies to its exact
         # coordinates at a close zoom instead of the whole municipality.
-        single_intent = _detect_single_project_intent(question) if is_followup else None
+        # Superlative intent (most expensive / biggest / latest / cheapest) may
+        # be a standalone query ("most expensive project in Lapu-Lapu") as long
+        # as a location resolved; the referential "locate" intent ("where is
+        # it") only makes sense as a follow-up.
+        single_intent = _detect_single_project_intent(question)
+        if single_intent == "locate" and not is_followup:
+            single_intent = None
         if single_intent and loc_projects:
             history_text_focus = " ".join(
                 h.content if hasattr(h, "content") else h.get("content", "")

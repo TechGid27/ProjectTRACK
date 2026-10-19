@@ -1597,6 +1597,7 @@ function CebuMap() {
     projectDots,
     activeStatusFilter,
     highlightedProjectId,
+    highlightProject,
   } = useMapContext()
 
   const [intelOpen, setIntelOpen] = useState(true)
@@ -1974,6 +1975,7 @@ function CebuMap() {
                     click(event) {
                       DomEvent.stopPropagation(event.originalEvent)
                       setHighlightEntity(dot.id)
+                      highlightProject(dot.id, [dot.latitude, dot.longitude])
                       openProjectDetail(dot.id)
                     },
                   }}
@@ -1995,14 +1997,17 @@ function CebuMap() {
           : showProjectPins &&
             selectedProjects.map((project) => {
               const pct = parseStatus(project.status).pct
+              const isHighlighted = highlightedProjectId === project.entity
               return (
                 <Marker
                   key={project.entity}
                   position={[project.displayLat, project.displayLng]}
                   icon={
-                    isCompletedStatus(project.status)
-                      ? projectPinCompletedIcon
-                      : projectPinIcon
+                    isHighlighted
+                      ? getSpatialPinIcon(project.status, true)
+                      : isCompletedStatus(project.status)
+                        ? projectPinCompletedIcon
+                        : projectPinIcon
                   }
                   alt={project.entity}
                   eventHandlers={{
@@ -2016,6 +2021,7 @@ function CebuMap() {
                         })
                       } else {
                         setHighlightEntity(project.entity)
+                        highlightProject(project.entity, [project.latitude, project.longitude])
                         openProjectDetail(project.entity)
                       }
                     },

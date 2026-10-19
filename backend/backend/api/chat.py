@@ -76,6 +76,79 @@ def _parse_validated_reference(raw: str):
     return None, None
 
 
+# Intent cues indicating the user has narrowed the conversation to ONE project,
+# which should focus the map on that project's exact coordinates (zoom 15)
+# instead of the whole municipality.
+_SUPERLATIVE_MAX_BUDGET = ("most expensive", "biggest", "largest", "highest",
+                           "priciest", "costliest", "biggest budget", "top")
+_SUPERLATIVE_MIN_BUDGET = ("least expensive", "cheapest", "smallest", "lowest")
+_SUPERLATIVE_LATEST = ("latest", "newest", "most recent", "recent")
+_SUPERLATIVE_OLDEST = ("oldest", "earliest")
+_LOCATE_SINGULAR_CUES = ("where is it", "where's it", "where is that", "where it is",
+                         "locate it", "locate that", "show it on", "show that on",
+                         "pin it", "zoom to it", "zoom to that", "zoom into it",
+                         "find it on", "point it out", "on the map")
+
+
+def _detect_single_project_intent(question: str):
+    """
+    Classify whether a follow-up targets a SINGLE project and how to pick it.
+
+    Returns one of: "max_budget", "min_budget", "latest", "oldest", "locate",
+    or None (not a single-project request).
+    """
+    q = question.lower()
+    if any(c in q for c in _SUPERLATIVE_MAX_BUDGET):
+        return "max_budget"
+    if any(c in q for c in _SUPERLATIVE_MIN_BUDGET):
+        return "min_budget"
+    if any(c in q for c in _SUPERLATIVE_LATEST):
+        return "latest"
+    if any(c in q for c in _SUPERLATIVE_OLDEST):
+        return "oldest"
+    if any(c in q for c in _LOCATE_SINGULAR_CUES):
+        return "locate"
+    return None
+
+
+def _select_project_for_intent(intent: str, projects: list, last_pid: Optional[str]):
+    """
+    Pick the single project a singular-intent follow-up refers to.
+
+    `projects` are location samples (already ordered by budget desc). For
+    "locate" we prefer the previously-focused project id when available.
+    """
+    usable = [p for p in projects if p.get("latitude") and p.get("longitude")]
+    if not usable:
+        return None
+
+    def budget_of(p):
+        return p.get("budget_num") or 0
+
+    def year_of(p):
+        # Year is embedded in the budget_raw string e.g. "(Year: 2024)".
+        m = re.search(r"Year:\s*(\d{4})", str(p.get("budget") or ""))
+        return int(m.group(1)) if m else 0
+
+    if intent == "max_budget":
+        return max(usable, key=budget_of)
+    if intent == "min_budget":
+        return min(usable, key=budget_of)
+    if intent == "latest":
+        return max(usable, key=year_of)
+    if intent == "oldest":
+        return min([p for p in usable if year_of(p)] or usable, key=year_of)
+    if intent == "locate":
+        if last_pid:
+            for p in usable:
+                pid = (p.get("entity") or p.get("id") or "").replace("DPWH Project ", "").upper()
+                if pid == last_pid.upper():
+                    return p
+        # Fall back to the most prominent (highest budget) project discussed.
+        return max(usable, key=budget_of)
+    return None
+
+
 async def resolve_project_context(
     question: str,
     history: List[Any]
@@ -222,6 +295,58 @@ async def resolve_project_context(
 
     if loc_projects or detected_muni:
         matched_projects = loc_projects
+
+        # Singular-project focus: if the follow-up narrows to ONE project
+        # (e.g. "what's the most expensive one?", "where is it located?"),
+        # promote that specific project so the map flies to its exact
+        # coordinates at a close zoom instead of the whole municipality.
+        single_intent = _detect_single_project_intent(question) if is_followup else None
+        if single_intent and loc_projects:
+            history_text_focus = " ".join(
+                h.content if hasattr(h, "content") else h.get("content", "")
+                for h in (history or [])[-6:]
+            )
+            prev_pids_focus = re.findall(r'\b\d{2}[A-Za-z]{1,2}\d{4,5}\b', history_text_focus, re.IGNORECASE)
+            last_pid = prev_pids_focus[-1] if prev_pids_focus else None
+            chosen = _select_project_for_intent(single_intent, loc_projects, last_pid)
+            if chosen:
+                cpid = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "")
+                clat = float(chosen["latitude"])
+                clng = float(chosen["longitude"])
+                focus_desc = clean_description(chosen.get("description"))
+                focus_budget = chosen.get("budget") or format_currency(chosen.get("budget_num"))
+                graph_context = (
+                    f"Focused Project: DPWH Project {cpid}\n"
+                    f"Location: {clean_location(chosen.get('municipality') or detected_muni or search_query)}\n"
+                    f"Scope Description: {focus_desc}\n"
+                    f"Budget: {focus_budget}\n"
+                    f"Status: {chosen.get('status', 'N/A')}"
+                )
+                spatial_context = SpatialContext(
+                    target_location=chosen.get("municipality") or (detected_muni or search_query.title()),
+                    center=[clat, clng],
+                    zoom=16,
+                    total_count=1,
+                    projects=[
+                        SpatialProjectPoint(
+                            id=cpid,
+                            description=focus_desc,
+                            budget=chosen.get("budget"),
+                            budget_numeric=chosen.get("budget_num"),
+                            status=chosen.get("status"),
+                            contractor=None,
+                            category=chosen.get("category"),
+                            latitude=clat,
+                            longitude=clng,
+                            municipality=chosen.get("municipality"),
+                            barangay=chosen.get("barangay"),
+                            formatted_address=chosen.get("formatted_address") or chosen.get("municipality"),
+                        )
+                    ],
+                )
+                focus_project = neo4j_service.get_project_by_id(cpid.upper())
+                return focus_project, [chosen], graph_context, spatial_context
+
         lines = []
         for p in matched_projects[:5]:
             pid = p['entity'].replace('DPWH Project ', '')

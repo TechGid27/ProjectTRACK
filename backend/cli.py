@@ -12,7 +12,8 @@ Usage:
   python cli.py --instant                  # Sub-second search mode (no LLM wait)
   python cli.py --sync                     # Sync Supabase data into Neo4j Aura
   python cli.py --scrape                   # Scrape BetterGov to Apify & Supabase
-  python cli.py --all                      # Run full pipeline: Scrape -> Sync -> Console
+  python cli.py --all                      # Run full pipeline: Scrape -> Sync -> Enrich -> Console
+  python cli.py --enrich                    # Ingest PhilGEPS procurement + GAA appropriations into Neo4j
   python cli.py --top-contractors          # View top contractors by budget
   python cli.py --summary                  # View total dataset statistics
   python cli.py --api                      # Launch FastAPI backend server (http://localhost:8000)
@@ -51,6 +52,8 @@ from pipeline import (
     check_neo4j_connectivity,
     geocode_location,
     geocode_neo4j_graph,
+    sync_procurement_to_neo4j,
+    sync_appropriations_to_neo4j,
 )
 
 
@@ -160,8 +163,49 @@ def run_full_pipeline():
     print("\n[Step 2/2] Ingesting all projects into Neo4j Aura Knowledge Graph...")
     sync_projects_to_neo4j(reset=False)
 
+    run_enrichment()
+
     print("\n🎉 Pipeline Complete! Launching Knowledge Graph Console...")
     run_console()
+
+
+def run_enrichment():
+    """Fetch & ingest PhilGEPS procurement and GAA appropriations into Neo4j.
+
+    Runs after DPWH projects/contractors exist so the conservative PhilGEPS
+    name+area matching has Contractor nodes to attach to.
+    """
+    if not check_neo4j_credentials():
+        show_neo4j_missing_error()
+        return
+
+    # Own a single Neo4j driver for the whole enrichment run and inject it into
+    # both sync steps. This avoids each step closing the shared singleton driver
+    # (which previously left the GAA step with a "Driver closed" error).
+    from pipeline.sync_to_neo4j import get_clients, close_driver
+    _, driver = get_clients()
+    if driver is None:
+        show_neo4j_missing_error()
+        return
+
+    print("\n" + "=" * 68)
+    print("🧩 ENRICHMENT: PhilGEPS Procurement + GAA Appropriations")
+    print("=" * 68)
+    try:
+        print("\n[Enrich 1/2] PhilGEPS procurement (conservative name+Cebu match)...")
+        try:
+            sync_procurement_to_neo4j(driver=driver)
+        except Exception as e:
+            print(f"⚠️ PhilGEPS enrichment skipped: {e}")
+
+        print("\n[Enrich 2/2] GAA appropriations (DPWH Cebu offices)...")
+        try:
+            sync_appropriations_to_neo4j(driver=driver)
+        except Exception as e:
+            print(f"⚠️ GAA enrichment skipped: {e}")
+    finally:
+        close_driver()
+    print("\n✅ Enrichment complete.")
 
 
 def handle_menu_choice(choice: str) -> bool:
@@ -326,6 +370,10 @@ def main():
 
         if first_arg in ("--all", "all", "full"):
             run_full_pipeline()
+            return
+
+        if first_arg in ("--enrich", "enrich", "--procurement", "--gaa"):
+            run_enrichment()
             return
 
         if first_arg in ("--geocode", "-g", "geocode"):

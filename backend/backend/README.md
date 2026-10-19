@@ -28,9 +28,9 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 ```text
 backend/
-├── main.py                  # FastAPI app factory, CORS, routers & lifespan
+├── app.py                  # FastAPI app factory, CORS, routers & lifespan
 ├── config.py                # Typed settings via Pydantic Settings & .env
-├── run.py                   # Development server CLI runner
+# (run.py now lives at backend/run.py -> start with `python run.py`)
 ├── setup_local_ai.py        # Permission-gated 1-command installer for local Ollama & qwen2.5:0.5b
 ├── requirements.txt         # FastAPI backend dependencies
 ├── README.md                # Documentation & API reference
@@ -104,10 +104,10 @@ Start the development server with auto-reload:
 
 ```bash
 # Option A: Using the convenience runner
-python backend/run.py
+python run.py
 
 # Option B: Using Uvicorn directly
-python -m uvicorn backend.main:create_app --factory --reload --host 0.0.0.0 --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 Once running:

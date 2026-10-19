@@ -65,7 +65,7 @@ Choose the workflow best suited to your development environment:
 
 5. **Start Application Server**:
    ```bash
-   python -m uvicorn backend.main:create_app --factory --reload --port 8000
+   python -m uvicorn backend.app:create_app --factory --reload --port 8000
    ```
 
 ---
@@ -211,7 +211,7 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["python", "-m", "uvicorn", "backend.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "backend.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### 3.3 Website Dockerfile (`Website/Dockerfile`)

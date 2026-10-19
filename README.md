@@ -96,7 +96,7 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Start FastAPI application
-python -m uvicorn backend.main:create_app --factory --reload --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --port 8000
 ```
 The REST API will be accessible at `http://localhost:8000` (Interactive documentation at `http://localhost:8000/docs`).
 

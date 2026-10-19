@@ -141,7 +141,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 4. Start FastAPI server with live reload
-python -m uvicorn backend.main:create_app --factory --reload --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --port 8000
 ```
 
 Expected terminal output:

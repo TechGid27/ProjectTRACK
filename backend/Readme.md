@@ -230,6 +230,8 @@ python cli.py --summary
 ### 4. Data Scraping, Neo4j Ingestion & Geocoding
 ```powershell
 # Ingest Supabase projects into Neo4j Aura
+# (automatically reassigns each project to the LGU polygon containing its
+#  authentic GPS, so per-municipality counts stay accurate)
 python cli.py --sync
 
 # Scrape projects from BetterGov into Apify & Supabase

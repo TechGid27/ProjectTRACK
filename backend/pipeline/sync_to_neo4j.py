@@ -430,6 +430,21 @@ def sync_projects_to_neo4j(reset: bool = False, limit: int = None):
         project_count = session.run("MATCH (p:Project) RETURN count(p) as c").single()["c"]
         contractor_count = session.run("MATCH (c:Contractor) RETURN count(c) as c").single()["c"]
 
+    # 2b. Correct municipalities from authentic GPS (polygon reverse-geocode).
+    # The batch ingest stamps a text-geocoded municipality, which is unreliable
+    # for vague province-level addresses. Reassign each project to the LGU whose
+    # boundary polygon actually contains its authentic DPWH coordinates so
+    # per-municipality counts stay accurate and non-Cebu points are excluded.
+    try:
+        from pipeline.correct_municipalities import correct_municipalities
+    except ImportError:
+        from correct_municipalities import correct_municipalities
+    try:
+        print("🗺️  Correcting municipalities from authentic GPS polygons...")
+        correct_municipalities(apply=True)
+    except Exception as e:
+        print(f"⚠️ Municipality correction skipped: {e}")
+
     # 3. Mark graph_synced in Supabase
     print("📝 Updating sync flags in Supabase...")
     supabase.table("scraped_pages").update({"graph_synced": True}).neq("url", "").execute()

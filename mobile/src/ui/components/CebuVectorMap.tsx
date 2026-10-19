@@ -7,13 +7,15 @@ import {
   useWindowDimensions,
   PanResponder,
 } from 'react-native';
-import Svg, { Path, G, Circle } from 'react-native-svg';
+import Svg, { Path, G, Circle, Text as SvgText } from 'react-native-svg';
 import { Pin, MunicipalityCollection } from '../../core/types';
 import {
   computeBoundingBox,
   geoToSvgCoordinates,
   normalizeLguName,
+  clusterPins,
 } from '../../core/geoUtils';
+import { haptics } from '../../services/haptics';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 const cebuData = cebuDataRaw as unknown as MunicipalityCollection;
@@ -125,6 +127,11 @@ export default function CebuVectorMap({
     });
   }, [pins, bounds, width, height]);
 
+  // 3.1 Density pin clustering for low zoom
+  const displayPinClusters = useMemo(() => {
+    return clusterPins(renderedPins, scale, 28);
+  }, [renderedPins, scale]);
+
   // 4. Gesture responder for Drag & Pinch-to-zoom
   const panResponder = useMemo(
     () =>
@@ -186,18 +193,21 @@ export default function CebuVectorMap({
   );
 
   const handleZoomIn = () => {
+    haptics.triggerLightImpact();
     const next = Math.min(4.0, Number((scaleRef.current + 0.35).toFixed(2)));
     scaleRef.current = next;
     setScale(next);
   };
 
   const handleZoomOut = () => {
+    haptics.triggerLightImpact();
     const next = Math.max(0.7, Number((scaleRef.current - 0.35).toFixed(2)));
     scaleRef.current = next;
     setScale(next);
   };
 
   const handleReset = () => {
+    haptics.triggerLightImpact();
     scaleRef.current = 1.0;
     offsetRef.current = { x: 0, y: 0 };
     setScale(1.0);
@@ -238,15 +248,56 @@ export default function CebuVectorMap({
                   fill={fillColor}
                   stroke={strokeColor}
                   strokeWidth={strokeWidth}
-                  onPress={() => onSelectMunicipality?.(item.normalizedName)}
+                  onPress={() => {
+                    haptics.triggerSelection();
+                    onSelectMunicipality?.(item.normalizedName);
+                  }}
                 />
               );
             })}
           </G>
 
-          {/* Render Glowing Project Pins */}
+          {/* Render Project Pins & Density Clusters */}
           <G>
-            {renderedPins.map((pin) => {
+            {displayPinClusters.map((item) => {
+              if (item.isCluster) {
+                return (
+                  <G
+                    key={item.id}
+                    testID={`map-cluster-${item.count}`}
+                    onPress={() => {
+                      haptics.triggerSelection();
+                      const nextScale = Math.min(
+                        4.0,
+                        Number((scaleRef.current + 0.8).toFixed(2)),
+                      );
+                      scaleRef.current = nextScale;
+                      setScale(nextScale);
+                    }}
+                  >
+                    <Circle
+                      cx={item.x}
+                      cy={item.y}
+                      r={14}
+                      fill="#1f3d3c"
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                    />
+                    <SvgText
+                      x={item.x}
+                      y={item.y + 4}
+                      fill="#ffffff"
+                      fontSize={11}
+                      fontWeight="bold"
+                      textAnchor="middle"
+                    >
+                      {item.count}
+                    </SvgText>
+                  </G>
+                );
+              }
+
+              const pin = item.pins[0];
               const isSelected = selectedPinId === pin.id;
               const coreColor = pin.tone === 'warning' ? '#f59e0b' : '#10b981';
               const glowColor =
@@ -259,6 +310,7 @@ export default function CebuVectorMap({
                   key={pin.id}
                   testID={`map-pin-${pin.id}`}
                   onPress={() => {
+                    haptics.triggerSelection();
                     const { x: _x, y: _y, ...originalPin } = pin;
                     onSelectPin?.(originalPin);
                   }}
@@ -337,8 +389,9 @@ const styles = StyleSheet.create({
   },
   controlsContainer: {
     position: 'absolute',
-    top: 14,
+    top: '50%',
     right: 14,
+    transform: [{ translateY: -55 }],
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 4,
@@ -346,8 +399,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 4,
-    zIndex: 10,
+    elevation: 5,
+    zIndex: 15,
     gap: 4,
   },
   controlBtn: {
@@ -374,13 +427,13 @@ const styles = StyleSheet.create({
   },
   zoomIndicator: {
     position: 'absolute',
-    bottom: 14,
+    top: 14,
     right: 14,
     backgroundColor: 'rgba(31, 61, 60, 0.85)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    zIndex: 10,
+    zIndex: 12,
   },
   zoomIndicatorText: {
     color: '#ffffff',

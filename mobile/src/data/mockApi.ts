@@ -157,3 +157,18 @@ export function computeLguSummary(lguName: string): LguSummary {
     activeProjects,
   };
 }
+
+export function getTopContractors(limit: number = 20) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { topContractors } = require('./contractors');
+  return (topContractors || []).slice(0, limit);
+}
+
+export function getSystemSummary() {
+  return {
+    total_projects: mockProjects.length,
+    total_lgus: 53,
+    total_cities: 9,
+    total_municipalities: 44,
+  };
+}

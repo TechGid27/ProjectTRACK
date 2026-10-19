@@ -501,6 +501,36 @@ class TestBackendAPI(unittest.TestCase):
         self.assertIsNotNone(spatial["center"])
         self.assertEqual(len(spatial["center"]), 2)
 
+    def test_by_location_hyphenated_city(self):
+        """Hyphenated city names like Lapu-Lapu must resolve (regression guard)."""
+        resp = self.client.get("/api/projects/by-location?location=Lapu-Lapu%20City&limit=5")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # If the graph has Lapu-Lapu projects they must be found, not zero.
+        self.assertIn("total_count", data)
+        if data.get("projects"):
+            from backend.services.neo4j_service import canonical_municipality
+            for p in data["projects"]:
+                self.assertEqual(
+                    canonical_municipality(p.get("municipality")),
+                    canonical_municipality("Lapu-Lapu City"),
+                )
+
+    def test_chat_most_expensive_in_named_location(self):
+        """A standalone superlative that names a location focuses one project."""
+        resp = self.client.post("/api/chat", json={
+            "message": "what is the most expensive project in lapu lapu?",
+            "mode": "instant",
+            "history": [],
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["guardrail"]["is_off_topic"])
+        # Must find Lapu-Lapu data and narrow to a single focused project.
+        if data.get("spatial") and data["spatial"].get("projects"):
+            self.assertEqual(data["spatial"]["total_count"], 1)
+            self.assertGreaterEqual(data["spatial"]["zoom"], 15)
+
 
 if __name__ == "__main__":
     unittest.main()

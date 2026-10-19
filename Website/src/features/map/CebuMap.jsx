@@ -16,6 +16,9 @@ import {
   fetchOsmContextCached,
   featureCentroid,
 } from '../../services/overpass'
+import { useMapContext } from './MapContext'
+import { clusterByProximity } from './cluster'
+import MapLegend from './MapLegend'
 
 const BOUNDS = [
   [9.32, 123.2],
@@ -68,6 +71,31 @@ const projectPinCompletedIcon = divIcon({
   iconAnchor: [6, 6],
 })
 
+function getSpatialPinIcon(status, isHighlighted) {
+  const s = (status || '').toLowerCase()
+  let toneClass = 'pin--slate'
+  if (s.includes('complete') || s.includes('100%')) {
+    toneClass = 'pin--emerald'
+  } else if (s.includes('ongoing') || s.includes('on-going')) {
+    toneClass = 'pin--amber'
+  } else if (
+    s.includes('bidding') ||
+    s.includes('procurement') ||
+    s.includes('planning')
+  ) {
+    toneClass = 'pin--cyan'
+  }
+
+  const highlightClass = isHighlighted ? ' pin--highlighted' : ''
+
+  return divIcon({
+    className: '',
+    html: `<span class="project-pin ${toneClass}${highlightClass}"></span>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  })
+}
+
 function haversineKm(a, b) {
   const R = 6371
   const toRad = (deg) => (deg * Math.PI) / 180
@@ -107,6 +135,21 @@ function MapLabels() {
       container.classList.remove('show-labels')
     }
   }, [map])
+
+  return null
+}
+
+function MapContextCameraController() {
+  const map = useMap()
+  const { cameraTarget } = useMapContext()
+
+  useEffect(() => {
+    if (!cameraTarget?.center) return
+    map.flyTo(cameraTarget.center, cameraTarget.zoom ?? 13, {
+      duration: 1.5,
+      easeLinearity: 0.25,
+    })
+  }, [map, cameraTarget])
 
   return null
 }
@@ -929,7 +972,7 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Projects at shared coordinate`}
+      aria-label={`Projects in this area`}
       className="fixed inset-0 z-[2000] flex items-center justify-center p-4"
     >
       <button
@@ -942,10 +985,10 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
         <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div>
             <p className="text-[10px] font-semibold tracking-widest text-white/40">
-              SHARED LOCATION
+              NEARBY PROJECTS
             </p>
             <h2 className="mt-1 font-serif text-lg font-bold text-white">
-              {count} project{count !== 1 ? 's' : ''} at this coordinate
+              {count} project{count !== 1 ? 's' : ''} in this area
             </h2>
             <p className="mt-0.5 text-[11px] text-white/50">
               {top?.position?.[0]?.toFixed(4)}, {top?.position?.[1]?.toFixed(4)}
@@ -1549,6 +1592,15 @@ function MapControls() {
 }
 
 function CebuMap() {
+  const {
+    activeLocation: spatialLocation,
+    clearSpatialData,
+    projectDots,
+    activeStatusFilter,
+    highlightedProjectId,
+    highlightProject,
+  } = useMapContext()
+
   const [intelOpen, setIntelOpen] = useState(true)
   const [selected, setSelected] = useState(null)
   const [zoom, setZoom] = useState(8)
@@ -1565,6 +1617,82 @@ function CebuMap() {
     error: false,
   })
 
+  const filteredSpatialDots = useMemo(() => {
+    if (!projectDots || projectDots.length === 0) return []
+    if (activeStatusFilter === 'all') return projectDots
+    return projectDots.filter((d) => {
+      const s = (d.status || '').toLowerCase()
+      if (activeStatusFilter === 'completed') {
+        return s.includes('complete') || s.includes('100%')
+      }
+      if (activeStatusFilter === 'ongoing') {
+        return s.includes('ongoing') || s.includes('on-going')
+      }
+      if (activeStatusFilter === 'procurement') {
+        return (
+          s.includes('bidding') ||
+          s.includes('procurement') ||
+          s.includes('planning')
+        )
+      }
+      return true
+    })
+  }, [projectDots, activeStatusFilter])
+
+  // Deterministic micro-dispersion for projects sharing exact coordinates
+  const displaySpatialDots = useMemo(() => {
+    if (!filteredSpatialDots || filteredSpatialDots.length === 0) return []
+
+    // Cluster markers that are close ON SCREEN at the current zoom (not just
+    // those sharing an exact coordinate), then fan out each cluster so every
+    // project stays individually visible and clickable. As the user zooms in,
+    // the pixel threshold covers less ground, so clusters separate naturally.
+    const clusters = clusterByProximity(
+      filteredSpatialDots.filter((d) => d.latitude != null && d.longitude != null),
+      zoom,
+      (d) => [Number(d.latitude), Number(d.longitude)],
+    )
+
+    const dispersed = []
+    for (const cluster of clusters) {
+      const group = cluster.items
+      if (group.length === 1) {
+        dispersed.push({
+          ...group[0],
+          displayLat: group[0].latitude,
+          displayLng: group[0].longitude,
+        })
+      } else {
+        // Fan the colliding points out around the cluster anchor. The radius is
+        // scaled to the current zoom so the spread stays visually consistent.
+        const spreadPx = 16
+        const dLat = spreadPx * (360 / (256 * Math.pow(2, zoom)))
+        group.forEach((dot, idx) => {
+          const angle = (idx * 2 * Math.PI) / group.length
+          const cosLat = Math.cos((dot.latitude * Math.PI) / 180) || 1
+          const dLng = dLat / cosLat
+          dispersed.push({
+            ...dot,
+            displayLat: dot.latitude + dLat * Math.sin(angle),
+            displayLng: dot.longitude + dLng * Math.cos(angle),
+          })
+        })
+      }
+    }
+    return dispersed
+  }, [filteredSpatialDots, zoom])
+
+  const isSpatialActive = useMemo(() => {
+    if (!displaySpatialDots || displaySpatialDots.length === 0) return false
+    if (!spatialLocation) return false
+    if (selected?.kind === 'lgu') {
+      const sName = selected.name.toLowerCase()
+      const spName = spatialLocation.toLowerCase()
+      return sName.includes(spName) || spName.includes(sName)
+    }
+    return !selected
+  }, [displaySpatialDots, spatialLocation, selected])
+
   const onZoom = useCallback((value) => setZoom(value), [])
 
   useEffect(() => {
@@ -1577,23 +1705,45 @@ function CebuMap() {
     }
   }, [])
 
+  const lastRequestedLguRef = useRef(null)
+
   useEffect(() => {
     function onSelectLgu(event) {
-      const name = event.detail
-      if (!name || !municipalities) return
-      const feature = municipalities.features.find(
-        (f) => f.properties.name === name,
-      )
+      const name = event?.detail
+      if (!name) return
+      lastRequestedLguRef.current = name
+      if (!municipalities) return
+      const target = String(name).trim().toLowerCase()
+      const feature = municipalities.features.find((f) => {
+        const fn = f.properties.name.toLowerCase()
+        return fn === target || target.includes(fn) || fn.includes(target)
+      })
       if (!feature) return
       const [lng, lat] = feature.properties.label
       setHighlightEntity(null)
-      setSelected({ kind: 'lgu', name, lat, lng, feature })
+      setSelected({ kind: 'lgu', name: feature.properties.name, lat, lng, feature })
       setIntelOpen(true)
     }
     window.addEventListener('projecttrack:select-lgu', onSelectLgu)
+    if (municipalities && lastRequestedLguRef.current) {
+      onSelectLgu({ detail: lastRequestedLguRef.current })
+      lastRequestedLguRef.current = null
+    }
     return () =>
       window.removeEventListener('projecttrack:select-lgu', onSelectLgu)
   }, [municipalities])
+
+  useEffect(() => {
+    function onOpenProject(event) {
+      const pid = event.detail
+      if (!pid) return
+      setHighlightEntity(pid)
+      setDetailEntity(pid)
+    }
+    window.addEventListener('projecttrack:open-project', onOpenProject)
+    return () =>
+      window.removeEventListener('projecttrack:open-project', onOpenProject)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -1619,7 +1769,11 @@ function CebuMap() {
     }
   }, [])
 
-  const queryName = selected ? lguQuery(selected.name) : null
+  // Send the full canonical LGU name to the backend. The API normalizes
+  // "City of X" / "X City" and isolates projects by exact municipality, so
+  // stripping the " City" suffix here would broaden the query and leak dots
+  // from other LGUs (e.g. "Cebu City" -> "Cebu" matched the whole province).
+  const queryName = selected ? selected.name : null
   const locProjects =
     queryName && locState.name === queryName ? locState.data : null
   const locError =
@@ -1674,12 +1828,14 @@ function CebuMap() {
       lng: pin.position[1],
     })
     setIntelOpen(true)
+    clearSpatialData()
   }
 
   function selectLgu(feature) {
     const name = feature.properties.name
     if (selected?.kind === 'lgu' && selected.name === name) {
       setSelected(null)
+      clearSpatialData()
       return
     }
     const [lng, lat] = feature.properties.label
@@ -1692,6 +1848,13 @@ function CebuMap() {
       feature,
     })
     setIntelOpen(true)
+    if (
+      spatialLocation &&
+      !name.toLowerCase().includes(spatialLocation.toLowerCase()) &&
+      !spatialLocation.toLowerCase().includes(name.toLowerCase())
+    ) {
+      clearSpatialData()
+    }
   }
 
   const showDetail =
@@ -1714,18 +1877,23 @@ function CebuMap() {
       (a, b) => (b.budgetNum ?? 0) - (a.budgetNum ?? 0),
     )
 
-    const groups = new Map()
-    for (const pin of sorted) {
-      const key = `${pin.position[0].toFixed(4)},${pin.position[1].toFixed(4)}`
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key).push(pin)
-    }
+    // Group pins that overlap ON SCREEN at the current zoom (projects that are
+    // close, not only those at an identical coordinate). Each cluster renders
+    // as a single pin with a count badge; clicking it opens the group list.
+    // Pins are pre-sorted by budget desc, so the cluster anchor/representative
+    // is the most prominent project in that cluster.
+    const clusters = clusterByProximity(
+      sorted,
+      zoom,
+      (pin) => pin.position,
+    )
 
-    return [...groups.entries()].map(([key, group]) => {
+    return clusters.map((cluster, idx) => {
+      const group = cluster.items
       const top = group[0]
       const [lat, lng] = top.position
       return {
-        key,
+        key: `${lat.toFixed(5)},${lng.toFixed(5)}-${idx}`,
         entity: top.id,
         latitude: lat,
         longitude: lng,
@@ -1737,7 +1905,7 @@ function CebuMap() {
         group,
       }
     })
-  }, [lguPinState, queryName, selected])
+  }, [lguPinState, queryName, selected, zoom])
 
   return (
     <section className="w-full">
@@ -1755,11 +1923,14 @@ function CebuMap() {
       >
         {municipalities && (
           <GeoJSON
+            key={`munis-${selected?.name || spatialLocation || 'none'}`}
             data={municipalities}
             style={(feature) => ({
               className:
-                feature.properties.name === selected?.name &&
-                selected?.kind === 'lgu'
+                (feature.properties.name === selected?.name &&
+                selected?.kind === 'lgu') ||
+                (spatialLocation &&
+                  feature.properties.name.toLowerCase().includes(spatialLocation.toLowerCase()))
                   ? 'land land--selected'
                   : 'land',
               fillOpacity: 1,
@@ -1785,55 +1956,105 @@ function CebuMap() {
         <MapLabels />
         <MapControls />
         <MapCamera target={selected} />
-        <MapBackgroundClick onClear={() => setSelected(null)} />
+        <MapContextCameraController />
+        <MapBackgroundClick
+          onClear={() => {
+            setSelected(null)
+            clearSpatialData()
+          }}
+        />
         <ZoomWatcher onZoom={onZoom} />
         <BarangayLayer target={selected} visible={showDetail} zoom={zoom} />
-        {showProjectPins &&
-          selectedProjects.map((project) => {
-            const pct = parseStatus(project.status).pct
-            return (
-              <Marker
-                key={project.entity}
-                position={[project.displayLat, project.displayLng]}
-                icon={
-                  isCompletedStatus(project.status)
-                    ? projectPinCompletedIcon
-                    : projectPinIcon
-                }
-                alt={project.entity}
-                eventHandlers={{
-                  click(event) {
-                    DomEvent.stopPropagation(event.originalEvent)
-                    setIntelOpen(true)
-                    if (project.count > 1) {
-                      setCoordGroup({
-                        key: project.key,
-                        projects: project.group,
-                      })
-                    } else {
-                      setHighlightEntity(project.entity)
-                      openProjectDetail(project.entity)
-                    }
-                  },
-                }}
-              >
-                <Tooltip
-                  direction="top"
-                  offset={[0, -8]}
-                  opacity={1}
-                  className="pin-label"
+        
+        {/* Synchronized AI Copilot Spatial Dots */}
+        {isSpatialActive
+          ? displaySpatialDots.map((dot) => {
+              const isHighlighted = highlightedProjectId === dot.id
+              const bStr =
+                dot.budget ||
+                (dot.budget_numeric != null
+                  ? `₱${(dot.budget_numeric / 1e6).toFixed(1)}M`
+                  : '')
+              return (
+                <Marker
+                  key={`spatial-${dot.id}`}
+                  position={[dot.displayLat, dot.displayLng]}
+                  icon={getSpatialPinIcon(dot.status, isHighlighted)}
+                  alt={dot.id}
+                  eventHandlers={{
+                    click(event) {
+                      DomEvent.stopPropagation(event.originalEvent)
+                      setHighlightEntity(dot.id)
+                      highlightProject(dot.id, [dot.latitude, dot.longitude])
+                      openProjectDetail(dot.id)
+                    },
+                  }}
                 >
-                  {project.count > 1
-                    ? `${project.count} projects · ${project.entity}+`
-                    : project.entity}
-                  {pct != null ? ` · ${pct}%` : ''}
-                  {project.budgetNum != null
-                    ? ` · ₱${(project.budgetNum / 1e6).toFixed(1)}M`
-                    : ''}
-                </Tooltip>
-              </Marker>
-            )
-          })}
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -8]}
+                    opacity={1}
+                    className="pin-label"
+                  >
+                    <strong>{dot.id}</strong>
+                    {bStr ? ` · ${bStr}` : ''}
+                    {dot.barangay ? ` · Brgy. ${dot.barangay}` : ''}
+                    {dot.status ? ` · ${dot.status}` : ''}
+                  </Tooltip>
+                </Marker>
+              )
+            })
+          : showProjectPins &&
+            selectedProjects.map((project) => {
+              const pct = parseStatus(project.status).pct
+              const isHighlighted = highlightedProjectId === project.entity
+              return (
+                <Marker
+                  key={project.entity}
+                  position={[project.displayLat, project.displayLng]}
+                  icon={
+                    isHighlighted
+                      ? getSpatialPinIcon(project.status, true)
+                      : isCompletedStatus(project.status)
+                        ? projectPinCompletedIcon
+                        : projectPinIcon
+                  }
+                  alt={project.entity}
+                  eventHandlers={{
+                    click(event) {
+                      DomEvent.stopPropagation(event.originalEvent)
+                      setIntelOpen(true)
+                      if (project.count > 1) {
+                        setCoordGroup({
+                          key: project.key,
+                          projects: project.group,
+                        })
+                      } else {
+                        setHighlightEntity(project.entity)
+                        highlightProject(project.entity, [project.latitude, project.longitude])
+                        openProjectDetail(project.entity)
+                      }
+                    },
+                  }}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -8]}
+                    opacity={1}
+                    className="pin-label"
+                  >
+                    {project.count > 1
+                      ? `${project.count} projects · ${project.entity}+`
+                      : project.entity}
+                    {pct != null ? ` · ${pct}%` : ''}
+                    {project.budgetNum != null
+                      ? ` · ₱${(project.budgetNum / 1e6).toFixed(1)}M`
+                      : ''}
+                  </Tooltip>
+                </Marker>
+              )
+            })}
+        <MapLegend />
         {intelOpen ? (
           <LocationIntelPanel
             key={selected ? `${selected.kind}:${selected.name}` : 'overview'}

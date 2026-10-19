@@ -142,6 +142,7 @@ export async function streamChatMessage({
       () => null,
     )
     if (data) {
+      if (data.spatial) onEvent('context', { spatial: data.spatial })
       if (data.answer) onEvent('token', { token: data.answer })
       onEvent('done', { status: 'completed' })
       return

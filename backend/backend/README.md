@@ -2,17 +2,25 @@
 
 High-performance, production-ready Python **FastAPI** backend for the DPWH Cebu Infrastructure Knowledge Graph, Analytics, and GraphRAG Question Answering System.
 
+Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi-Tier Fallback Resilience** (`Groq -> Local Ollama qwen2.5:0.5b -> Deterministic Graph Synthesizer`).
+
 ---
 
 ## Key Features
 
-* **Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
-* **5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
-* **Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
-* **Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
-* **Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
-* **Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
-* **Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation.
+* **⚡ Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
+* **🛡️ 5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
+* **🧼 Prompt-Injection Hardening**: User messages and client-supplied history are normalized (NFKC, zero-width/control-char stripping, whitespace de-flooding, length cap) and screened for common injection phrasings (instruction-override, persona/developer-mode jailbreaks, prompt exfiltration, chat-template delimiters). Instruction-override content planted in history is also rejected.
+* **🤖 Multi-Tier Fallback Resilience**:
+  * **Groq LPU**: Primary high-speed cloud generation at ~500+ tok/s.
+  * **Local Ollama Fallback**: Lightweight `qwen2.5:0.5b` (~398 MB) offline fallback via `python main.py --setup-local-ai`.
+  * **Deterministic Graph Synthesizer**: Sub-5ms zero-token factual synthesizer ensuring zero failures on rate limits (HTTP 429).
+* **⚡ Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
+* **🌊 Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
+* **Conversational Memory & Spatial Targeting**: Follow-ups remember the prior location or project; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying DB-locked and injection-safe. Chat answers carry map coordinates that fly to an LGU or zoom to a single project.
+* **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
+* **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
+* **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
 
 ---
 
@@ -20,9 +28,10 @@ High-performance, production-ready Python **FastAPI** backend for the DPWH Cebu 
 
 ```text
 backend/
-├── main.py                  # FastAPI app factory, CORS, routers & lifespan
+├── app.py                  # FastAPI app factory, CORS, routers & lifespan
 ├── config.py                # Typed settings via Pydantic Settings & .env
-├── run.py                   # Development server CLI runner
+# (run.py now lives at backend/run.py -> start with `python run.py`)
+├── setup_local_ai.py        # Permission-gated 1-command installer for local Ollama & qwen2.5:0.5b
 ├── requirements.txt         # FastAPI backend dependencies
 ├── README.md                # Documentation & API reference
 ├── API_JSON_EXAMPLES.md     # Copy-pasteable JSON request/response examples
@@ -45,11 +54,14 @@ backend/
 │   ├── __init__.py
 │   ├── neo4j_service.py     # Connection pool & Cypher queries
 │   ├── guardrail_service.py # Pre-retrieval classifier & stream rail
-│   ├── llm_service.py       # LLM streaming & token budgeting
+│   ├── llm_service.py       # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
+│   ├── graph_synthesizer.py # Deterministic Graph Synthesizer (<5ms)
 │   └── pipeline_service.py  # Background job execution & state tracker
-└── tests/                   # Test suite (11 unit & integration tests)
+└── tests/                   # Test suite (55 unit & integration tests)
     ├── __init__.py
-    └── test_api.py          # Unit & integration test cases
+    ├── test_api.py          # API endpoints & guardrails tests (33 tests)
+    └── test_fallback.py     # Fallback resilience & synthesizer tests (5 tests)
+    └── test_auth.py          # Supabase auth endpoint tests (12 tests)
 ```
 
 ---
@@ -74,10 +86,10 @@ NEO4J_URI="neo4j+s://your-instance.databases.neo4j.io"
 NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="your-password"
 
-# Xiaomi MiMo-V2-Flash Configuration
-LLM_BASE_URL="https://router.huggingface.co/v1"
-LLM_MODEL="XiaomiMiMo/MiMo-V2-Flash"
-LLM_API_KEY="hf_your_free_token"
+# Groq LPU Configuration (Fast API / Free Tier: https://console.groq.com/keys)
+LLM_BASE_URL="https://api.groq.com/openai/v1"
+LLM_MODEL="qwen/qwen3.8-27b"
+GROQ_API_KEY="gsk_your_groq_api_key"
 LLM_MAX_TOKENS=2048
 
 # Supabase & Apify (Optional: only needed for scraping and syncing)
@@ -92,10 +104,10 @@ Start the development server with auto-reload:
 
 ```bash
 # Option A: Using the convenience runner
-python backend/run.py
+python run.py
 
 # Option B: Using Uvicorn directly
-python -m uvicorn backend.main:create_app --factory --reload --host 0.0.0.0 --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 Once running:
@@ -107,20 +119,21 @@ Once running:
 
 ## Running Tests
 
-Run the test suite using Python's built-in `unittest` runner:
+Run the full automated test suite (55 unit & integration tests):
 
 ```bash
-python backend/tests/test_api.py
+python -m unittest discover -s backend/tests -p "test_*.py"
 ```
 
-All 11 unit and integration tests validate:
-* Pre-retrieval guardrails (blocking off-topic prompts)
-* On-topic infrastructure questions
-* Exact project ID lookups
-* Analytics and dataset aggregations
-* Server-Sent Events (SSE) streaming responses
-* Background job tracking
-* Health diagnostics
+The test suite validates:
+- **Pre-retrieval guardrails**: Blocking off-topic prompts in `<0.1ms`.
+- **Infrastructure domain queries**: Accurate project extraction and routing.
+- **Project lookups**: Exact project ID retrieval and 404 handling.
+- **Analytics & rankings**: Top contractor budget aggregation and project rankings.
+- **SSE Streaming**: Token streaming with fallback.
+- **Fallback resilience**: Groq 429 rate limit automatic cascade to Instant Graph Synthesizer.
+- **Installer safety**: Permission gating `[y/N]` prompt in `setup_local_ai`.
+- **System health**: Multi-service diagnostics across Neo4j and LLM endpoints.
 
 ---
 
@@ -132,7 +145,7 @@ All 11 unit and integration tests validate:
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Comprehensive system health across Neo4j and LLM |
 | `GET` | `/api/health/neo4j` | Neo4j Aura ping and latency (ms) |
-| `GET` | `/api/health/llm` | LLM model status and latency |
+| `GET` | `/api/health/llm` | LLM model status, latency, and fallback state |
 
 ---
 
@@ -144,31 +157,7 @@ All 11 unit and integration tests validate:
 | `GET` | `/api/projects/search?q=...` | Full-text search across projects, contractors, locations |
 | `GET` | `/api/projects/by-location?location=...` | Aggregate projects, total count & budget for a municipality |
 
-#### Example: Search Projects by Location
-```bash
-curl -X GET "http://localhost:8000/api/projects/by-location?location=Bogo&limit=5"
-```
-
-Response:
-```json
-{
-  "location": "Bogo",
-  "total_count": 87,
-  "total_budget": 1425000000.0,
-  "total_budget_formatted": "PHP 1.43B",
-  "showing_count": 5,
-  "projects": [
-    {
-      "entity": "24HD0012",
-      "labels": ["Project"],
-      "description": "Construction of Flood Mitigation Structure along Bogo River",
-      "budget": "PHP 49,000,000.00",
-      "budget_num": 49000000.0,
-      "status": "Ongoing"
-    }
-  ]
-}
-```
+> Location matching is exact and canonicalized: `Cebu City`, `City of Bogo`/`Bogo City`, and hyphenated names like `Lapu-Lapu City` resolve to a single LGU without cross-LGU leakage.
 
 ---
 
@@ -179,24 +168,6 @@ Response:
 | `GET` | `/api/analytics/summary` | Overall dataset metrics (total projects, total budget, contractors) |
 | `GET` | `/api/analytics/top-contractors?limit=10` | Ranked contractors by cumulative awarded budget |
 | `GET` | `/api/analytics/top-projects?limit=10` | Most expensive DPWH infrastructure projects in Cebu |
-
-#### Example: Top Contractors
-```bash
-curl -X GET "http://localhost:8000/api/analytics/top-contractors?limit=3"
-```
-
-Response:
-```json
-[
-  {
-    "contractor": "QM BUILDERS",
-    "code": "7494",
-    "project_count": 142,
-    "total_budget": 5890000000.0,
-    "total_budget_formatted": "PHP 5.89B"
-  }
-]
-```
 
 ---
 
@@ -216,37 +187,45 @@ Response:
 }
 ```
 
-* `mode="ai"`: Graph retrieval + LLM summary.
+* `mode="ai"`: Graph retrieval + Groq / Local Ollama / Deterministic Synthesizer.
 * `mode="instant"`: Instant Cypher lookup (`<10ms`, zero AI latency).
 
-#### Off-Domain Guardrail Example:
-```bash
-curl -X POST "http://localhost:8000/api/chat" \
-     -H "Content-Type: application/json" \
-     -d '{"message": "Write a python script for binary search"}'
-```
+---
 
-Response:
-```json
-{
-  "answer": "Out of Scope: Programming and software code generation queries are outside system scope.\nThis assistant is strictly restricted to DPWH Cebu infrastructure projects, contractors, budgets, and locations.",
-  "graph_context": "",
-  "project_card": null,
-  "matched_projects_count": 0,
-  "guardrail": {
-    "is_off_topic": true,
-    "reason": "Programming and software code generation queries are outside system scope.",
-    "matched_rule": "programming_intent"
-  },
-  "mode": "ai",
-  "duration_ms": 0.4,
-  "model": null
-}
+### Authentication (Supabase-backed)
+
+Backend-managed Supabase (GoTrue) auth. The server exchanges credentials/OAuth
+tokens with Supabase and stores the session in an **HTTP-only cookie**, so the
+browser never handles raw tokens. The web client calls these with
+`fetch(..., { credentials: 'include' })` (see `Website/src/services/auth.js`).
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET`  | `/api/auth/oauth/{provider}?redirect=...` | OAuth authorize URL for `google`, `github`, `facebook`, ... |
+| `POST` | `/api/auth/callback` | Persist `{ access_token, refresh_token }` from an OAuth redirect into the session cookie |
+| `GET`  | `/api/auth/session` | Current user (`{ user }` or `{ user: null }`); auto-refreshes an expired token |
+| `POST` | `/api/auth/signin` | Email/password sign-in; opens the session cookie |
+| `POST` | `/api/auth/signup` | Email/password registration (honors Supabase email-confirmation) |
+| `POST` | `/api/auth/signout` | Revoke the session and clear the cookie |
+
+**Setup:** add `SUPABASE_ANON_KEY` (and keep `SUPABASE_URL`) to the backend
+`.env`, and set `FRONTEND_URL` to your web origin so credentialed cookies and
+the default OAuth redirect work. For a cross-site frontend over HTTPS, set
+`AUTH_COOKIE_SECURE=true` and `AUTH_COOKIE_SAMESITE=none`.
+
+**Protecting a route (for teammates):**
+```python
+from fastapi import Depends
+from backend.api.auth import get_current_user
+
+@router.get("/private")
+async def private(user = Depends(get_current_user)):
+    return {"you_are": user.email}
 ```
 
 ---
 
-### Pipeline Administration
+### ⚙️ Pipeline Administration
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |

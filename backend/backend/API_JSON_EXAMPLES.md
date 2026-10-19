@@ -43,7 +43,7 @@ This document provides complete, copy-pasteable JSON examples for all request pa
 
 ### 1.1 Standard Grounded AI Mode (`POST /api/chat`)
 
-Retrieves facts from Neo4j in `<20ms` and generates a grounded engineering summary with Xiaomi MiMo (`XiaomiMiMo/MiMo-V2-Flash`).
+Retrieves facts from Neo4j in `<20ms` and generates a grounded engineering summary with Groq (`qwen/qwen3.8-27b`).
 
 #### **Request (Sent to Backend)**
 ```json
@@ -77,7 +77,7 @@ Retrieves facts from Neo4j in `<20ms` and generates a grounded engineering summa
   },
   "mode": "ai",
   "duration_ms": 312.45,
-  "model": "XiaomiMiMo/MiMo-V2-Flash"
+  "model": "qwen/qwen3.8-27b"
 }
 ```
 

@@ -20,11 +20,13 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 
 * **Vector Boundary Rendering**: Renders all 53 Local Government Units (LGUs) of Cebu Province (44 municipalities and 9 cities) as styled vector polygons without requiring external raster satellite tile services.
 * **Barangay Zoom Intelligence**: Dynamic polygon rendering for barangay boundaries at high zoom levels (~Zoom 12+).
-* **Project Status Markers**: Teal diamonds for ongoing projects (with completion %), blue diamonds for completed. Shared coordinates open a group list.
+* **Project Status Markers**: Teal diamonds for ongoing projects (with completion %), blue diamonds for completed.
+* **Proximity Marker Clustering**: Projects that overlap on screen are clustered by a zoom-aware pixel distance (`src/features/map/cluster.js`), not just by identical coordinates. Clusters collapse to one pin with a count and a nearby-projects list, and separate again as you zoom in.
 * **Location Intel Panel**: Per-LGU project list with statuses, budgets, and paginated full-details modal.
 * **Contractor Rankings**: `/contractors` page ranking contractors by awarded budget.
 * **Auth**: Email/password and OAuth sign-in via the backend (`src/services/auth.js`); session-aware header with avatar menu.
-* **GraphRAG Chat**: Floating chat assistant (`src/features/chat/ChatBot.jsx`) streaming from the backend SSE endpoint with non-streaming fallback.
+* **GraphRAG Chat with Memory**: Floating chat assistant streaming from the backend SSE endpoint (non-streaming fallback). Context-aware follow-ups ("tell me more about it", "what about in Cordova?") keep the prior topic.
+* **Chat-Synchronized Map**: Chat answers drive the map camera - location questions fly to the LGU, while singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Clicking any pin highlights it too.
 
 ---
 
@@ -32,6 +34,10 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 
 ### 1. Installation
 ```bash
+# Navigate to Website directory
+cd Website
+
+# Install dependencies
 npm install
 ```
 
@@ -61,6 +67,6 @@ npm run preview  # Locally preview production build
 
 ---
 
-## License
+## 📁 Project Structure
 
 This package is part of the ProjectTrack open-source monorepo, licensed under the MIT License.

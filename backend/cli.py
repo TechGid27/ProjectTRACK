@@ -6,17 +6,18 @@ Unified entry point for scraping, syncing, analyzing, and querying
 the DPWH Cebu Knowledge Graph (2022 - Present).
 
 Usage:
-  python main.py                            # Interactive menu / console
-  python main.py 25H00064                   # Instant project card (<100ms)
-  python main.py "any project in bogo?"     # Direct AI natural language query
-  python main.py --instant                  # Sub-second search mode (no LLM wait)
-  python main.py --sync                     # Sync Supabase data into Neo4j Aura
-  python main.py --scrape                   # Scrape BetterGov to Apify & Supabase
-  python main.py --all                      # Run full pipeline: Scrape -> Sync -> Console
-  python main.py --top-contractors          # View top contractors by budget
-  python main.py --summary                  # View total dataset statistics
-  python main.py --api                      # Launch FastAPI backend server (http://localhost:8000)
-  python main.py --geocode                  # Batch geocode all Neo4j location and project nodes
+  python cli.py                            # Interactive menu / console
+  python cli.py 25H00064                   # Instant project card (<100ms)
+  python cli.py "any project in bogo?"     # Direct AI natural language query
+  python cli.py --instant                  # Sub-second search mode (no LLM wait)
+  python cli.py --sync                     # Sync Supabase data into Neo4j Aura
+  python cli.py --scrape                   # Scrape BetterGov to Apify & Supabase
+  python cli.py --all                      # Run full pipeline: Scrape -> Sync -> Console
+  python cli.py --top-contractors          # View top contractors by budget
+  python cli.py --summary                  # View total dataset statistics
+  python cli.py --api                      # Launch FastAPI backend server (http://localhost:8000)
+  python cli.py --geocode                  # Batch geocode all Neo4j location and project nodes
+  python cli.py --setup-local-ai           # Configure offline local AI fallback (qwen2.5:0.5b)
 """
 
 import sys
@@ -98,7 +99,7 @@ def show_scraper_missing_error():
     print('  SUPABASE_URL="https://xxx.supabase.co"')
     print('  SUPABASE_SERVICE_KEY="your_key"')
     print("\n💡 Tip: If you only want to query the existing knowledge graph,")
-    print("   run: python main.py (no scraper keys needed!)")
+    print("   run: python cli.py (no scraper keys needed!)")
     print("=" * 68 + "\n")
 
 
@@ -136,6 +137,7 @@ def show_menu():
     print("  [8] 📊 View Dataset & Knowledge Graph Statistics")
     print("  [9] 🚀 Launch FastAPI Backend Server (REST & SSE Streaming)")
     print("  [10] 📍 Batch Geocode Neo4j Graph Locations (WGS84 Coordinates)")
+    print("  [11] 🤖 Setup Local AI Fallback (qwen2.5:0.5b ~398MB)")
     print("  [0] ❌ Exit")
     print("=" * 68)
 
@@ -252,7 +254,7 @@ def handle_menu_choice(choice: str) -> bool:
         print(f"\n🚀 Launching FastAPI Backend on http://{settings.HOST}:{settings.PORT}")
         print(f"📖 Interactive Swagger Docs: http://localhost:{settings.PORT}/docs")
         print(f"📑 ReDoc Documentation:      http://localhost:{settings.PORT}/redoc\n")
-        uvicorn.run("backend.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+        uvicorn.run("backend.app:app", host=settings.HOST, port=settings.PORT, reload=True)
         return True
 
     elif choice in ("10", "geocode", "geo"):
@@ -266,6 +268,11 @@ def handle_menu_choice(choice: str) -> bool:
         print("\n📍 Running Neo4j knowledge graph batch geocoding...")
         geocode_neo4j_graph(driver)
         close_driver()
+        return True
+
+    elif choice in ("11", "setup-local-ai", "setup-ai", "setup"):
+        from backend.setup_local_ai import setup_local_ai
+        setup_local_ai(auto_confirm=False)
         return True
 
     elif choice in ("0", "exit", "quit", "q"):
@@ -332,6 +339,12 @@ def main():
             print("\n📍 Running Neo4j knowledge graph batch geocoding...")
             geocode_neo4j_graph(driver)
             close_driver()
+            return
+
+        if first_arg in ("--setup-local-ai", "setup-local-ai", "--setup-ai"):
+            from backend.setup_local_ai import setup_local_ai
+            auto = "--yes" in sys.argv or "-y" in sys.argv
+            setup_local_ai(auto_confirm=auto)
             return
 
         # Database queries below require Neo4j credentials
@@ -410,7 +423,7 @@ def main():
 
     print_banner()
     print("🚀 Auto-launching Interactive Query & AI Console (Default Option [1])...")
-    print("💡 (To access batch scraping, sync, or dataset stats menu, run: python main.py --menu)\n")
+    print("💡 (To access batch scraping, sync, or dataset stats menu, run: python cli.py --menu)\n")
     try:
         handle_menu_choice("1")
     except (KeyboardInterrupt, EOFError):

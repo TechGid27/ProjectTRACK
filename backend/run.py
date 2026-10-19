@@ -4,8 +4,8 @@ Backend Server Runner
 Convenient startup script for running FastAPI with Uvicorn.
 
 Usage:
-    python backend/run.py
-    python backend/run.py --port 8080 --reload
+    python run.py
+    python run.py --port 8080 --reload
 """
 
 import sys
@@ -13,8 +13,15 @@ import argparse
 from pathlib import Path
 import uvicorn
 
-# Ensure repository root is on sys.path
-ROOT_DIR = Path(__file__).resolve().parent.parent
+# Ensure UTF-8 console output on Windows so emoji in startup logs do not
+# crash with a cp1252 UnicodeEncodeError.
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Ensure the backend directory is importable as the `backend` package.
+ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -36,7 +43,7 @@ def main():
     print("=" * 65 + "\n")
 
     uvicorn.run(
-        "backend.main:app",
+        "backend.app:app",
         host=args.host,
         port=args.port,
         reload=args.reload

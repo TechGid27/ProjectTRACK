@@ -15,9 +15,9 @@ if sys.stderr and hasattr(sys.stderr, "reconfigure"):
 
 load_dotenv()
 
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://router.huggingface.co/v1")
-LLM_MODEL = os.getenv("LLM_MODEL", "XiaomiMiMo/MiMo-V2-Flash")
-LLM_API_KEY = os.getenv("LLM_API_KEY", os.getenv("HF_TOKEN", ""))
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen/qwen3.8-27b")
+LLM_API_KEY = (os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("HF_TOKEN") or "").strip()
 
 _driver = None
 
@@ -563,7 +563,7 @@ def print_fts_results(results: list[dict]):
 # ==========================================================
 
 def ensure_ollama_running() -> bool:
-    """Checks if LLM service is available. Returns True immediately for remote APIs (MiMo / HF / OpenAI)."""
+    """Checks if LLM service is available. Returns True immediately for remote APIs (Groq / HF / OpenAI)."""
     if not is_local_llm():
         return True
 
@@ -627,7 +627,7 @@ def is_local_llm() -> bool:
 
 
 def get_effective_max_tokens(requested_tokens: int = 150) -> int:
-    """Situational Token Manager: allows unli/generous tokens for MiMo and local models."""
+    """Situational Token Manager: allows generous tokens for Groq and local models."""
     env_cap = os.getenv("LLM_MAX_TOKENS")
     if env_cap:
         try:
@@ -635,14 +635,62 @@ def get_effective_max_tokens(requested_tokens: int = 150) -> int:
         except ValueError:
             pass
 
-    # Unlimited / generous tokens for MiMo or local execution
-    if is_local_llm() or "mimo" in LLM_MODEL.lower():
+    # Generous tokens for Groq, MiMo or local execution
+    if is_local_llm() or "groq" in LLM_BASE_URL.lower() or "mimo" in LLM_MODEL.lower():
         return max(requested_tokens, 2048)
     return min(requested_tokens, 200)
 
 
+def get_local_ollama_model() -> str | None:
+    """Check if local Ollama is reachable and return a usable model name."""
+    try:
+        import urllib.request
+        import json
+        req = urllib.request.Request("http://localhost:11434/api/tags", headers={"User-Agent": "ProjectTRACK"})
+        with urllib.request.urlopen(req, timeout=0.8) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                models = [m.get("name", "") for m in data.get("models", [])]
+                for m in models:
+                    if "qwen2.5:0.5b" in m:
+                        return m
+                if models:
+                    return models[0]
+                return "qwen2.5:0.5b"
+    except Exception:
+        pass
+    return None
+
+
+def extract_context_from_messages(messages: list[dict]) -> tuple[str, str, bool]:
+    """Extract graph_context, question, and is_single flag from conversation messages."""
+    graph_context = ""
+    question = ""
+    is_single = False
+    for m in messages:
+        content = m.get("content", "")
+        if m.get("role") == "system":
+            if "summary of what this project accomplishes" in content:
+                is_single = True
+        elif m.get("role") == "user":
+            if "Knowledge Graph Context:\n" in content:
+                parts = content.split("Knowledge Graph Context:\n", 1)[1]
+                if "\n\nUser Question: " in parts:
+                    ctx, q = parts.split("\n\nUser Question: ", 1)
+                    graph_context = ctx.strip()
+                    question = q.strip()
+                elif "\n\nTopic: " in parts:
+                    graph_context = parts.split("\n\nTopic: ", 1)[0].strip()
+                    question = content
+                else:
+                    graph_context = parts.strip()
+            else:
+                question = content
+    return graph_context, question, is_single
+
+
 async def stream_ollama(messages: list[dict], max_tokens: int = 50) -> str:
-    """Stream from Xiaomi MiMo-V2-Flash (Hugging Face / Xiaomi API) or local Ollama."""
+    """Stream from Groq API (OpenAI-compatible) with fallback to local Ollama or Instant Graph Synthesis."""
     effective_tokens = get_effective_max_tokens(max_tokens)
     headers = {"Content-Type": "application/json"}
     if LLM_API_KEY and LLM_API_KEY.lower() not in ("ollama", "none", ""):
@@ -653,7 +701,7 @@ async def stream_ollama(messages: list[dict], max_tokens: int = 50) -> str:
     first_token_time = None
     token_count = 0
 
-    # 1. Primary for Remote / MiMo: Standard OpenAI-compatible /chat/completions
+    # 1. Primary for Remote / Groq: Standard OpenAI-compatible /chat/completions
     if not is_local_llm():
         url_v1 = f"{LLM_BASE_URL.rstrip('/')}/chat/completions"
         payload_v1 = {
@@ -722,191 +770,89 @@ async def stream_ollama(messages: list[dict], max_tokens: int = 50) -> str:
                         return "".join(collected_chunks).strip()
                     else:
                         err_body = (await resp.aread()).decode("utf-8", errors="replace")
-                        print(f"\n⚠️ MiMo API Error ({resp.status_code}): {err_body}")
-                        if resp.status_code == 400 and "not supported" in err_body.lower():
-                            print("\n💡 Troubleshooting Tips:")
-                            print("   • If using official Xiaomi MiMo platform (free API / unli tokens):")
-                            print("     Set in .env:")
-                            print('       LLM_BASE_URL="https://api.xiaomimimo.com/v1"')
-                            print('       LLM_MODEL="mimo-v2-flash"')
-                            print('       LLM_API_KEY="<your-key-from-platform.xiaomimimo.com>"')
-                            print("   • If using Hugging Face router, the supported model ID is:")
-                            print('       LLM_MODEL="XiaomiMiMo/MiMo-V2.6-Flash-RL"')
-                        elif resp.status_code in (401, 403):
-                            print("💡 Tip: Please add your API key in .env: LLM_API_KEY=\"your_key_here\"")
-                        elif resp.status_code == 402:
-                            print("💡 Tip: Hugging Face requires paid credits for this endpoint.")
-                            print("   Use the free Xiaomi platform (https://platform.xiaomimimo.com) instead.")
+                        if resp.status_code in (401, 403):
+                            print(f"\n⚠️ Groq API Authentication Error (401)")
+                        elif resp.status_code == 429:
+                            print(f"\n⚠️ Groq API Rate Limit Reached (429)")
+                        else:
+                            print(f"\n⚠️ Groq API Error ({resp.status_code}): {err_body}")
         except Exception as e:
-            print(f"\n⚠️ MiMo endpoint error: {e}")
+            print(f"\n⚠️ Groq connection issue: {e}")
 
-    # 2. Local Ollama Native Endpoint (if local)
-    url_native = "http://localhost:11434/api/chat"
-    payload_native = {
-        "model": LLM_MODEL,
-        "messages": messages,
-        "stream": True,
-        "options": {
-            "num_thread": 6,
-            "num_ctx": 2048,
-            "num_predict": effective_tokens,
-            "temperature": 0.2,
-            "repeat_penalty": 1.25
+    # Tier 1 Fallback: Local Ollama (qwen2.5:0.5b or local model)
+    local_model = get_local_ollama_model()
+    if local_model:
+        url_native = "http://localhost:11434/api/chat"
+        payload_native = {
+            "model": local_model,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "num_thread": 6,
+                "num_ctx": 2048,
+                "num_predict": effective_tokens,
+                "temperature": 0.2,
+                "repeat_penalty": 1.25
+            }
         }
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            async with client.stream("POST", url_native, json=payload_native) as resp:
-                if resp.status_code == 200:
-                    buffer = ""
-                    flushed = False
-                    suppressed = False
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        import json
-                        d = json.loads(line)
-                        chunk = d.get("message", {}).get("content", "")
-                        if chunk:
-                            if first_token_time is None:
-                                first_token_time = time.perf_counter()
-                            token_count += 1
-                            collected_chunks.append(chunk)
-                            buffer += chunk
-                            if not flushed:
-                                if is_prohibited_stream_chunk(buffer):
-                                    suppressed = True
-                                    break
-                                if len(buffer) >= 30:
-                                    sys.stdout.write(buffer)
-                                    sys.stdout.flush()
-                                    flushed = True
-                            else:
-                                if is_prohibited_stream_chunk("".join(collected_chunks)):
-                                    suppressed = True
-                                    break
-                                sys.stdout.write(chunk)
-                                sys.stdout.flush()
-                        if d.get("done"):
-                            break
-                    if suppressed:
-                        print("\n⚠️ [Response Suppressed by Guardrail: Detected off-domain output]")
-                        print("💡 This assistant is strictly restricted to DPWH Cebu infrastructure projects.")
-                        print("=" * 62)
-                        return "I am restricted to answering questions regarding DPWH Cebu infrastructure projects."
-                    if not flushed and buffer:
-                        if is_prohibited_stream_chunk(buffer):
-                            print("\n⚠️ [Response Suppressed by Guardrail: Detected off-domain output]")
-                            print("💡 This assistant is strictly restricted to DPWH Cebu infrastructure projects.")
-                            print("=" * 62)
-                            return "I am restricted to answering questions regarding DPWH Cebu infrastructure projects."
-                        sys.stdout.write(buffer)
-                        sys.stdout.flush()
-                    elapsed = time.perf_counter() - start_time
-                    ttft = (first_token_time - start_time) if first_token_time else elapsed
-                    gen_duration = elapsed - ttft
-                    speed_str = f" | ~{token_count / gen_duration:.1f} tok/s" if (token_count > 1 and gen_duration > 0.05) else ""
-                    print(f"\n⏱️ Response time: {elapsed:.2f}s (TTFT: {ttft:.2f}s{speed_str})")
-                    print("=" * 62)
-                    return "".join(collected_chunks).strip()
-    except Exception:
-        pass
-
-    # Fallback to standard OpenAI-compatible endpoint (e.g. vLLM or local server)
-    url_v1 = f"{LLM_BASE_URL}/chat/completions"
-    payload_v1 = {
-        "model": LLM_MODEL,
-        "messages": messages,
-        "stream": True,
-        "max_tokens": effective_tokens,
-        "temperature": 0.1
-    }
-    start_time_v1 = time.perf_counter()
-    first_token_time_v1 = None
-    token_count_v1 = 0
-
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            async with client.stream("POST", url_v1, json=payload_v1) as resp:
-                buffer_v1 = ""
-                flushed_v1 = False
-                suppressed_v1 = False
-                async for line in resp.aiter_lines():
-                    if line.startswith("data: ") and not line.endswith("[DONE]"):
-                        import json
-                        try:
-                            d = json.loads(line[6:])
-                            chunk = d["choices"][0]["delta"].get("content", "")
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+                async with client.stream("POST", url_native, json=payload_native) as resp:
+                    if resp.status_code == 200:
+                        buffer = ""
+                        flushed = False
+                        suppressed = False
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            import json
+                            d = json.loads(line)
+                            chunk = d.get("message", {}).get("content", "")
                             if chunk:
-                                if first_token_time_v1 is None:
-                                    first_token_time_v1 = time.perf_counter()
-                                token_count_v1 += 1
+                                if first_token_time is None:
+                                    first_token_time = time.perf_counter()
+                                token_count += 1
                                 collected_chunks.append(chunk)
-                                buffer_v1 += chunk
-                                if not flushed_v1:
-                                    if is_prohibited_stream_chunk(buffer_v1):
-                                        suppressed_v1 = True
+                                buffer += chunk
+                                if not flushed:
+                                    if is_prohibited_stream_chunk(buffer):
+                                        suppressed = True
                                         break
-                                    if len(buffer_v1) >= 30:
-                                        sys.stdout.write(buffer_v1)
+                                    if len(buffer) >= 30:
+                                        sys.stdout.write(buffer)
                                         sys.stdout.flush()
-                                        flushed_v1 = True
+                                        flushed = True
                                 else:
                                     if is_prohibited_stream_chunk("".join(collected_chunks)):
-                                        suppressed_v1 = True
+                                        suppressed = True
                                         break
                                     sys.stdout.write(chunk)
                                     sys.stdout.flush()
-                        except Exception:
-                            pass
-                if suppressed_v1:
-                    print("\n⚠️ [Response Suppressed by Guardrail: Detected off-domain output]")
-                    print("💡 This assistant is strictly restricted to DPWH Cebu infrastructure projects.")
-                    print("=" * 62)
-                    return "I am restricted to answering questions regarding DPWH Cebu infrastructure projects."
-                if not flushed_v1 and buffer_v1:
-                    if is_prohibited_stream_chunk(buffer_v1):
-                        print("\n⚠️ [Response Suppressed by Guardrail: Detected off-domain output]")
-                        print("💡 This assistant is strictly restricted to DPWH Cebu infrastructure projects.")
+                            if d.get("done"):
+                                break
+                        if not suppressed and not flushed and buffer:
+                            sys.stdout.write(buffer)
+                            sys.stdout.flush()
+                        elapsed = time.perf_counter() - start_time
+                        print(f"\n⚡ [Generated via Offline Local Model: {local_model}]")
+                        print(f"⏱️ Response time: {elapsed:.2f}s")
                         print("=" * 62)
-                        return "I am restricted to answering questions regarding DPWH Cebu infrastructure projects."
-                    sys.stdout.write(buffer_v1)
-                    sys.stdout.flush()
-        elapsed = time.perf_counter() - start_time_v1
-        ttft = (first_token_time_v1 - start_time_v1) if first_token_time_v1 else elapsed
-        gen_duration = elapsed - ttft
-        speed_str = f" | ~{token_count_v1 / gen_duration:.1f} tok/s" if (token_count_v1 > 1 and gen_duration > 0.05) else ""
-        print(f"\n⏱️ Response time: {elapsed:.2f}s (TTFT: {ttft:.2f}s{speed_str})")
-        print("=" * 62)
-        return "".join(collected_chunks).strip()
-    except Exception as e:
-        if "connection" in str(e).lower() and ensure_ollama_running():
-            print("🔄 Auto-started Ollama. Retrying request...")
-            try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-                    async with client.stream("POST", url_v1, json=payload_v1) as resp:
-                        async for line in resp.aiter_lines():
-                            if line.startswith("data: ") and not line.endswith("[DONE]"):
-                                import json
-                                try:
-                                    d = json.loads(line[6:])
-                                    chunk = d["choices"][0]["delta"].get("content", "")
-                                    if chunk:
-                                        sys.stdout.write(chunk)
-                                        sys.stdout.flush()
-                                        collected_chunks.append(chunk)
-                                except Exception:
-                                    pass
-                print("\n" + "=" * 62)
-                return "".join(collected_chunks).strip()
-            except Exception:
-                pass
-        print(f"\n💡 Notice: Local AI summary is currently unavailable ({e.__class__.__name__}).")
-        print("   All verified facts and data from the Knowledge Graph are shown above.")
-        print(f"   👉 To enable AI summaries: install Ollama (https://ollama.com) and run: `ollama pull {LLM_MODEL}`")
-        print("=" * 62)
-        return ""
+                        return "".join(collected_chunks).strip()
+        except Exception:
+            pass
+
+    # Tier 2 Fallback: Instant Graph Deterministic Synthesizer (<5ms)
+    from backend.services.graph_synthesizer import synthesize_graph_response
+    ctx, q, is_single = extract_context_from_messages(messages)
+    summary = synthesize_graph_response(
+        graph_context=ctx,
+        question=q,
+        is_single_project=is_single,
+        include_setup_tip=True
+    )
+    print("\n" + summary)
+    print("=" * 62)
+    return summary
 
 async def ask_llm_stream(question: str, history: list[dict] = None, last_context: str = "", mode: str = "ai") -> tuple[str, str]:
     """Retrieve relevant subgraph from Neo4j in <20ms and stream grounded answer from Ollama with conversational memory."""
@@ -971,12 +917,21 @@ async def ask_llm_stream(question: str, history: list[dict] = None, last_context
             return "", graph_context
 
         if not ensure_ollama_running():
-            print(f"\n💡 Notice: Local AI ({LLM_MODEL}) is offline or not installed.")
-            print("   Complete project details from the Knowledge Graph are displayed above.")
-            return "", graph_context
+            from backend.services.graph_synthesizer import synthesize_graph_response
+            summary = synthesize_graph_response(
+                graph_context=graph_context,
+                question=question,
+                is_single_project=True,
+                include_setup_tip=True
+            )
+            print("\n🤖 Grounded Engineering Summary (Instant Graph Mode):")
+            print("-" * 62)
+            print(summary)
+            print("=" * 62)
+            return summary, graph_context
 
         system_prompt = (
-            "You are MiMo, an expert DPWH civil engineering assistant in Cebu, Philippines developed by Xiaomi.\n"
+            "You are ProjectTRACK AI, an expert DPWH civil engineering assistant in Cebu, Philippines powered by Groq.\n"
             "Provide a concise 1 to 2 sentence plain-English summary of what this project accomplishes.\n\n"
             "CRITICAL RULES:\n"
             "1. Focus ONLY on what is being constructed, repaired, or installed and its practical public benefit.\n"
@@ -984,7 +939,7 @@ async def ask_llm_stream(question: str, history: list[dict] = None, last_context
             "3. NEVER use the phrase 'Barangay Unspecified'.\n"
             "4. Always output complete, grammatically finished sentences ending with terminal punctuation (. or !). Never stop mid-sentence."
         )
-        engine_badge = "MiMo Free API - Unlimited Tokens" if "mimo" in LLM_MODEL.lower() else ("Local Engine - Unlimited Tokens" if is_local_llm() else "Cloud API")
+        engine_badge = "Groq LPU Engine" if "groq" in LLM_BASE_URL.lower() else ("Local Engine - Unlimited Tokens" if is_local_llm() else "Cloud API")
         print(f"\n🤖 Grounded Engineering Summary ({LLM_MODEL} | {engine_badge}):")
         print("-" * 62)
         messages = [
@@ -1028,10 +983,20 @@ async def ask_llm_stream(question: str, history: list[dict] = None, last_context
                 return "", ""
 
             if not ensure_ollama_running():
-                print(f"💡 Notice: Local AI ({LLM_MODEL}) is offline. Graph results and instant metrics are displayed above.")
-                print(f"👉 To enable AI summaries: install Ollama (https://ollama.com) and run: `ollama pull {LLM_MODEL}`")
-                print("💡 Tip: Type any Project ID (e.g. '25HN0012') for full engineering details.")
-                return "", ""
+                from backend.services.graph_synthesizer import synthesize_graph_response
+                graph_context = (
+                    f"Location / Subject: {loc_label}\n"
+                    f"Total Recorded Projects in Database: {insights['total_count']}\n"
+                    f"Total Allocated Budget: {insights['total_budget_fmt']}\n"
+                    f"Primary Sectors: {insights['sectors']}\n"
+                    f"Key Contractors: {insights['key_contractors'] or 'Various'}"
+                )
+                summary = synthesize_graph_response(graph_context=graph_context, question=question, is_single_project=False, include_setup_tip=True)
+                print(f"🤖 Grounded Answer (Instant Graph Mode):")
+                print("-" * 62)
+                print(summary)
+                print("💡 Tip: Type any Project ID (e.g. '25HN0012') or ask 'tell me more about [ID]' for full engineering details.")
+                return summary, graph_context
 
             # Compact context for prompt evaluation: keeps TTFT under 1.5s
             lines = []
@@ -1071,28 +1036,18 @@ async def ask_llm_stream(question: str, history: list[dict] = None, last_context
                     f"Sample Projects: {sample_lines}"
                 )
 
-                if is_local_llm() or "mimo" in LLM_MODEL.lower():
-                    system_prompt = (
-                        "You are MiMo, an expert DPWH civil engineering assistant in Cebu, Philippines developed by Xiaomi.\n"
-                        f"Provide a clear, cohesive plain-English synthesis of what the DPWH public works in Cebu accomplish regarding '{loc_label}'.\n\n"
-                        "CRITICAL RULES:\n"
-                        "1. NO DICTIONARY DEFINITIONS: NEVER provide textbook definitions.\n"
-                        f"2. INFRASTRUCTURE FOCUS: Synthesize the verified engineering activities (such as major river basins, flood mitigation structures, revetments, seawalls, or road upgrading) across the mentioned Cebu locations.\n"
-                        "3. NO MECHANICAL NUMBERED LISTS: Write a coherent, well-structured synthesis rather than mechanically enumerating project IDs.\n"
-                        "4. ALWAYS finish complete sentences. Never cut off mid-thought.\n"
-                        "5. Never say 'Barangay Unspecified'."
-                    )
-                else:
-                    system_prompt = (
-                        "You are MiMo, an expert DPWH civil engineering assistant in Cebu, Philippines developed by Xiaomi.\n"
-                        f"Provide a concise 1 to 2 sentence summary of what the DPWH public works in Cebu relate to '{loc_label}'.\n\n"
-                        "CRITICAL RULES:\n"
-                        "1. NO DICTIONARY DEFINITIONS: Focus solely on public works in Cebu.\n"
-                        "2. Be concise (1-2 sentences) to conserve API tokens. Never stop mid-sentence.\n"
-                        "3. Never say 'Barangay Unspecified'."
-                    )
+                system_prompt = (
+                    "You are ProjectTRACK AI, an expert DPWH civil engineering assistant in Cebu, Philippines powered by Groq.\n"
+                    f"Provide a clear, cohesive plain-English synthesis of what the DPWH public works in Cebu accomplish regarding '{loc_label}'.\n\n"
+                    "CRITICAL RULES:\n"
+                    "1. NO DICTIONARY DEFINITIONS: NEVER provide textbook definitions.\n"
+                    f"2. INFRASTRUCTURE FOCUS: Synthesize the verified engineering activities (such as major river basins, flood mitigation structures, revetments, seawalls, or road upgrading) across the mentioned Cebu locations.\n"
+                    "3. NO MECHANICAL NUMBERED LISTS: Write a coherent, well-structured synthesis rather than mechanically enumerating project IDs.\n"
+                    "4. ALWAYS finish complete sentences. Never cut off mid-thought.\n"
+                    "5. Never say 'Barangay Unspecified'."
+                )
 
-                engine_badge = "MiMo Free API - Unlimited Tokens" if "mimo" in LLM_MODEL.lower() else ("Local Engine - Unlimited Tokens" if is_local_llm() else "Cloud API")
+                engine_badge = "Groq LPU Engine" if "groq" in LLM_BASE_URL.lower() else ("Local Engine - Unlimited Tokens" if is_local_llm() else "Cloud API")
                 print(f"🤖 Grounded Answer ({LLM_MODEL} | {engine_badge}):")
                 print("-" * 62)
 
@@ -1163,9 +1118,12 @@ async def ask_llm_stream(question: str, history: list[dict] = None, last_context
                 return "", graph_context
 
             if not ensure_ollama_running():
-                print(f"\n💡 Notice: Local AI ({LLM_MODEL}) is offline. Graph context is displayed above.")
-                print(f"👉 To enable AI answers: install Ollama (https://ollama.com) and run: `ollama pull {LLM_MODEL}`")
-                return "", graph_context
+                from backend.services.graph_synthesizer import synthesize_graph_response
+                summary = synthesize_graph_response(graph_context=graph_context, question=question, is_single_project=False, include_setup_tip=True)
+                print(f"\n================ 🤖 GROUNDED ANSWER (Instant Graph Mode) ================")
+                print(summary)
+                print("=" * 62)
+                return summary, graph_context
 
             system_prompt = (
                 "You are an expert DPWH civil engineering assistant dedicated exclusively to Cebu, Philippines.\n"
@@ -1200,8 +1158,10 @@ def run_console():
     print("\n" + "=" * 65)
     print(f"⚡ Neo4j Knowledge Graph Console (DPWH Cebu Infrastructure)")
     if has_ai:
-        if "mimo" in LLM_MODEL.lower():
-            print(f"Connected to Neo4j Aura + Xiaomi MiMo Free API ({LLM_MODEL})")
+        if "groq" in LLM_BASE_URL.lower():
+            print(f"Connected to Neo4j Aura + Groq API ({LLM_MODEL})")
+        elif "mimo" in LLM_MODEL.lower():
+            print(f"Connected to Neo4j Aura + Xiaomi MiMo API ({LLM_MODEL})")
         elif not is_local_llm():
             print(f"Connected to Neo4j Aura + Cloud AI ({LLM_MODEL})")
         else:

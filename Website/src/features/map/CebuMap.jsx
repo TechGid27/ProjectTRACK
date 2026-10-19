@@ -1763,7 +1763,11 @@ function CebuMap() {
     }
   }, [])
 
-  const queryName = selected ? lguQuery(selected.name) : null
+  // Send the full canonical LGU name to the backend. The API normalizes
+  // "City of X" / "X City" and isolates projects by exact municipality, so
+  // stripping the " City" suffix here would broaden the query and leak dots
+  // from other LGUs (e.g. "Cebu City" -> "Cebu" matched the whole province).
+  const queryName = selected ? selected.name : null
   const locProjects =
     queryName && locState.name === queryName ? locState.data : null
   const locError =

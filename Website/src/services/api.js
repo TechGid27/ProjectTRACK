@@ -91,6 +91,9 @@ export async function submitAnomalyReport({
   description,
   location,
   reporterName,
+  category,
+  latitude,
+  longitude,
   picture,
 }) {
   const formData = new FormData()
@@ -98,6 +101,11 @@ export async function submitAnomalyReport({
   formData.append('description', description)
   if (location) formData.append('location', location)
   if (reporterName) formData.append('reporter_name', reporterName)
+  if (category) formData.append('category', category)
+  // Browser geolocation is lower-trust than mobile hardware GPS; the backend
+  // re-validates the ≤150m geofence against the project's DPWH coordinates.
+  if (typeof latitude === 'number') formData.append('latitude', String(latitude))
+  if (typeof longitude === 'number') formData.append('longitude', String(longitude))
   if (picture) formData.append('picture', picture)
 
   return request('/reports', {

@@ -37,15 +37,17 @@ Every fiscal year, billions of Philippine Pesos are allocated for Department of 
 * **Budget and Expenditure Transparency**: Real-time auditing of allocated funds, expenditure disbursements, variance indicators, and source funding across municipalities.
 * **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store.
 
-### Planned Mobile Field Auditor (`mobile` — React Native with Expo)
-* **Geofenced On-Site Photo Capture**: Planned use of React Native and Expo (`expo-location`, `expo-camera`) to verify GPS proximity to project coordinates before photo capture.
-* **Offline-First Background Sync**: Planned offline caching and background synchronization for field observations in low-connectivity areas.
+### Mobile Field Auditor (`mobile` — React Native with Expo)
+* **Geofenced On-Site Photo Capture**: Uses React Native and Expo (`expo-location`, `expo-camera`) to confirm the device is within ≤150m of the project's DPWH coordinates before the live camera shutter unlocks (gallery uploads disabled for ground-truth integrity).
+* **Server-Verified Submission & Badging**: Captured audits are submitted to `/api/reports`, re-validated server-side (geofence + image forensics), and the returned verdict — status, distance, forensics result, reputation — is shown on-device.
+* **Offline-First Background Sync**: Audits captured offline are queued in a local outbox and synced to the backend when connectivity returns.
 
 ### Core Backend and Services (`backend`)
 * **Personnel and Entity Graph Mapping**: Models relationships between contractors, authorized managing officers, district engineers, and procurement awards into a traversable graph.
 * **Spatial Data Integrity**: Exact, canonicalized municipality matching eliminates cross-LGU leakage, and a polygon reverse-geocoding pipeline reassigns each project to the LGU that actually contains its authentic DPWH coordinates (projects outside Cebu are flagged and excluded).
 * **Supabase Authentication**: Backend-managed Supabase (GoTrue) auth under `/api/auth` (OAuth, email/password, session, sign-out) with HTTP-only session cookies, auto token refresh, and a reusable route-guard dependency - ready for the web and mobile clients to hook into.
 * **High-Throughput RESTful and SSE API**: Production-grade FastAPI endpoints supporting sub-20ms instant Cypher queries, Server-Sent Events (SSE) streaming, and standardized GeoJSON feeds.
+* **Field Report Verification API**: `/api/reports` endpoints enforce the four verification pillars server-side — a ≤150m geofence check against authentic DPWH coordinates, ELA + perceptual-hash image forensics, authenticated submission with a 3-reports/day limit and reputation scoring, and a verification verdict (status, distance, forensics, reputation) surfaced to both clients. Reports persist to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
 
 ---
 

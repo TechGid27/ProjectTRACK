@@ -1,7 +1,8 @@
-import { ProjectDetail, Contractor, Pin } from '../core/types';
+import { ProjectDetail, Contractor, Pin, ReportVerification, ReportRecord } from '../core/types';
 import { mockProjects, getProjectsByLocation, getProjectById } from '../data/mockApi';
 import { topContractors } from '../data/contractors';
 import { pins as localPins } from '../data/pins';
+import { outbox } from './outbox';
 
 const DEFAULT_API_BASE = 'http://localhost:8000/api';
 
@@ -191,6 +192,91 @@ class ApiService {
         answer: 'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
       };
     }
+  }
+
+  /**
+   * Submit a geofenced field report (Pillars 1–3). Sends multipart form data
+   * with the session cookie (credentials: 'include'); the backend re-validates
+   * the ≤150m geofence and runs image forensics, returning a verification
+   * verdict. Throws an Error with a `.status` on 401 / 429 / other failures.
+   */
+  async submitReport(input: {
+    projectId: string;
+    description: string;
+    category?: string;
+    latitude?: number;
+    longitude?: number;
+    photo?: { uri: string; name?: string; type?: string } | null;
+  }): Promise<ReportVerification> {
+    const form = new FormData();
+    form.append('project_id', input.projectId);
+    form.append('description', input.description);
+    if (input.category) form.append('category', input.category);
+    if (typeof input.latitude === 'number') form.append('latitude', String(input.latitude));
+    if (typeof input.longitude === 'number') form.append('longitude', String(input.longitude));
+    if (input.photo) {
+      // React Native multipart file shape.
+      form.append('picture', {
+        uri: input.photo.uri,
+        name: input.photo.name ?? 'field-photo.jpg',
+        type: input.photo.type ?? 'image/jpeg',
+      } as unknown as Blob);
+    }
+
+    const res = await fetch(`${this.baseUrl}/reports`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    if (!res.ok) {
+      let detail = `Report submission failed (HTTP ${res.status})`;
+      try {
+        const body = await res.json();
+        if (body?.detail) detail = body.detail;
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      const error = new Error(detail) as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
+    return (await res.json()) as ReportVerification;
+  }
+
+  /** Fetch a project's reports with verification badges (Pillar 5). */
+  async fetchProjectReports(projectId: string): Promise<ReportRecord[]> {
+    const res = await fetch(`${this.baseUrl}/reports/${encodeURIComponent(projectId)}`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    return (body?.reports ?? []) as ReportRecord[];
+  }
+
+  /**
+   * Offline-first sync (Pillar 1 field durability): POST each pending outbox
+   * audit to the backend. Marks items synced on success; leaves them pending on
+   * failure so a later sync retries. Returns the number successfully synced.
+   */
+  async syncPendingAudits(): Promise<number> {
+    const pending = outbox.getPendingAudits();
+    let synced = 0;
+    for (const item of pending) {
+      try {
+        await this.submitReport({
+          projectId: item.projectId,
+          description: item.notes ?? 'On-site field audit (offline capture).',
+          latitude: item.latitude,
+          longitude: item.longitude,
+        });
+        outbox.markSynced(item.id);
+        synced += 1;
+      } catch {
+        // Keep the item pending for the next sync attempt.
+      }
+    }
+    return synced;
   }
 }
 

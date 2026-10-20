@@ -19,6 +19,7 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 * **🌊 Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
 * **Conversational Memory & Spatial Targeting**: Follow-ups remember the prior location or project; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying DB-locked and injection-safe. Chat answers carry map coordinates that fly to an LGU or zoom to a single project.
 * **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
+* **📍 Field Report Verification**: Authenticated citizen reports (`/api/reports`) with a server-authoritative ≤150m geofence check against DPWH coordinates (Pillar 1), ELA + perceptual-hash image forensics (Pillar 2), identity gating with a 3-reports/day limit and reputation scoring (Pillar 3), and verification badging (Pillar 5). Persisted to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
 * **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
 * **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
 
@@ -42,6 +43,7 @@ backend/
 │   ├── projects.py          # /api/projects/{id}, /api/projects/search, /api/projects/by-location
 │   ├── analytics.py         # /api/analytics/summary, /top-contractors, /top-projects, /appropriations, /procurement
 │   ├── chat.py              # /api/chat (JSON), /api/chat/stream (SSE streaming)
+│   ├── reports.py           # /api/reports (POST submit), /api/reports/{project_id} (GET list)
 │   └── pipeline.py          # /api/pipeline/sync, /api/pipeline/scrape, /api/pipeline/jobs
 ├── models/                  # Pydantic validation & response schemas
 │   ├── __init__.py
@@ -81,7 +83,7 @@ pip install -r backend/requirements.txt
 The backend automatically reads from your `.env` file in the project root or backend directory:
 
 ```env
-# Neo4j Database
+# Neo4j Database (required)
 NEO4J_URI="neo4j+s://your-instance.databases.neo4j.io"
 NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="your-password"
@@ -92,11 +94,28 @@ LLM_MODEL="qwen/qwen3.8-27b"
 GROQ_API_KEY="gsk_your_groq_api_key"
 LLM_MAX_TOKENS=2048
 
-# Supabase & Apify (Optional: only needed for scraping and syncing)
+# Supabase (required for authentication AND field reports)
 SUPABASE_URL="https://your-project.supabase.co"
-SUPABASE_SERVICE_KEY="your-key"
-APIFY_TOKEN="your-apify-token"
+SUPABASE_SERVICE_KEY="your_service_role_key"     # server-only; writes reports + storage
+SUPABASE_ANON_KEY="your_anon_public_key"         # required for /api/auth (GoTrue)
+SUPABASE_REPORT_BUCKET="report-photos"           # optional; defaults to report-photos
+# SUPABASE_JWT_SECRET="your_jwt_secret"          # optional; local JWT verification
+
+# Session cookie behavior (set SECURE=true in production over HTTPS)
+FRONTEND_URL="http://localhost:5173"
+AUTH_COOKIE_NAME="pt_session"
+AUTH_COOKIE_SECURE="false"
+AUTH_COOKIE_SAMESITE="lax"
+
+# Apify (optional: only needed when running the scraper)
+APIFY_TOKEN="your_apify_api_token"
 ```
+
+> **Note**: Supabase is **no longer optional** — `SUPABASE_URL` + `SUPABASE_ANON_KEY`
+> back the `/api/auth` login flow, and `SUPABASE_URL` + `SUPABASE_SERVICE_KEY`
+> back the `/api/reports` field-report subsystem (Postgres + the `report-photos`
+> Storage bucket). Apply the migrations in `supabase/migrations/` first
+> (see `supabase/README.md`). Only `APIFY_TOKEN` remains optional.
 
 ### 3. Run the Backend Server
 

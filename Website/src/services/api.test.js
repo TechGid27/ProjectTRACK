@@ -90,4 +90,33 @@ describe('api service', () => {
       }),
     ).rejects.toThrow(/HTTP 422/)
   })
+
+  it('submitAnomalyReport attaches latitude/longitude and category', async () => {
+    fetch.mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 'x' }) })
+    await submitAnomalyReport({
+      projectId: '24HH0043',
+      description: 'Concrete works do not match the posted scope here.',
+      category: 'ghost_project',
+      latitude: 11.0509,
+      longitude: 124.0055,
+    })
+    const [, options] = fetch.mock.calls[0]
+    expect(options.body.get('latitude')).toBe('11.0509')
+    expect(options.body.get('longitude')).toBe('124.0055')
+    expect(options.body.get('category')).toBe('ghost_project')
+  })
+
+  it('submitAnomalyReport surfaces a 429 rate-limit error', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ detail: 'Daily report limit reached (3 per 24 hours).' }),
+    })
+    await expect(
+      submitAnomalyReport({
+        projectId: '24HH0043',
+        description: 'This is my fourth report in the same day window.',
+      }),
+    ).rejects.toMatchObject({ status: 429 })
+  })
 })

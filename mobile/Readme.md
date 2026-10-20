@@ -12,17 +12,20 @@
 
 The mobile client is the planned companion app for on-the-ground infrastructure monitoring. It enables field auditors and citizen volunteers to verify DPWH project progress with GPS-locked photo evidence, offline-capable data access, and a conversational assistant — all synced to the ProjectTrack backend.
 
-### Planned Capabilities
+### Capabilities
 
 | Feature | Description |
 | :--- | :--- |
-| **GPS-Aware Field Audits** | Geofenced photo capture using `expo-location` and `expo-camera`, requiring physical proximity (100 m) to project coordinates before evidence can be submitted. |
-| **Offline-First Architecture** | Local SQLite storage (`expo-sqlite`) with background sync and an idempotent queue for low-connectivity field conditions. |
-| **Citizen Photo Verification** | EXIF metadata extraction, SHA-256 hashing, and server-side ELA analysis for tamper detection. |
+| **GPS-Aware Field Audits** | Geofenced photo capture using `expo-location` and `expo-camera`, requiring physical proximity (≤150 m) to project coordinates before evidence can be submitted. The shutter stays locked until a live hardware GPS fix is inside the geofence. |
+| **Server-Authoritative Verification** | Submissions are re-validated server-side: the backend recomputes the Haversine distance against the project's DPWH coordinates and runs ELA + perceptual-hash image forensics before trusting a report. |
+| **Verification Badging** | Each submitted report surfaces its verdict — status, distance from site, forensics result, and reporter reputation — using the same schema as the web client. |
+| **Offline-First Architecture** | An in-memory outbox queues audits captured offline; `api.syncPendingAudits()` POSTs them to the backend when connectivity returns, marking each synced on success. |
 | **Conversational Field Assistant** | On-device access to the GraphRAG chat via SSE streaming for contextual project queries. |
 | **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. |
 
-> **Note:** The mobile client is in active development. Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up) and the API service layer are implemented. Geofenced photo capture and offline sync are slated for upcoming sprints.
+> **Status:** Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up),
+> the API service layer, geofenced hardware capture, live report submission with
+> verification badging, and the offline outbox sync are implemented and tested.
 
 ---
 
@@ -84,6 +87,7 @@ Key variables:
 | `npm run typecheck` | Run TypeScript type checking (`tsc --noEmit`) |
 | `npm run test` | Run Jest test suite |
 | `npm run test:coverage` | Run tests with coverage report |
+| `npm run audit` | Allowlist-aware `npm audit` gate (see Security note below) |
 
 ---
 
@@ -120,6 +124,8 @@ The mobile client communicates with the ProjectTrack FastAPI backend:
 | `GET /api/projects/{id}` | Retrieve individual project details |
 | `POST /api/chat` | Send queries to the GraphRAG assistant |
 | `GET /api/chat/stream` | SSE streaming for real-time AI responses |
+| `POST /api/reports` | Submit a geofenced, forensic field report (multipart, session cookie) |
+| `GET /api/reports/{id}` | List a project's reports with verification badges |
 | `GET /api/health` | Backend connectivity check |
 
 ---
@@ -144,6 +150,27 @@ Coverage thresholds (enforced in `jest.config.js`):
 | Functions | 80% |
 | Lines | 80% |
 | Statements | 80% |
+
+---
+
+## Security / Dependency Audit
+
+The CI **Security Audit** workflow runs `npm run audit` for this package. A plain
+`npm audit --audit-level=high` cannot pass here: the Expo SDK 52 / React Native
+0.76 / jest-expo build toolchain pulls transitive advisories (node-tar,
+node-forge, postcss, braces, @xmldom/xmldom, ...) whose only npm remediation is a
+breaking `expo@44` downgrade. Those advisories are **not** introduced by this
+project's direct dependencies.
+
+`npm run audit` (`scripts/audit-check.js`) is an allowlist-aware gate:
+
+- `mobile/.npm-audit-allow.json` lists the known, documented Expo-toolchain
+  advisory ids that are accepted until the next Expo SDK upgrade.
+- The gate still **fails** on any new high/critical advisory outside that list,
+  so genuinely new vulnerabilities are not masked.
+
+When upgrading the Expo SDK, re-run `npm run audit` and prune any ids that no
+longer appear from `.npm-audit-allow.json`.
 
 ---
 

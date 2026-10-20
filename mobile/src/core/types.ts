@@ -64,6 +64,35 @@ export interface AnomalyReport {
   timestamp: number;
 }
 
+/**
+ * Shared verification verdict returned by the backend (Pillar 5).
+ * Mirrors backend/models/report.py ReportVerification + the website badges so
+ * the two clients render identical badge semantics.
+ */
+export type ReportStatus = 'verified' | 'pending' | 'flagged' | 'rejected';
+export type ForensicsVerdict = 'clean' | 'suspicious' | 'recycled';
+
+export interface ReportVerification {
+  id: string;
+  project_id: string;
+  status: ReportStatus;
+  distance_meters: number | null;
+  geofence_pass: boolean;
+  ela_score: number | null;
+  phash_recycled: boolean;
+  forensics_verdict: ForensicsVerdict;
+  reporter_reputation: number;
+  created_at: string;
+}
+
+export interface ReportRecord extends ReportVerification {
+  description: string;
+  category: string;
+  photo_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 export interface LguSummary {
   name: string;
   totalProjects: number;

@@ -1329,10 +1329,10 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
                 data-testid="gps-status"
                 className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${
                   gpsStatus === 'acquired'
-                    ? 'bg-emerald-400/15 text-emerald-300'
+                    ? 'bg-violet-400/25 text-violet-200'
                     : gpsStatus === 'denied'
                       ? 'bg-white/10 text-white/50'
-                      : 'bg-amber-400/15 text-amber-300'
+                      : 'bg-violet-400/10 text-violet-300/70'
                 }`}
               >
                 {gpsStatus === 'acquiring' && '📍 Acquiring GPS…'}
@@ -1562,12 +1562,12 @@ function ProjectDetailModal({ entity, onClose }) {
                   {report.badge && (
                     <span
                       data-testid="report-verification-badge"
-                      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${
                         report.badge.tone === 'success'
-                          ? 'bg-emerald-400/20 text-emerald-300'
+                          ? 'bg-violet-400/25 text-violet-200 ring-violet-400/60'
                           : report.badge.tone === 'warning'
-                            ? 'bg-amber-400/20 text-amber-300'
-                            : 'bg-white/10 text-white/60'
+                            ? 'bg-rose-400/25 text-rose-200 ring-rose-400/60'
+                            : 'bg-white/10 text-white/60 ring-white/15'
                       }`}
                     >
                       {report.badge.label}
@@ -1575,7 +1575,7 @@ function ProjectDetailModal({ entity, onClose }) {
                   )}
                   <p
                     role="status"
-                    className="rounded-lg bg-emerald-400/15 px-3 py-2 text-[11px] font-semibold text-emerald-300"
+                    className="rounded-lg bg-violet-400/15 px-3 py-2 text-[11px] font-semibold text-violet-300"
                   >
                     {report.pending
                       ? 'Report saved on this device — server was unreachable, it will not appear for others yet.'

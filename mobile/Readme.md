@@ -12,17 +12,20 @@
 
 The mobile client is the planned companion app for on-the-ground infrastructure monitoring. It enables field auditors and citizen volunteers to verify DPWH project progress with GPS-locked photo evidence, offline-capable data access, and a conversational assistant — all synced to the ProjectTrack backend.
 
-### Planned Capabilities
+### Capabilities
 
 | Feature | Description |
 | :--- | :--- |
-| **GPS-Aware Field Audits** | Geofenced photo capture using `expo-location` and `expo-camera`, requiring physical proximity (100 m) to project coordinates before evidence can be submitted. |
-| **Offline-First Architecture** | Local SQLite storage (`expo-sqlite`) with background sync and an idempotent queue for low-connectivity field conditions. |
-| **Citizen Photo Verification** | EXIF metadata extraction, SHA-256 hashing, and server-side ELA analysis for tamper detection. |
+| **GPS-Aware Field Audits** | Geofenced photo capture using `expo-location` and `expo-camera`, requiring physical proximity (≤150 m) to project coordinates before evidence can be submitted. The shutter stays locked until a live hardware GPS fix is inside the geofence. |
+| **Server-Authoritative Verification** | Submissions are re-validated server-side: the backend recomputes the Haversine distance against the project's DPWH coordinates and runs ELA + perceptual-hash image forensics before trusting a report. |
+| **Verification Badging** | Each submitted report surfaces its verdict — status, distance from site, forensics result, and reporter reputation — using the same schema as the web client. |
+| **Offline-First Architecture** | An in-memory outbox queues audits captured offline; `api.syncPendingAudits()` POSTs them to the backend when connectivity returns, marking each synced on success. |
 | **Conversational Field Assistant** | On-device access to the GraphRAG chat via SSE streaming for contextual project queries. |
 | **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. |
 
-> **Note:** The mobile client is in active development. Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up) and the API service layer are implemented. Geofenced photo capture and offline sync are slated for upcoming sprints.
+> **Status:** Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up),
+> the API service layer, geofenced hardware capture, live report submission with
+> verification badging, and the offline outbox sync are implemented and tested.
 
 ---
 
@@ -120,6 +123,8 @@ The mobile client communicates with the ProjectTrack FastAPI backend:
 | `GET /api/projects/{id}` | Retrieve individual project details |
 | `POST /api/chat` | Send queries to the GraphRAG assistant |
 | `GET /api/chat/stream` | SSE streaming for real-time AI responses |
+| `POST /api/reports` | Submit a geofenced, forensic field report (multipart, session cookie) |
+| `GET /api/reports/{id}` | List a project's reports with verification badges |
 | `GET /api/health` | Backend connectivity check |
 
 ---

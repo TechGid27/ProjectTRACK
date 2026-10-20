@@ -119,6 +119,33 @@ export default function MapLegend() {
                 </button>
               </div>
 
+              {/* Report verification color key (informational — not a filter) */}
+              <div className="space-y-1.5 border-t border-white/10 pt-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
+                  Report Verification
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    title="Citizen report with GPS confirmed on-site"
+                    className="rounded-full bg-violet-400/25 px-2.5 py-1 text-[11px] font-bold text-violet-200 ring-1 ring-violet-400/60"
+                  >
+                    On-Site Verified
+                  </span>
+                  <span
+                    title="Citizen report flagged by photo forensics"
+                    className="rounded-full bg-rose-400/25 px-2.5 py-1 text-[11px] font-bold text-rose-200 ring-1 ring-rose-400/60"
+                  >
+                    Needs Review
+                  </span>
+                  <span
+                    title="Citizen report without location or forensics verification"
+                    className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60 ring-1 ring-white/15"
+                  >
+                    Unverified
+                  </span>
+                </div>
+              </div>
+
               {/* Density toggle & project counter if active location */}
               {hasActiveSpatial && totalCount > 0 && (
                 <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-2.5">

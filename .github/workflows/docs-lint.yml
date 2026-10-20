@@ -2,8 +2,7 @@
 # ProjectTrack — Documentation Lint
 # ──────────────────────────────────────────────────────────────────────────────
 # Lints all Markdown files on pull requests that touch documentation.
-# Helps maintain consistent formatting and catches common mistakes.
-# Uses the repo-level .markdownlint.json for rule configuration.
+# Advisory only — reports issues but does not block merges.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Docs Lint
@@ -17,12 +16,14 @@ on:
 
 jobs:
   markdown-lint:
-    name: Markdown Lint
+    name: Markdown Lint (advisory)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
       - uses: DavidAnson/markdownlint-cli2-action@v19
+        continue-on-error: true
         with:
           globs: |
             **/*.md

@@ -136,6 +136,25 @@ class ReportStore:
             raise ReportStoreError(resp.status_code, self._extract_error(resp))
         return resp.json() if resp.content else []
 
+    async def summarize_reports(self, limit: int = 5000) -> List[Dict[str, Any]]:
+        """Return (project_id, status) rows for the map-wide verification legend.
+
+        Public/redacted: only the two columns needed to aggregate badge tones —
+        no descriptions, photos, reporter ids, or coordinates leave the store.
+        """
+        self._ensure_configured()
+        params = {"select": "project_id,status", "limit": str(limit)}
+        url = f"{self._rest_url}/{self.REPORTS_TABLE}"
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(url, headers=self._headers(), params=params)
+        except Exception as e:
+            logger.warning(f"summarize_reports transport error: {e}")
+            raise ReportStoreError(503, "Could not reach the report datastore.")
+        if resp.status_code >= 400:
+            raise ReportStoreError(resp.status_code, self._extract_error(resp))
+        return resp.json() if resp.content else []
+
     async def recent_report_count(self, user_id: str, since: datetime) -> int:
         """Count reports a user filed at/after ``since`` (Pillar 3 rate limit)."""
         self._ensure_configured()

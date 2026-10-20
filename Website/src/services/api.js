@@ -121,6 +121,10 @@ export function fetchProjectReports(projectId) {
   return request(`/reports/${encodeURIComponent(projectId)}`)
 }
 
+export function fetchReportSummaries() {
+  return request('/reports/summaries')
+}
+
 export async function postChatMessage({
   message,
   mode = 'ai',

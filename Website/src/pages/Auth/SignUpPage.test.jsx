@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import SignUpPage from './SignUpPage'
 
 const authMock = vi.hoisted(() => ({
+  getSession: vi.fn(async () => null),
+  signOut: vi.fn(async () => {}),
   redirectToOAuth: vi.fn(async () => {}),
   signUpWithEmail: vi.fn(async () => ({
     user: { id: 'user-2', email: 'new@example.com' },
@@ -27,8 +29,8 @@ describe('SignUpPage', () => {
       screen.getByRole('button', { name: /continue with google/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /continue with facebook/i }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /continue with facebook/i }),
+    ).not.toBeInTheDocument()
     expect(screen.getByLabelText(/^email/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument()
     expect(
@@ -36,7 +38,7 @@ describe('SignUpPage', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /already have an account\? sign in/i }),
-    ).toHaveAttribute('href', '#/signin')
+    ).toHaveAttribute('href', '/signin')
   })
 
   it('creates an account through the backend and reports the message', async () => {

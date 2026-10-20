@@ -4,6 +4,7 @@ FastAPI Backend Integration & Unit Tests
 Validates all endpoints, guardrails, healthchecks, and data schemas.
 """
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -17,6 +18,15 @@ from fastapi.testclient import TestClient
 from backend.app import app
 from backend.services.guardrail_service import check_guardrail
 from backend.services.neo4j_service import neo4j_service
+
+# Chat tests that assert real project rows (spatial context, follow-up
+# memory, superlatives) need a live, seeded Neo4j. They are integration
+# tests: skip them in CI/local runs without graph credentials so the unit
+# suite can gate merges on its own.
+requires_graph = unittest.skipUnless(
+    os.getenv("NEO4J_URI"),
+    "needs a live seeded Neo4j (set NEO4J_URI to run)",
+)
 
 
 class TestBackendAPI(unittest.TestCase):
@@ -366,6 +376,7 @@ class TestBackendAPI(unittest.TestCase):
                     f"Unexpected municipality in Cebu City aggregation: {p.get('municipality')!r}",
                 )
 
+    @requires_graph
     def test_chat_spatial_context(self):
         """Verify chat returns spatial context and coordinates for location query."""
         resp = self.client.post("/api/chat", json={
@@ -388,6 +399,7 @@ class TestBackendAPI(unittest.TestCase):
             self.assertIn("latitude", p)
             self.assertIn("longitude", p)
 
+    @requires_graph
     def test_chat_followup_location_memory(self):
         """Follow-up like 'tell me more about it' must reuse the prior location topic."""
         history = [
@@ -421,6 +433,7 @@ class TestBackendAPI(unittest.TestCase):
         data = resp.json()
         self.assertFalse(data["graph_context"])
 
+    @requires_graph
     def test_chat_followup_superlative_with_terms(self):
         """A follow-up with real terms + a cue ('most expensive one on it?') keeps context."""
         history = [
@@ -540,6 +553,7 @@ class TestBackendAPI(unittest.TestCase):
         # 'locate' prefers the previously-focused project id when provided.
         self.assertEqual(_select_project_for_intent("locate", projects, "24AA0001")["entity"], "24AA0001")
 
+    @requires_graph
     def test_chat_most_expensive_focuses_single_project(self):
         """A 'most expensive one' follow-up focuses the map on ONE project (zoom-in)."""
         history = [
@@ -612,6 +626,7 @@ class TestBackendAPI(unittest.TestCase):
             self.assertGreaterEqual(data["spatial"]["zoom"], 15)
             self.assertEqual(data["spatial"]["target_location"], "Cordova")
 
+    @requires_graph
     def test_chat_plain_location_continuation_without_superlative(self):
         """A continuation after a NON-superlative turn stays a full overview."""
         history = [

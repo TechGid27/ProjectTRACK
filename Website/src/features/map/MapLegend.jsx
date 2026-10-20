@@ -8,13 +8,19 @@ export default function MapLegend() {
     totalLocationProjects,
     displayMode,
     activeStatusFilter,
+    activeVerificationFilter,
     loadingAll,
     setStatusFilter,
+    setVerificationFilter,
     loadAllProjects,
     showTop50,
   } = useMapContext()
 
-  const [minimized, setMinimized] = useState(false)
+  // Collapsed by default on phones so the legend never covers the map
+  // or overlaps the Location Intel panel on narrow screens.
+  const [minimized, setMinimized] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 640,
+  )
 
   // Only show when there's an active spatial search or dots
   const hasActiveSpatial = Boolean(activeLocation && projectDots.length > 0)
@@ -23,6 +29,10 @@ export default function MapLegend() {
 
   const handleFilterClick = (filter) => {
     setStatusFilter(activeStatusFilter === filter ? 'all' : filter)
+  }
+
+  const handleVerifyClick = (filter) => {
+    setVerificationFilter(activeVerificationFilter === filter ? 'all' : filter)
   }
 
   return (
@@ -67,7 +77,7 @@ export default function MapLegend() {
           inert={minimized}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="space-y-3 p-3.5 text-xs text-white/80">
+            <div className="max-h-[min(26rem,42vh)] space-y-3 overflow-y-auto p-3.5 text-xs text-white/80">
               {/* Status filters */}
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
@@ -86,11 +96,11 @@ export default function MapLegend() {
                   onClick={() => handleFilterClick('ongoing')}
                   className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
                     activeStatusFilter === 'ongoing'
-                      ? 'bg-amber-500/30 text-amber-200 ring-1 ring-amber-400/50'
-                      : 'bg-white/5 text-amber-300/80 hover:bg-white/10 hover:text-amber-200'
+                      ? 'bg-amber-500/30 text-amber-400 ring-1 ring-amber-400/50'
+                      : 'bg-white/5 text-amber-400 hover:bg-white/10 hover:text-amber-300'
                   }`}
                 >
-                  <span className="inline-block h-2 w-2 rotate-45 rounded-[1px] bg-amber-400 shadow-[0_0_6px_#f59e0b]" />
+                  <span className="inline-block h-2 w-2 rotate-45 rounded-[1px] bg-amber-500 shadow-[0_0_6px_#f59e0b]" />
                   Ongoing
                 </button>
                 <button
@@ -98,11 +108,11 @@ export default function MapLegend() {
                   onClick={() => handleFilterClick('completed')}
                   className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
                     activeStatusFilter === 'completed'
-                      ? 'bg-emerald-500/30 text-emerald-200 ring-1 ring-emerald-400/50'
-                      : 'bg-white/5 text-emerald-300/80 hover:bg-white/10 hover:text-emerald-200'
+                      ? 'bg-emerald-500/30 text-emerald-400 ring-1 ring-emerald-400/50'
+                      : 'bg-white/5 text-emerald-400 hover:bg-white/10 hover:text-emerald-300'
                   }`}
                 >
-                  <span className="inline-block h-2 w-2 rotate-45 rounded-[1px] bg-emerald-400 shadow-[0_0_6px_#10b981]" />
+                  <span className="inline-block h-2 w-2 rotate-45 rounded-[1px] bg-emerald-500 shadow-[0_0_6px_#10b981]" />
                   Completed
                 </button>
                 <button
@@ -110,42 +120,63 @@ export default function MapLegend() {
                   onClick={() => handleFilterClick('procurement')}
                   className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
                     activeStatusFilter === 'procurement'
-                      ? 'bg-cyan-500/30 text-cyan-200 ring-1 ring-cyan-400/50'
-                      : 'bg-white/5 text-cyan-300/80 hover:bg-white/10 hover:text-cyan-200'
+                      ? 'bg-cyan-500/30 text-cyan-400 ring-1 ring-cyan-400/50'
+                      : 'bg-white/5 text-cyan-400 hover:bg-white/10 hover:text-cyan-300'
                   }`}
                 >
-                  <span className="inline-block h-2 w-2 rotate-45 rounded-[1px] bg-cyan-400 shadow-[0_0_6px_#06b6d4]" />
+                  <span className="inline-block h-2 w-2 rotate-45 rounded-[1px] bg-cyan-500 shadow-[0_0_6px_#06b6d4]" />
                   Bidding
                 </button>
               </div>
 
-              {/* Report verification color key (informational — not a filter) */}
+              {/* Report verification filters — click to show only matching projects */}
               <div className="space-y-1.5 border-t border-white/10 pt-2.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
                   Report Verification
                 </p>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span
-                    title="Citizen report with GPS confirmed on-site"
-                    className="inline-flex items-center gap-1.5 rounded-full bg-violet-400/25 px-2.5 py-1 text-[11px] font-bold text-violet-200 ring-1 ring-violet-400/60"
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyClick('verified')}
+                    aria-pressed={activeVerificationFilter === 'verified'}
+                    title="Show only projects with On-Site Verified reports"
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
+                      activeVerificationFilter === 'verified'
+                        ? 'bg-violet-500/40 text-violet-100 ring-2 ring-violet-300'
+                        : 'bg-violet-400/25 text-violet-200 ring-1 ring-violet-400/60 hover:bg-violet-400/35'
+                    }`}
                   >
                     <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-violet-400 shadow-[0_0_6px_#8b5cf6]" />
                     On-Site Verified
-                  </span>
-                  <span
-                    title="Citizen report flagged by photo forensics"
-                    className="inline-flex items-center gap-1.5 rounded-full bg-rose-400/25 px-2.5 py-1 text-[11px] font-bold text-rose-200 ring-1 ring-rose-400/60"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyClick('flagged')}
+                    aria-pressed={activeVerificationFilter === 'flagged'}
+                    title="Show only projects with Photo Flagged reports (red diamond)"
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
+                      activeVerificationFilter === 'flagged'
+                        ? 'bg-rose-500/40 text-rose-100 ring-2 ring-rose-300'
+                        : 'bg-rose-400/25 text-rose-200 ring-1 ring-rose-400/60 hover:bg-rose-400/35'
+                    }`}
                   >
                     <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-rose-400 shadow-[0_0_6px_#f43f5e]" />
                     Photo Flagged
-                  </span>
-                  <span
-                    title="Citizen report without location or forensics verification"
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60 ring-1 ring-white/15"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleVerifyClick('unverified')}
+                    aria-pressed={activeVerificationFilter === 'unverified'}
+                    title="Show only projects with Unverified reports"
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
+                      activeVerificationFilter === 'unverified'
+                        ? 'bg-white/20 text-white ring-2 ring-white/60'
+                        : 'bg-white/10 text-white/60 ring-1 ring-white/15 hover:bg-white/15'
+                    }`}
                   >
                     <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-white/75 shadow-[0_0_6px_#ffffff80]" />
                     Unverified
-                  </span>
+                  </button>
                 </div>
               </div>
 

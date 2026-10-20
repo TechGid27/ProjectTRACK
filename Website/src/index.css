@@ -158,10 +158,6 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-.project-pin--completed {
-  background: #0369a1;
-}
-
 .pin--emerald {
   background: #10b981 !important;
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
@@ -170,8 +166,8 @@
 
 .pin--amber {
   background: #f59e0b !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.65) !important;
   border-color: rgba(255, 255, 255, 0.95) !important;
-  animation: pin-glow-amber 2.2s infinite ease-in-out;
 }
 
 .pin--cyan {
@@ -185,23 +181,29 @@
   border-color: rgba(255, 255, 255, 0.9) !important;
 }
 
+/* Verification-filter tones (map legend): On-Site Verified / Photo Flagged / Unverified */
+.pin--violet {
+  background: #8b5cf6 !important;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.pin--rose {
+  background: #f43f5e !important;
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.pin--white {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+}
+
 .pin--highlighted {
   box-shadow: 0 0 18px 4px #ec4899, 0 0 0 3px #ffffff !important;
   transform: rotate(45deg) scale(1.4) !important;
   z-index: 1000 !important;
 }
-
-@keyframes pin-glow-amber {
-  0%, 100% {
-    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
-    transform: rotate(45deg) scale(1);
-  }
-  50% {
-    box-shadow: 0 0 14px rgba(245, 158, 11, 0.95);
-    transform: rotate(45deg) scale(1.18);
-  }
-}
-
 
 .muni-label {
   display: none;

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SignInPage from './SignInPage'
+import { navigate } from '../../app/router'
 
 const authMock = vi.hoisted(() => ({
   getSession: vi.fn(async () => null),
@@ -15,13 +16,18 @@ const authMock = vi.hoisted(() => ({
 
 vi.mock('../../services/auth', () => authMock)
 
+vi.mock('../../app/router', async (importOriginal) => {
+  const actual = await importOriginal()
+  return { ...actual, navigate: vi.fn() }
+})
+
 describe('SignInPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authMock.getSession.mockResolvedValue(null)
   })
 
-  it('renders the heading, both OAuth buttons, and the email form', () => {
+  it('renders the heading, the Google OAuth button, and the email form', () => {
     render(<SignInPage />)
     expect(
       screen.getByRole('heading', { name: /sign in/i }),
@@ -30,8 +36,8 @@ describe('SignInPage', () => {
       screen.getByRole('button', { name: /continue with google/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /continue with facebook/i }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: /continue with facebook/i }),
+    ).not.toBeInTheDocument()
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
   })
@@ -57,11 +63,11 @@ describe('SignInPage', () => {
     )
     render(<SignInPage />)
     await user.click(
-      screen.getByRole('button', { name: /continue with facebook/i }),
+      screen.getByRole('button', { name: /continue with google/i }),
     )
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(
-        /facebook sign-in failed/i,
+        /google sign-in failed/i,
       )
     })
   })
@@ -79,13 +85,8 @@ describe('SignInPage', () => {
       'correct-horse',
     )
     await waitFor(() => {
-      expect(
-        screen.getByText(/watchdog@example\.com/),
-      ).toBeInTheDocument()
+      expect(navigate).toHaveBeenCalledWith('/', { replace: true })
     })
-    expect(
-      screen.getByRole('button', { name: /sign out/i }),
-    ).toBeInTheDocument()
   })
 
   it('surfaces backend sign-in errors', async () => {
@@ -110,27 +111,20 @@ describe('SignInPage', () => {
     render(<SignInPage />)
     expect(
       screen.getByRole('link', { name: /new here\? create an account/i }),
-    ).toHaveAttribute('href', '#/signup')
+    ).toHaveAttribute('href', '/signup')
   })
 
-  it('shows the signed-in session on mount and signs out', async () => {
+  it('redirects to the home page when a session already exists', async () => {
     authMock.getSession.mockResolvedValue({
       id: 'user-9',
       email: 'watchdog@example.com',
     })
     render(<SignInPage />)
     await waitFor(() => {
-      expect(
-        screen.getByText(/watchdog@example\.com/),
-      ).toBeInTheDocument()
+      expect(navigate).toHaveBeenCalledWith('/', { replace: true })
     })
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: /sign out/i }))
-    expect(authMock.signOut).toHaveBeenCalled()
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /sign in with email/i }),
-      ).toBeInTheDocument()
-    })
+    expect(
+      screen.queryByRole('button', { name: /sign out/i }),
+    ).not.toBeInTheDocument()
   })
 })

@@ -1,22 +1,59 @@
 # Security Policy
 
+## Supported Versions
+
+| Component | Version | Supported |
+| :--- | :--- | :---: |
+| Backend (FastAPI) | 1.0.x | ✅ |
+| Website (React 19 + Vite 8) | 0.x | ✅ |
+| Mobile (Expo SDK 52) | 1.0.x | ✅ |
+
+Only the latest release on the `development` and `main` branches receives security updates.
+
+---
+
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability, please use our [Report Vulnerability issue template](https://github.com/kaids77/ProjectTRACK/issues/new?assignees=&labels=security&template=REPORT_VULNERABILITY.yaml).
+**Do not open a public issue for security vulnerabilities.**
 
-**Preferred contact:** charliemangyao@gmail.com
+| Channel | Details |
+| :--- | :--- |
+| **Email** (preferred) | charliemangyao@gmail.com |
+| **GitHub template** | [Report Vulnerability](https://github.com/kaids77/ProjectTRACK/issues/new?assignees=&labels=security&template=REPORT_VULNERABILITY.yaml) |
 
-We will respond within **72 hours** and provide a timeline for remediation.
+We will acknowledge your report within **72 hours** and provide a remediation timeline.
 
-## Responsible Disclosure
+---
 
-Please follow these guidelines when reporting security vulnerabilities:
+## Scope
 
-- Do not open public issues containing sensitive vulnerability details.
-- Provide sufficient information to help us reproduce and investigate the issue.
-- Avoid disclosing vulnerabilities publicly before we have had a reasonable opportunity to address them.
-- Do not access, modify, or delete data without authorization.
+The following areas are in scope for responsible disclosure:
 
-For technical details on our defense-in-depth architecture, 5-layer domain guardrails, Error Level Analysis (ELA) image forensics, and citizen privacy protections, refer to [docs/07-security.md](docs/07-security.md).
+* **Cypher injection** — any input path that can execute unintended Neo4j queries.
+* **Prompt injection** — bypasses of the 5-layer domain guardrails in the GraphRAG engine.
+* **Authentication bypass** — Supabase session token leakage, cookie tampering, or OAuth redirect manipulation.
+* **Image forensics evasion** — methods to defeat Error Level Analysis (ELA) or GPS geofence validation.
+* **Credential exposure** — API keys, database URIs, or tokens leaked via logs, responses, or client bundles.
+* **CORS misconfiguration** — origins that should not be permitted access to credentialed endpoints.
 
-Thank you for helping keep ProjectTrack secure.
+---
+
+## Responsible Disclosure Guidelines
+
+* Provide enough information to reproduce and investigate the issue.
+* Avoid accessing, modifying, or deleting data beyond what is necessary to demonstrate the vulnerability.
+* Do not disclose vulnerabilities publicly before we have had a reasonable opportunity to address them.
+* We commit to crediting reporters in the security advisory (unless you prefer anonymity).
+
+---
+
+## Architecture Reference
+
+For details on the defense-in-depth architecture, 5-layer domain guardrails, Error Level Analysis (ELA) image forensics, prompt-injection hardening, and citizen privacy protections, see [docs/07-security.md](docs/07-security.md).
+
+---
+
+## Maintainers
+
+* **Lead Maintainer**: Charlie C. Mangyao (`kaids77`)
+* **Core Maintainer**: Gideon P. Ayao (`TechGid27`)

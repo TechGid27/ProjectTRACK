@@ -1,50 +1,50 @@
 ---
 name: Bug Report
-about: Create a report to help us improve ProjectTrack
-title: '[BUG] '
+about: Report a bug to help us improve ProjectTrack
+title: "[BUG] "
 labels: bug
-assignees: ''
+assignees: ""
 ---
 
-## Bug Description
+## What happened?
 
-A clear and concise description of what the bug is.
+<!-- A clear description of the bug. -->
 
-## Affected Component
+## What did you expect?
 
-- [ ] Web GIS Map (`Website/`)
-- [ ] Mobile Auditor App (`Mobile/`)
-- [ ] FastAPI Backend (`backend/`)
-- [ ] Neo4j Knowledge Graph / Cypher Queries
-- [ ] Ingestion / Web Scraper Pipeline (`backend/pipeline/`)
+<!-- What should have happened instead? -->
+
+## Steps to reproduce
+
+1.
+2.
+3.
+
+## Affected component
+
+- [ ] Website — map, chat, auth, or frontend UI (`Website/`)
+- [ ] Mobile — Expo field client (`mobile/`)
+- [ ] Backend — FastAPI API or services (`backend/`)
+- [ ] Pipeline — scraper or data ingestion (`backend/pipeline/`)
+- [ ] Neo4j — knowledge graph queries or schema
 - [ ] Other
 
-## Steps to Reproduce
+## Error logs
 
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+<!-- Paste any terminal output, browser console logs, or HTTP responses: -->
 
-## Expected Behavior
-
-A clear and concise description of what you expected to happen.
-
-## Actual Behavior / Error Logs
-
-Include any terminal output, console logs, or HTTP response payloads:
 ```text
 (paste logs here)
 ```
 
-## Environment Details
+## Environment
 
-* OS: [e.g. Windows 11, macOS Sequoia, Ubuntu 22.04]
-* Browser / Device: [e.g. Chrome 124, Android 14 Emulator]
-* Python Version: [e.g. 3.11.4]
-* Node.js Version: [e.g. 20.12.0]
-* Branch: `development`
+- **OS**: [e.g., Windows 11, macOS Sequoia, Ubuntu 24.04]
+- **Browser / Device**: [e.g., Chrome 130, Android 15 emulator]
+- **Python**: [e.g., 3.11.4]
+- **Node.js**: [e.g., 20.12.0]
+- **Branch**: `development`
 
-## Additional Context
+## Additional context
 
-Add any other context, screenshots, or project identifiers (e.g. `24HH0043`) related to the problem.
+<!-- Screenshots, DPWH project IDs (e.g., `24HH0043`), or any other relevant details. -->

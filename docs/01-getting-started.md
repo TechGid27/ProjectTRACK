@@ -53,7 +53,7 @@ ProjectTrack/
 │   ├── 06-roadmap.md              # Development priorities and milestones
 │   └── 07-security.md             # Security architecture and threat defense
 ├── Website/                       # React 19 + Leaflet GIS Web Application
-├── Mobile/                        # React Native Expo Geofenced Mobile Client
+├── mobile/                        # React Native Expo Geofenced Mobile Client
 └── backend/                       # FastAPI, Neo4j GraphRAG, and Scraping Pipeline
 ```
 
@@ -66,8 +66,8 @@ ProjectTrack/
 Ensure you are working on the active development branch:
 
 ```bash
-git clone https://github.com/TechGid27/ProjectTrack.git
-cd ProjectTrack
+git clone https://github.com/kaids77/ProjectTRACK.git
+cd ProjectTRACK
 git checkout development
 ```
 
@@ -96,10 +96,18 @@ NEO4J_URI="neo4j+s://your-instance.databases.neo4j.io"
 NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="your_neo4j_password_here"
 
-# 2. Xiaomi MiMo-V2-Flash LLM (via Hugging Face Free Inference Router)
-LLM_BASE_URL="https://router.huggingface.co/v1"
-LLM_MODEL="XiaomiMiMo/MiMo-V2-Flash"
-LLM_API_KEY="hf_your_free_huggingface_token_here"
+# 2. LLM Configuration (Configurable - pick ONE provider)
+#
+# Option A: Groq LPU (default in code, requires free key from console.groq.com)
+LLM_BASE_URL="https://api.groq.com/openai/v1"
+LLM_MODEL="qwen/qwen3.8-27b"
+LLM_API_KEY="gsk_your_groq_api_key_here"
+#
+# Option B: Hugging Face Free Inference Router (zero-cost, good for evaluation)
+# LLM_BASE_URL="https://router.huggingface.co/v1"
+# LLM_MODEL="XiaomiMiMo/MiMo-V2-Flash"
+# LLM_API_KEY="hf_your_free_huggingface_token_here"
+#
 LLM_MAX_TOKENS=2048
 
 # 3. Supabase & Apify (Optional: required only for running new data scrapers)

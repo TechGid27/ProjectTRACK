@@ -1,0 +1,29 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ProjectTrack — Documentation Lint
+# ──────────────────────────────────────────────────────────────────────────────
+# Lints all Markdown files on pull requests that touch documentation.
+# Helps maintain consistent formatting and catches common mistakes.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Docs Lint
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/workflows/docs-lint.yml"
+
+jobs:
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: |
+            **/*.md
+            !node_modules/**
+            !**/node_modules/**
+            !**/coverage/**

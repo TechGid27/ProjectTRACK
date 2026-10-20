@@ -46,7 +46,8 @@ This Code of Conduct applies within all community spaces, and also applies when 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported directly to the project leadership at:
 
 * **Primary Contact**: charliemangyao@gmail.com
-* **Project Maintainer**: Gideon P. Ayao and the ProjectTrack Core Team
+* **Lead Maintainer**: Charlie C. Mangyao (`kaids77`)
+* **Core Maintainer**: Gideon P. Ayao (`TechGid27`)
 
 All complaints will be reviewed and investigated promptly, impartially, and with strict respect for the privacy and security of the reporter.
 

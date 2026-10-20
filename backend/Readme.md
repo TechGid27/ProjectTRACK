@@ -377,3 +377,11 @@ The test suite validates:
 ## License
 
 This project is licensed under the MIT License.
+---
+
+## Maintainers
+
+* **Lead Maintainer**: Charlie C. Mangyao (`kaids77`)
+* **Core Maintainer**: Gideon P. Ayao (`TechGid27`)
+
+See the root [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.

@@ -70,3 +70,9 @@ npm run preview  # Locally preview production build
 ## 📁 Project Structure
 
 This package is part of the ProjectTrack open-source monorepo, licensed under the MIT License.
+
+---
+
+## Contributing
+
+See the root [CONTRIBUTING.md](../CONTRIBUTING.md) for branching strategy, commit conventions, and pull request guidelines.

@@ -1,0 +1,32 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ProjectTrack — Documentation Lint
+# ──────────────────────────────────────────────────────────────────────────────
+# Lints all Markdown files on pull requests that touch documentation.
+# Advisory only — reports issues but does not block merges.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Docs Lint
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/workflows/docs-lint.yml"
+      - ".markdownlint.json"
+
+jobs:
+  markdown-lint:
+    name: Markdown Lint (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DavidAnson/markdownlint-cli2-action@v19
+        continue-on-error: true
+        with:
+          globs: |
+            **/*.md
+            !node_modules/**
+            !**/node_modules/**
+            !**/coverage/**

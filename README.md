@@ -3,6 +3,8 @@
 > **Civic Intelligence and Transparency Engine for DPWH Infrastructure Projects Across Cebu**  
 > *Transforming fragmented public civil works data into verifiable, geospatial, and graph-powered community intelligence.*
 
+[![CI](https://github.com/kaids77/ProjectTRACK/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/kaids77/ProjectTRACK/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/kaids77/ProjectTRACK/actions/workflows/security-audit.yml/badge.svg)](https://github.com/kaids77/ProjectTRACK/actions/workflows/security-audit.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Branch](https://img.shields.io/badge/Branch-development-orange.svg)](#)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python)](https://python.org)
@@ -140,7 +142,7 @@ ProjectTrack/
 ├── CODE_OF_CONDUCT.md                   <-- Contributor Covenant community standards
 ├── SECURITY.md                          <-- Vulnerability reporting and threat policy
 ├── LICENSE                              <-- MIT Open-Source License
-├── .github/                             <-- GitHub issue and pull request templates
+├── .github/                             <-- CI/CD workflows, issue and PR templates
 ├── docs/                                <-- Central technical documentation
 │   ├── 01-getting-started.md
 │   ├── 02-architecture.md
@@ -160,10 +162,11 @@ ProjectTrack/
 
 ProjectTrack is maintained under an open-source model to advance civic technology, data transparency, and public accountability.
 
-* **Contributing**: Review [CONTRIBUTING.md](CONTRIBUTING.md) for pull request workflows and development guidelines.
+* **Contributing**: Review [CONTRIBUTING.md](CONTRIBUTING.md) for branching strategy, commit conventions, and pull request guidelines.
 * **Code of Conduct**: Adherence to the [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) is expected across all project channels.
 * **Security & Responsible Disclosure**: Read [SECURITY.md](SECURITY.md) before reporting vulnerabilities.
 * **Issue Tracking**: Report technical defects or submit architectural proposals through our [GitHub Issue Templates](.github/ISSUE_TEMPLATE/).
+* **CI/CD**: Automated lint, test, and security audit workflows run on every push and pull request via [GitHub Actions](.github/workflows/).
 
 ---
 

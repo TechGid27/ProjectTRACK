@@ -19,6 +19,7 @@ import {
 import { useMapContext } from './MapContext'
 import { clusterByProximity } from './cluster'
 import MapLegend from './MapLegend'
+import VerificationBadges from './VerificationBadges'
 
 const BOUNDS = [
   [9.32, 123.2],
@@ -1057,10 +1058,13 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
 function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
   const [signedIn, setSignedIn] = useState(undefined)
   const [submitting, setSubmitting] = useState(false)
+  const [coords, setCoords] = useState(null) // { latitude, longitude } | null
+  const [verdict, setVerdict] = useState(null) // ReportVerification after submit
   const [form, setForm] = useState({
     picName: '',
     picFile: null,
     location: defaultLocation ?? '',
+    category: 'other',
     desc: '',
     error: '',
   })
@@ -1077,6 +1081,20 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // Pillar 1: capture browser geolocation (lower-trust; backend re-validates).
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        setCoords({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        }),
+      () => setCoords(null),
+      { enableHighAccuracy: true, timeout: 8000 },
+    )
   }, [])
 
   useEffect(() => {
@@ -1104,8 +1122,12 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
         projectId: entity,
         description: form.desc.trim(),
         location: form.location.trim(),
+        category: form.category,
+        latitude: coords?.latitude,
+        longitude: coords?.longitude,
         picture: form.picFile,
       })
+      setVerdict(saved)
       onSubmitted({
         type: 'anomaly',
         id: saved.id,
@@ -1113,17 +1135,22 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
         description: form.desc.trim(),
         pictureName: form.picName,
         photoUrl: saved.photo_url ?? null,
-        at: new Date().toISOString(),
-        pending: false,
+        status: saved.status ?? 'pending',
+        distanceMeters: saved.distance_meters ?? null,
+        forensicsVerdict: saved.forensics_verdict ?? null,
+        at: saved.created_at ?? new Date().toISOString(),
+        pending: saved.status === 'pending',
       })
     } catch (error) {
-      patch({
-        error:
-          error?.status === 401
-            ? 'Sign in to file a report.'
-            : error?.message || 'Report submission failed — please try again.',
-      })
-      if (error?.status === 401) setSignedIn(false)
+      let message = error?.message || 'Report submission failed — please try again.'
+      if (error?.status === 401) {
+        message = 'Sign in to file a report.'
+        setSignedIn(false)
+      } else if (error?.status === 429) {
+        message =
+          'Daily report limit reached (3 per 24 hours). Please try again tomorrow.'
+      }
+      patch({ error: message })
     } finally {
       setSubmitting(false)
     }
@@ -1166,6 +1193,27 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
 
         {signedIn === undefined ? (
           <p className="mt-6 text-sm text-white/50">Checking session…</p>
+        ) : verdict ? (
+          <div className="mt-6 space-y-3" data-testid="report-verdict">
+            <p className="text-sm font-semibold text-white">
+              Report submitted and verified
+            </p>
+            <VerificationBadges report={verdict} />
+            <p className="text-[11px] leading-relaxed text-white/60">
+              {verdict.status === 'verified'
+                ? 'Your report passed the on-site geofence and image forensics checks.'
+                : verdict.status === 'flagged'
+                  ? 'Your report was recorded but flagged — it failed the geofence or image forensics check.'
+                  : 'Your report is pending a closer look at the submitted photo.'}
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex w-full items-center justify-center rounded-xl bg-[#1f3d3c] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2a5452]"
+            >
+              Done
+            </button>
+          </div>
         ) : signedIn === false ? (
           <div className="mt-6 space-y-3">
             <p className="text-sm leading-relaxed text-white/75">
@@ -1229,6 +1277,26 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
             </div>
             <div>
               <label
+                htmlFor="anomaly-category"
+                className="block text-[10px] font-medium text-white/50"
+              >
+                Category
+              </label>
+              <select
+                id="anomaly-category"
+                value={form.category}
+                onChange={(event) => patch({ category: event.target.value })}
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+              >
+                <option value="ghost_project">Ghost project</option>
+                <option value="delay">Delay</option>
+                <option value="substandard_materials">Substandard materials</option>
+                <option value="safety_hazard">Safety hazard</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label
                 htmlFor="anomaly-description"
                 className="block text-[10px] font-medium text-white/50"
               >
@@ -1243,6 +1311,11 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
                 className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
               />
             </div>
+            <p className="text-[9px] text-white/40">
+              {coords
+                ? '📍 Browser location attached (lower-trust; re-checked server-side).'
+                : 'Location not shared — the geofence check will mark this report as unverified.'}
+            </p>
             {form.error && (
               <p role="alert" className="text-[10px] text-red-300">
                 {form.error}

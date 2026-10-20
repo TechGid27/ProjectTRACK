@@ -1070,6 +1070,46 @@ function deriveBadge(report) {
   return { tone: 'neutral', label: 'Unverified' }
 }
 
+const VERIFICATION_TONES = [
+  {
+    tone: 'success',
+    label: 'On-Site Verified',
+    pill: 'bg-violet-400/25 text-violet-200 ring-violet-400/60',
+    diamond: 'bg-violet-400 shadow-[0_0_6px_#8b5cf6]',
+  },
+  {
+    tone: 'warning',
+    label: 'Photo Flagged',
+    pill: 'bg-rose-400/25 text-rose-200 ring-rose-400/60',
+    diamond: 'bg-rose-400 shadow-[0_0_6px_#f43f5e]',
+  },
+  {
+    tone: 'neutral',
+    label: 'Unverified',
+    pill: 'bg-white/10 text-white/60 ring-white/15',
+    diamond: 'bg-white/75 shadow-[0_0_6px_#ffffff80]',
+  },
+]
+
+function VerificationBadgePill({ badge }) {
+  if (!badge) return null
+  const meta =
+    VERIFICATION_TONES.find((t) => t.tone === badge.tone) ??
+    VERIFICATION_TONES[VERIFICATION_TONES.length - 1]
+  return (
+    <span
+      data-testid="report-verification-badge"
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${meta.pill}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] ${meta.diamond}`}
+      />
+      {badge.label}
+    </span>
+  )
+}
+
 function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
   const [signedIn, setSignedIn] = useState(undefined)
   const [submitting, setSubmitting] = useState(false)
@@ -1390,6 +1430,7 @@ function writeReport(id, value) {
 function ProjectDetailModal({ entity, onClose }) {
   const [detailState, setDetailState] = useState({ id: null, data: null })
   const [reportState, setReportState] = useState({ id: null, value: null })
+  const [reportsState, setReportsState] = useState({ id: null, list: [] })
   const [reportModalOpen, setReportModalOpen] = useState(false)
 
   const report =
@@ -1412,27 +1453,24 @@ function ProjectDetailModal({ entity, onClose }) {
     fetchProjectReports(entity)
       .then((data) => {
         if (cancelled) return
-        const latest = data.reports?.[data.reports.length - 1]
-        if (latest) {
-          setReportState({
-            id: entity,
-            value: {
-              type: 'anomaly',
-              id: latest.id,
-              location: latest.location ?? '',
-              description: latest.description,
-              pictureName: '',
-              photoUrl: latest.photo_url ?? null,
-              at: latest.created_at,
-              pending: false,
-              // Pillar 5 — verification badging from the backend.
-              badge: latest.badge ?? null,
-              distanceMeters: latest.distance_meters ?? null,
-              geofenceStatus: latest.geofence_status ?? null,
-              verificationStatus: latest.verification_status ?? null,
-            },
-          })
-        }
+        setReportsState({
+          id: entity,
+          list: (data.reports ?? []).map((latest) => ({
+            type: 'anomaly',
+            id: latest.id,
+            location: latest.location ?? '',
+            description: latest.description,
+            pictureName: '',
+            photoUrl: latest.photo_url ?? null,
+            at: latest.created_at,
+            pending: false,
+            // Pillar 5 — badge derived client-side from the server's verdict.
+            badge: deriveBadge(latest),
+            distanceMeters: latest.distance_meters ?? null,
+            forensicsVerdict: latest.forensics_verdict ?? null,
+            geofenceStatus: latest.geofence_pass ? 'inside' : 'outside',
+          })),
+        })
       })
       .catch(() => {})
     return () => {
@@ -1451,6 +1489,20 @@ function ProjectDetailModal({ entity, onClose }) {
 
   if (!entity) return null
   const project = detailState.id === entity ? detailState.data : null
+
+  // Newest-first list: local (just submitted / offline-pending) + all fetched,
+  // deduped by id so an online submission isn't shown twice.
+  const fetchedReports = reportsState.id === entity ? reportsState.list : []
+  const fetchedIds = new Set(fetchedReports.map((r) => r.id))
+  const reportList = [
+    ...(report && !fetchedIds.has(report.id) ? [report] : []),
+    ...[...fetchedReports].reverse(),
+  ]
+  const verificationCounts = reportList.reduce((acc, r) => {
+    const tone = r.badge?.tone ?? 'neutral'
+    acc[tone] = (acc[tone] ?? 0) + 1
+    return acc
+  }, {})
 
   const rows = project
     ? [
@@ -1557,54 +1609,7 @@ function ProjectDetailModal({ entity, onClose }) {
                 Observed an anomaly on-site? Send a report with a picture,
                 location, and short description.
               </p>
-              {report ? (
-                <div className="mt-2.5 space-y-1.5">
-                  {report.badge && (
-                    <span
-                      data-testid="report-verification-badge"
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${
-                        report.badge.tone === 'success'
-                          ? 'bg-violet-400/25 text-violet-200 ring-violet-400/60'
-                          : report.badge.tone === 'warning'
-                            ? 'bg-rose-400/25 text-rose-200 ring-rose-400/60'
-                            : 'bg-white/10 text-white/60 ring-white/15'
-                      }`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] ${
-                          report.badge.tone === 'success'
-                            ? 'bg-violet-400 shadow-[0_0_6px_#8b5cf6]'
-                            : report.badge.tone === 'warning'
-                              ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]'
-                              : 'bg-white/75 shadow-[0_0_6px_#ffffff80]'
-                        }`}
-                      />
-                      {report.badge.label}
-                    </span>
-                  )}
-                  <p
-                    role="status"
-                    className="rounded-lg bg-violet-400/15 px-3 py-2 text-[11px] font-semibold text-violet-300"
-                  >
-                    {report.pending
-                      ? 'Report saved on this device — server was unreachable, it will not appear for others yet.'
-                      : 'Thank you — your anomaly report for this project was submitted.'}
-                  </p>
-                  {(report.distanceMeters != null || report.geofenceStatus) && (
-                    <p className="text-[10px] text-white/50">
-                      {report.distanceMeters != null
-                        ? `${report.distanceMeters}m from site`
-                        : report.geofenceStatus === 'inside'
-                          ? 'On-site'
-                          : 'GPS not verified'}
-                      {report.at
-                        ? ` · ${new Date(report.at).toLocaleString()}`
-                        : ''}
-                    </p>
-                  )}
-                </div>
-              ) : (
+              {reportList.length === 0 ? (
                 <button
                   type="button"
                   onClick={() => setReportModalOpen(true)}
@@ -1627,6 +1632,76 @@ function ProjectDetailModal({ entity, onClose }) {
                   </svg>
                   Report Anomaly
                 </button>
+              ) : (
+                <div className="mt-2.5 space-y-2.5">
+                  {/* Aggregate verification summary */}
+                  <p
+                    data-testid="report-verification-summary"
+                    className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-white/70"
+                  >
+                    <span className="font-semibold text-white/90">
+                      {reportList.length}{' '}
+                      {reportList.length === 1 ? 'report' : 'reports'}
+                    </span>
+                    {VERIFICATION_TONES.filter(
+                      (t) => (verificationCounts[t.tone] ?? 0) > 0,
+                    ).map((t) => (
+                      <span
+                        key={t.tone}
+                        className="inline-flex items-center gap-1"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] ${t.diamond}`}
+                        />
+                        {verificationCounts[t.tone]} {t.label}
+                      </span>
+                    ))}
+                  </p>
+                  {report && (
+                    <p
+                      role="status"
+                      className="rounded-lg bg-violet-400/15 px-3 py-2 text-[11px] font-semibold text-violet-300"
+                    >
+                      {report.pending
+                        ? 'Report saved on this device — server was unreachable, it will not appear for others yet.'
+                        : 'Thank you — your anomaly report for this project was submitted.'}
+                    </p>
+                  )}
+                  <ul className="space-y-2">
+                    {reportList.map((item) => (
+                      <li
+                        key={item.id ?? `${item.at}-${item.description}`}
+                        className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-2"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                          <VerificationBadgePill badge={item.badge} />
+                          <span className="text-[10px] text-white/40">
+                            {item.distanceMeters != null
+                              ? `${item.distanceMeters}m from site`
+                              : item.geofenceStatus === 'inside'
+                                ? 'On-site'
+                                : 'GPS not verified'}
+                            {item.at
+                              ? ` · ${new Date(item.at).toLocaleString()}`
+                              : ''}
+                          </span>
+                        </div>
+                        <p className="mt-1.5 text-[11px] leading-snug text-white/80">
+                          {item.description}
+                        </p>
+                        {item.photoUrl && (
+                          <img
+                            src={item.photoUrl}
+                            alt="Reported anomaly evidence"
+                            loading="lazy"
+                            className="mt-1.5 max-h-32 w-full rounded-md object-cover"
+                          />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
             {project.url && (

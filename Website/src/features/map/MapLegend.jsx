@@ -135,7 +135,7 @@ export default function MapLegend() {
                     title="Citizen report flagged by photo forensics"
                     className="rounded-full bg-rose-400/25 px-2.5 py-1 text-[11px] font-bold text-rose-200 ring-1 ring-rose-400/60"
                   >
-                    Needs Review
+                    Photo Flagged
                   </span>
                   <span
                     title="Citizen report without location or forensics verification"

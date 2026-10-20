@@ -121,8 +121,15 @@ The mobile client communicates with the ProjectTrack FastAPI backend:
 | Endpoint | Usage |
 | :--- | :--- |
 | `GET /api/projects` | Fetch project listings for map display |
-| `GET /api/projects/{id}` | Retrieve individual project details |
-| `POST /api/chat` | Send queries to the GraphRAG assistant |
+| `GET /api/projects/{id}` | Retrieve individual project details (including disbursements, funding source, PhilGEPS awards) |
+| `GET /api/analytics/summary` | Knowledge graph statistics across Cebu Province |
+| `GET /api/analytics/top-contractors` | Contractor rankings by cumulative infrastructure budget |
+| `GET /api/analytics/appropriations` | GAA budget appropriations aggregated by district office |
+| `GET /api/analytics/procurement` | PhilGEPS bidding awards attached to Cebu contractors |
+| `POST /api/auth/signin` | Supabase password authentication with HTTP-only session cookie |
+| `POST /api/auth/signup` | Supabase citizen and verifier account registration |
+| `GET /api/auth/session` | Active session status and transparent token refresh |
+| `POST /api/chat` | Send queries to GraphRAG assistant (returns answers, sources, spatial camera targets) |
 | `GET /api/chat/stream` | SSE streaming for real-time AI responses |
 | `POST /api/reports` | Submit a geofenced, forensic field report (multipart, session cookie) |
 | `GET /api/reports/{id}` | List a project's reports with verification badges |

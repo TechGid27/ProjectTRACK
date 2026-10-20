@@ -19,7 +19,6 @@ import FieldAuditorModal from '../components/FieldAuditorModal';
 import { pins, initialPins } from '../../data/pins';
 import {
   mockProjects,
-  getProjectsByLocation,
   getProjectById,
 } from '../../data/mockApi';
 import { api } from '../../services/api';
@@ -116,10 +115,10 @@ export default function HomeScreen({
 
   // High impact projects for carousel
   const highImpactProjects = useMemo(() => {
-    return [...mockProjects]
+    return [...filteredProjects]
       .sort((a, b) => b.budget - a.budget)
       .slice(0, 8);
-  }, []);
+  }, [filteredProjects]);
 
   // Delayed projects count
   const delayedCount = useMemo(() => {
@@ -171,14 +170,6 @@ export default function HomeScreen({
     haptics.triggerLightImpact();
     setSelectedProject(project);
     setIsDetailModalOpen(true);
-  };
-
-  const handleReportAnomaly = (targetLgu: string) => {
-    if (!selectedProject) {
-      const fallback = mockProjects[0];
-      setSelectedProject(fallback);
-    }
-    setIsReportModalOpen(true);
   };
 
   const handleReportFromDetail = (project: ProjectDetail) => {

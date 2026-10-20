@@ -10,6 +10,35 @@ export interface Pin {
 
 export type ProjectStatus = 'Ongoing' | 'Completed' | 'Delayed';
 
+export interface ProcurementAward {
+  id: string;
+  title: string;
+  approved_budget?: number;
+  contract_amount?: number;
+  award_date?: string;
+  contractor?: string;
+  org_name?: string;
+  area_of_delivery?: string;
+  match_confidence?: string;
+}
+
+export interface AppropriationSummary {
+  office_name: string;
+  total_budget: number;
+  project_count: number;
+  source_of_funds?: string;
+}
+
+export interface SpatialContext {
+  view_level?: string;
+  center_lat?: number;
+  center_lng?: number;
+  zoom?: number;
+  target_lgu?: string;
+  focused_project_id?: string;
+  highlight_project_ids?: string[];
+}
+
 export interface ProjectDetail {
   id: string;
   title: string;
@@ -21,6 +50,12 @@ export interface ProjectDetail {
   startDate?: string;
   targetCompletion?: string;
   scope?: string;
+  amount_paid?: number;
+  source_of_funds?: string;
+  funding_source?: string;
+  program_name?: string;
+  region?: string;
+  procurements?: ProcurementAward[];
 }
 
 export interface BoundingBox {

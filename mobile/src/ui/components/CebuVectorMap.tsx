@@ -311,8 +311,15 @@ export default function CebuVectorMap({
                   testID={`map-pin-${pin.id}`}
                   onPress={() => {
                     haptics.triggerSelection();
-                    const { x: _x, y: _y, ...originalPin } = pin;
-                    onSelectPin?.(originalPin);
+                    onSelectPin?.({
+                      id: pin.id,
+                      name: pin.name,
+                      lat: pin.lat,
+                      lng: pin.lng,
+                      tone: pin.tone,
+                      lgu: pin.lgu,
+                      description: pin.description,
+                    });
                   }}
                 >
                   {/* Outer Glow Circle */}

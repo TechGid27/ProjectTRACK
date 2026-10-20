@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import { ProjectDetail, ProjectStatus } from '../../core/types';
 import { formatCurrencyPHP } from '../../core/geoUtils';
@@ -256,7 +255,7 @@ export default function LocationIntelSheet({
         <View style={styles.metricCard}>
           <Text style={styles.metricLabel}>Total Allocation</Text>
           <Text style={[styles.metricValue, { color: '#0d9488' }]}>
-            {formatCurrencyPHP(totalBudget)}
+            ₱{(totalBudget / 1_000_000).toFixed(2)}M
           </Text>
         </View>
         <View style={styles.metricCard}>
@@ -443,7 +442,7 @@ export default function LocationIntelSheet({
                         votes.userVoted === 'confirm' && styles.voteBtnActive,
                       ]}
                       onPress={(e) => {
-                        e.stopPropagation?.();
+                        e?.stopPropagation?.();
                         handleVote(project.id, 'confirm');
                       }}
                       testID={`confirm-vote-btn-${project.id}`}
@@ -459,7 +458,7 @@ export default function LocationIntelSheet({
                         votes.userVoted === 'dispute' && styles.voteBtnActive,
                       ]}
                       onPress={(e) => {
-                        e.stopPropagation?.();
+                        e?.stopPropagation?.();
                         handleVote(project.id, 'dispute');
                       }}
                       testID={`dispute-vote-btn-${project.id}`}
@@ -474,7 +473,7 @@ export default function LocationIntelSheet({
                     <TouchableOpacity
                       style={styles.fieldAuditBtn}
                       onPress={(e) => {
-                        e.stopPropagation?.();
+                        e?.stopPropagation?.();
                         onFieldAuditPress(project);
                       }}
                       testID={`field-audit-btn-${project.id}`}

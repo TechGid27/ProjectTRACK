@@ -1,4 +1,13 @@
-import { ProjectDetail, Contractor, Pin, ReportVerification, ReportRecord } from '../core/types';
+import {
+  ProjectDetail,
+  Contractor,
+  Pin,
+  ReportVerification,
+  ReportRecord,
+  ProcurementAward,
+  AppropriationSummary,
+  SpatialContext,
+} from '../core/types';
 import { mockProjects, getProjectsByLocation, getProjectById } from '../data/mockApi';
 import { topContractors } from '../data/contractors';
 import { pins as localPins } from '../data/pins';
@@ -17,6 +26,7 @@ export interface ChatResponse {
   answer: string;
   sources?: string[];
   mode?: string;
+  spatial?: SpatialContext;
 }
 
 class ApiService {
@@ -102,6 +112,12 @@ class ApiService {
           lgu: p.location || location,
           barangay: p.barangay,
           scope: p.scope,
+          amount_paid: p.amount_paid,
+          source_of_funds: p.source_of_funds,
+          funding_source: p.funding_source,
+          program_name: p.program_name,
+          region: p.region,
+          procurements: p.procurements,
         }));
       }
       return getProjectsByLocation(location);
@@ -126,6 +142,12 @@ class ApiService {
         lgu: p.location || 'Cebu Province',
         barangay: p.barangay,
         scope: p.scope,
+        amount_paid: p.amount_paid,
+        source_of_funds: p.source_of_funds,
+        funding_source: p.funding_source,
+        program_name: p.program_name,
+        region: p.region,
+        procurements: p.procurements,
       };
     } catch {
       return getProjectById(id);
@@ -172,6 +194,7 @@ class ApiService {
         answer: data.answer || 'No response returned from GraphRAG.',
         sources: data.sources || [],
         mode: data.mode || 'ai',
+        spatial: data.spatial,
       };
     } catch {
       // Deterministic civic fallback for offline testing
@@ -180,17 +203,120 @@ class ApiService {
         return {
           answer: 'In Bogo City, QM BUILDERS holds the largest flood mitigation contract: ₱49,000,000 for the Construction of Flood Mitigation Structure along Bogo River (Project 24HD0012).',
           sources: ['24HD0012'],
+          mode: 'offline_civic_agent',
         };
       }
       if (q.includes('24hh0043') || q.includes('lahug')) {
         return {
           answer: 'Project 24HH0043: "Lahug River Flood Control Dredging & Slope Reinforcement" located in Lahug, Cebu City. Awarded to QM BUILDERS with an approved budget of ₱85,200,000.',
           sources: ['24HH0043'],
+          mode: 'offline_civic_agent',
         };
       }
       return {
         answer: 'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
+        mode: 'offline_civic_agent',
       };
+    }
+  }
+
+  async fetchAppropriations(limit = 50): Promise<AppropriationSummary[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/analytics/appropriations?limit=${limit}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return [
+        {
+          office_name: 'Cebu 1st District Engineering Office',
+          total_budget: 1850000000,
+          project_count: 42,
+          source_of_funds: 'GAA 2024',
+        },
+      ];
+    }
+  }
+
+  async fetchProcurementAwards(contractor?: string, limit = 50): Promise<ProcurementAward[]> {
+    try {
+      const url = contractor
+        ? `${this.baseUrl}/analytics/procurement?contractor=${encodeURIComponent(contractor)}&limit=${limit}`
+        : `${this.baseUrl}/analytics/procurement?limit=${limit}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  async signIn(email: string, password: string): Promise<{ user: any; error?: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { user: null, error: data?.detail || 'Sign-in failed.' };
+      }
+      return { user: data.user || data };
+    } catch {
+      // Offline fallback for testing
+      return { user: { email, id: 'offline-user' } };
+    }
+  }
+
+  async signUp(email: string, password: string, fullName?: string): Promise<{ user: any; message?: string; error?: string }> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password, full_name: fullName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { user: null, error: data?.detail || 'Sign-up failed.' };
+      }
+      return { user: data.user || data, message: data.message };
+    } catch {
+      return { user: { email, id: 'offline-user' }, message: 'Account created (offline mode).' };
+    }
+  }
+
+  async signOut(): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/auth/signout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // offline noop
+    }
+  }
+
+  async getSession(): Promise<any | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/session`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data?.user ?? null;
+    } catch {
+      return null;
     }
   }
 

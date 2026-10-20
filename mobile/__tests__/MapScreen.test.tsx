@@ -12,7 +12,7 @@ describe('MapScreen Component', () => {
   });
 
   test('renders MapHeader, CebuVectorMap, and LocationIntelSheet', () => {
-    const { getByTestId, getByText } = render(
+    const { getByTestId } = render(
       <MapScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}

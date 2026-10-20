@@ -143,6 +143,21 @@ export default function MapScreen({
     setIsDetailModalOpen(true);
   };
 
+  const handleSelectProjectById = (projectId: string) => {
+    const found = getProjectById(projectId);
+    if (found) {
+      setSelectedProject(found);
+      setIsDetailModalOpen(true);
+    } else {
+      api.fetchProjectById(projectId).then((p) => {
+        if (p) {
+          setSelectedProject(p);
+          setIsDetailModalOpen(true);
+        }
+      });
+    }
+  };
+
   const handleReportAnomaly = (targetLgu: string) => {
     if (!selectedProject) {
       const fallback = activeProjects[0] || {
@@ -297,6 +312,8 @@ export default function MapScreen({
       <ChatBotModal
         visible={isChatBotOpen}
         onClose={() => setIsChatBotOpen(false)}
+        onSelectProject={handleSelectProjectById}
+        onFocusLgu={handleSelectMunicipality}
       />
 
       <ProjectDetailModal

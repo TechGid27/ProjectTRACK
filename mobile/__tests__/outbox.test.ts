@@ -1,4 +1,4 @@
-import { outbox, QueuedAudit } from '../src/services/outbox';
+import { outbox } from '../src/services/outbox';
 
 describe('OutboxService', () => {
   beforeEach(() => {

@@ -83,7 +83,7 @@ pip install -r backend/requirements.txt
 The backend automatically reads from your `.env` file in the project root or backend directory:
 
 ```env
-# Neo4j Database
+# Neo4j Database (required)
 NEO4J_URI="neo4j+s://your-instance.databases.neo4j.io"
 NEO4J_USERNAME="neo4j"
 NEO4J_PASSWORD="your-password"
@@ -94,11 +94,28 @@ LLM_MODEL="qwen/qwen3.8-27b"
 GROQ_API_KEY="gsk_your_groq_api_key"
 LLM_MAX_TOKENS=2048
 
-# Supabase & Apify (Optional: only needed for scraping and syncing)
+# Supabase (required for authentication AND field reports)
 SUPABASE_URL="https://your-project.supabase.co"
-SUPABASE_SERVICE_KEY="your-key"
-APIFY_TOKEN="your-apify-token"
+SUPABASE_SERVICE_KEY="your_service_role_key"     # server-only; writes reports + storage
+SUPABASE_ANON_KEY="your_anon_public_key"         # required for /api/auth (GoTrue)
+SUPABASE_REPORT_BUCKET="report-photos"           # optional; defaults to report-photos
+# SUPABASE_JWT_SECRET="your_jwt_secret"          # optional; local JWT verification
+
+# Session cookie behavior (set SECURE=true in production over HTTPS)
+FRONTEND_URL="http://localhost:5173"
+AUTH_COOKIE_NAME="pt_session"
+AUTH_COOKIE_SECURE="false"
+AUTH_COOKIE_SAMESITE="lax"
+
+# Apify (optional: only needed when running the scraper)
+APIFY_TOKEN="your_apify_api_token"
 ```
+
+> **Note**: Supabase is **no longer optional** — `SUPABASE_URL` + `SUPABASE_ANON_KEY`
+> back the `/api/auth` login flow, and `SUPABASE_URL` + `SUPABASE_SERVICE_KEY`
+> back the `/api/reports` field-report subsystem (Postgres + the `report-photos`
+> Storage bucket). Apply the migrations in `supabase/migrations/` first
+> (see `supabase/README.md`). Only `APIFY_TOKEN` remains optional.
 
 ### 3. Run the Backend Server
 

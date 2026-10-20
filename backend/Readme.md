@@ -65,7 +65,7 @@ backend/
 │   ├── correct_municipalities.py # Reassign projects to the LGU that contains their coordinates
 │   └── query_graph.py          # Cypher queries, Guardrails, Instant Insights & Streaming QA
 ├── .env.example                # Template for required environment variables
-├── requirements.txt            # Python dependencies (includes FastAPI, Uvicorn, Neo4j, HTTPX)
+├── requirements.txt            # Python dependencies (FastAPI, Uvicorn, Neo4j, HTTPX, Pillow/imagehash/numpy for forensics)
 └── Readme.md                   # Complete installation, usage & architecture guide
 ```
 
@@ -79,7 +79,7 @@ backend/
    * **[Neo4j AuraDB](https://neo4j.com/cloud/platform/aura-graph-database/)** (Free cloud graph database instance)
    * **[Groq Cloud](https://console.groq.com/keys)** (Free ultra-fast LLM inference API)
    * **[Ollama](https://ollama.com/)** (Optional: only needed for offline local AI summaries; installable via `python cli.py --setup-local-ai`)
-   * **[Supabase](https://supabase.com/)** (Optional: only needed if syncing or scraping)
+   * **[Supabase](https://supabase.com/)** (Required for authentication and field reports; optional only if you also sync/scrape)
    * **[Apify](https://apify.com/)** (Optional: only needed if running the scraper)
 
 > [!NOTE]
@@ -147,11 +147,23 @@ LLM_MODEL="qwen/qwen3.8-27b"
 GROQ_API_KEY="gsk_your_groq_api_key"
 LLM_MAX_TOKENS="2048"
 
-# Apify & Supabase (Optional)
-APIFY_TOKEN="your_apify_api_token"
+# --- Supabase (Required: authentication + field reports) ---
+# API settings: https://supabase.com/dashboard/project/_/settings/api
 SUPABASE_URL="https://your-project-id.supabase.co"
-SUPABASE_SERVICE_KEY="your_supabase_service_role_key"
+SUPABASE_SERVICE_KEY="your_supabase_service_role_key"   # server-only; reports + storage
+SUPABASE_ANON_KEY="your_supabase_anon_public_key"       # required for /api/auth (GoTrue)
+SUPABASE_REPORT_BUCKET="report-photos"                  # optional; defaults to report-photos
+
+# Web origin allowed to call the API with cookies + default OAuth redirect.
+FRONTEND_URL="http://localhost:5173"
+
+# --- Apify (Optional: only needed when running the scraper) ---
+APIFY_TOKEN="your_apify_api_token"
 ```
+
+> [!NOTE]
+> Before using `/api/reports`, apply the SQL + storage migrations in
+> `supabase/migrations/` (see `supabase/README.md`).
 
 ---
 

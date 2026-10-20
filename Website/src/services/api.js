@@ -104,8 +104,11 @@ export async function submitAnomalyReport({
   if (category) formData.append('category', category)
   // Browser geolocation is lower-trust than mobile hardware GPS; the backend
   // re-validates the ≤150m geofence against the project's DPWH coordinates.
-  if (typeof latitude === 'number') formData.append('latitude', String(latitude))
-  if (typeof longitude === 'number') formData.append('longitude', String(longitude))
+  // Partial fixes (one coordinate only) are omitted — both are required.
+  if (latitude != null && longitude != null) {
+    formData.append('latitude', String(latitude))
+    formData.append('longitude', String(longitude))
+  }
   if (picture) formData.append('picture', picture)
 
   return request('/reports', {

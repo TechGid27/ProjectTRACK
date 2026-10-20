@@ -11,6 +11,7 @@ import {
   submitAnomalyReport,
 } from '../../services/api'
 import { getSession } from '../../services/auth'
+import { captureGeolocation } from '../../services/geolocation'
 import {
   BARANGAY_MIN_ZOOM,
   fetchOsmContextCached,
@@ -1055,11 +1056,25 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
   )
 }
 
+/**
+ * Derive a Pillar 5 badge (tone + label) from the server's report verdict
+ * fields. The backend returns `status` (verified | pending | flagged |
+ * rejected) rather than a pre-rendered badge, so clients map it here.
+ */
+function deriveBadge(report) {
+  const status = report?.status
+  if (status === 'verified') return { tone: 'success', label: 'On-Site Verified' }
+  if (status === 'pending' || status === 'flagged' || status === 'rejected') {
+    return { tone: 'warning', label: 'Photo Flagged' }
+  }
+  return { tone: 'neutral', label: 'Unverified' }
+}
+
 function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
   const [signedIn, setSignedIn] = useState(undefined)
   const [submitting, setSubmitting] = useState(false)
-  const [coords, setCoords] = useState(null) // { latitude, longitude } | null
   const [verdict, setVerdict] = useState(null) // ReportVerification after submit
+  const [gpsStatus, setGpsStatus] = useState('idle') // idle | acquiring | acquired | denied
   const [form, setForm] = useState({
     picName: '',
     picFile: null,
@@ -1083,20 +1098,6 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
     }
   }, [])
 
-  // Pillar 1: capture browser geolocation (lower-trust; backend re-validates).
-  useEffect(() => {
-    if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        setCoords({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        }),
-      () => setCoords(null),
-      { enableHighAccuracy: true, timeout: 8000 },
-    )
-  }, [])
-
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') onClose()
@@ -1117,15 +1118,23 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
     }
     setSubmitting(true)
     patch({ error: '' })
+
+    // Pillar 1 — capture browser GPS for server-side geofence verification.
+    // Never blocks submission: denial/timeout resolves null and the backend
+    // tags the report "unverified_no_gps".
+    setGpsStatus('acquiring')
+    const gps = await captureGeolocation()
+    setGpsStatus(gps ? 'acquired' : 'denied')
+
     try {
       const saved = await submitAnomalyReport({
         projectId: entity,
         description: form.desc.trim(),
         location: form.location.trim(),
         category: form.category,
-        latitude: coords?.latitude,
-        longitude: coords?.longitude,
         picture: form.picFile,
+        latitude: gps?.latitude,
+        longitude: gps?.longitude,
       })
       setVerdict(saved)
       onSubmitted({
@@ -1136,10 +1145,13 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
         pictureName: form.picName,
         photoUrl: saved.photo_url ?? null,
         status: saved.status ?? 'pending',
+        at: saved.created_at ?? new Date().toISOString(),
+        pending: false,
+        // Pillar 5 — badge derived client-side from the server's verdict fields.
+        badge: deriveBadge(saved),
         distanceMeters: saved.distance_meters ?? null,
         forensicsVerdict: saved.forensics_verdict ?? null,
-        at: saved.created_at ?? new Date().toISOString(),
-        pending: saved.status === 'pending',
+        geofenceStatus: saved.geofence_pass ? 'inside' : 'outside',
       })
     } catch (error) {
       let message = error?.message || 'Report submission failed — please try again.'
@@ -1311,11 +1323,23 @@ function ReportAnomalyModal({ entity, defaultLocation, onClose, onSubmitted }) {
                 className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
               />
             </div>
-            <p className="text-[9px] text-white/40">
-              {coords
-                ? '📍 Browser location attached (lower-trust; re-checked server-side).'
-                : 'Location not shared — the geofence check will mark this report as unverified.'}
-            </p>
+            {gpsStatus !== 'idle' && (
+              <p
+                role="status"
+                data-testid="gps-status"
+                className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${
+                  gpsStatus === 'acquired'
+                    ? 'bg-emerald-400/15 text-emerald-300'
+                    : gpsStatus === 'denied'
+                      ? 'bg-white/10 text-white/50'
+                      : 'bg-amber-400/15 text-amber-300'
+                }`}
+              >
+                {gpsStatus === 'acquiring' && '📍 Acquiring GPS…'}
+                {gpsStatus === 'acquired' && '📍 GPS acquired — will verify on-site'}
+                {gpsStatus === 'denied' && '📍 No GPS — report will be unverified'}
+              </p>
+            )}
             {form.error && (
               <p role="alert" className="text-[10px] text-red-300">
                 {form.error}
@@ -1401,6 +1425,11 @@ function ProjectDetailModal({ entity, onClose }) {
               photoUrl: latest.photo_url ?? null,
               at: latest.created_at,
               pending: false,
+              // Pillar 5 — verification badging from the backend.
+              badge: latest.badge ?? null,
+              distanceMeters: latest.distance_meters ?? null,
+              geofenceStatus: latest.geofence_status ?? null,
+              verificationStatus: latest.verification_status ?? null,
             },
           })
         }
@@ -1529,14 +1558,42 @@ function ProjectDetailModal({ entity, onClose }) {
                 location, and short description.
               </p>
               {report ? (
-                <p
-                  role="status"
-                  className="mt-2.5 rounded-lg bg-emerald-400/15 px-3 py-2 text-[11px] font-semibold text-emerald-300"
-                >
-                  {report.pending
-                    ? 'Report saved on this device — server was unreachable, it will not appear for others yet.'
-                    : 'Thank you — your anomaly report for this project was submitted.'}
-                </p>
+                <div className="mt-2.5 space-y-1.5">
+                  {report.badge && (
+                    <span
+                      data-testid="report-verification-badge"
+                      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                        report.badge.tone === 'success'
+                          ? 'bg-emerald-400/20 text-emerald-300'
+                          : report.badge.tone === 'warning'
+                            ? 'bg-amber-400/20 text-amber-300'
+                            : 'bg-white/10 text-white/60'
+                      }`}
+                    >
+                      {report.badge.label}
+                    </span>
+                  )}
+                  <p
+                    role="status"
+                    className="rounded-lg bg-emerald-400/15 px-3 py-2 text-[11px] font-semibold text-emerald-300"
+                  >
+                    {report.pending
+                      ? 'Report saved on this device — server was unreachable, it will not appear for others yet.'
+                      : 'Thank you — your anomaly report for this project was submitted.'}
+                  </p>
+                  {(report.distanceMeters != null || report.geofenceStatus) && (
+                    <p className="text-[10px] text-white/50">
+                      {report.distanceMeters != null
+                        ? `${report.distanceMeters}m from site`
+                        : report.geofenceStatus === 'inside'
+                          ? 'On-site'
+                          : 'GPS not verified'}
+                      {report.at
+                        ? ` · ${new Date(report.at).toLocaleString()}`
+                        : ''}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <button
                   type="button"

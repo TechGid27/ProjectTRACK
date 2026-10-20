@@ -28,6 +28,7 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 * **Field Report Verification**: Authenticated anomaly reporting from any project (`ReportAnomalyModal` in `src/features/map/CebuMap.jsx`). Attaches browser geolocation (lower-trust; re-validated server-side), handles sign-in (401) and the 3-per-day limit (429), and renders the backend verification verdict — status, distance from site, image-forensics result, reporter reputation, and timestamp — via `VerificationBadges`.
 * **GraphRAG Chat with Memory**: Floating chat assistant streaming from the backend SSE endpoint (non-streaming fallback). Context-aware follow-ups ("tell me more about it", "what about in Cordova?") keep the prior topic.
 * **Chat-Synchronized Map**: Chat answers drive the map camera - location questions fly to the LGU, while singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Clicking any pin highlights it too.
+* **Verified Anomaly Reporting**: The report modal captures browser GPS on submit (`src/services/geolocation.js`, non-blocking — denial/timeout degrades gracefully) and sends it to the backend geofence; the project detail panel renders each community report's verification badge ("On-Site Verified" / "Unverified" / "Needs Review") with distance and timestamp (`src/features/map/CebuMap.jsx`).
 
 ---
 

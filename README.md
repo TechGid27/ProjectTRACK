@@ -3,6 +3,8 @@
 > **Civic Intelligence and Transparency Engine for DPWH Infrastructure Projects Across Cebu**  
 > *Transforming fragmented public civil works data into verifiable, geospatial, and graph-powered community intelligence.*
 
+[![CI](https://github.com/kaids77/ProjectTRACK/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/kaids77/ProjectTRACK/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/kaids77/ProjectTRACK/actions/workflows/security-audit.yml/badge.svg)](https://github.com/kaids77/ProjectTRACK/actions/workflows/security-audit.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Branch](https://img.shields.io/badge/Branch-development-orange.svg)](#)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python)](https://python.org)
@@ -31,19 +33,22 @@ Every fiscal year, billions of Philippine Pesos are allocated for Department of 
 ### Web Platform (`Website`)
 * **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers. Overlapping projects are grouped by zoom-aware proximity clustering, and the map stays synchronized with the chat - flying to a selected LGU or zooming to and highlighting a single project for superlative/locating questions.
 * **GraphRAG-Powered AI Assistant**: Contextual natural language query engine grounded in the Neo4j knowledge graph, with domain guardrails and a configurable LLM provider (Groq by default). Supports conversational memory for follow-ups ("tell me more about it", "what about in Cordova?") via a sandboxed, whitelist-validated reference resolver that stays strictly database-locked and injection-safe. User input and conversation history are sanitized and screened for prompt-injection before reaching the model.
-* **Image Forensics Verification**: Built-in Error Level Analysis (ELA) and cryptographic metadata inspection to detect digital manipulation, timestamp tampering, or image recycling.
+* **Image Forensics Verification**: Citizen-submitted photo evidence is screened server-side with Error Level Analysis (ELA) and perceptual hashing (pHash) to detect digital manipulation or image recycling; flagged reports surface a "Photo Flagged" badge in the UI.
+* **Citizen Anomaly Reports with Verification Badging**: The report modal captures browser GPS at submission time; the backend runs a Haversine geofence check against official project coordinates and the UI renders a "On-Site Verified" / "Unverified" / "Photo Flagged" badge with distance and timestamp for every community report.
 * **Budget and Expenditure Transparency**: Real-time auditing of allocated funds, expenditure disbursements, variance indicators, and source funding across municipalities.
 * **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store.
 
-### Planned Mobile Field Auditor (`mobile` — React Native with Expo)
-* **Geofenced On-Site Photo Capture**: Planned use of React Native and Expo (`expo-location`, `expo-camera`) to verify GPS proximity to project coordinates before photo capture.
-* **Offline-First Background Sync**: Planned offline caching and background synchronization for field observations in low-connectivity areas.
+### Mobile Field Auditor (`mobile` — React Native with Expo)
+* **Geofenced On-Site Photo Capture**: Uses React Native and Expo (`expo-location`, `expo-camera`) to confirm the device is within ≤150m of the project's DPWH coordinates before the live camera shutter unlocks (gallery uploads disabled for ground-truth integrity).
+* **Server-Verified Submission & Badging**: Captured audits are submitted to `/api/reports`, re-validated server-side (geofence + image forensics), and the returned verdict — status, distance, forensics result, reputation — is shown on-device.
+* **Offline-First Background Sync**: Audits captured offline are queued in a local outbox and synced to the backend when connectivity returns.
 
 ### Core Backend and Services (`backend`)
 * **Personnel and Entity Graph Mapping**: Models relationships between contractors, authorized managing officers, district engineers, and procurement awards into a traversable graph.
 * **Spatial Data Integrity**: Exact, canonicalized municipality matching eliminates cross-LGU leakage, and a polygon reverse-geocoding pipeline reassigns each project to the LGU that actually contains its authentic DPWH coordinates (projects outside Cebu are flagged and excluded).
 * **Supabase Authentication**: Backend-managed Supabase (GoTrue) auth under `/api/auth` (OAuth, email/password, session, sign-out) with HTTP-only session cookies, auto token refresh, and a reusable route-guard dependency - ready for the web and mobile clients to hook into.
 * **High-Throughput RESTful and SSE API**: Production-grade FastAPI endpoints supporting sub-20ms instant Cypher queries, Server-Sent Events (SSE) streaming, and standardized GeoJSON feeds.
+* **Field Report Verification API**: `/api/reports` endpoints enforce the four verification pillars server-side — a ≤150m geofence check against authentic DPWH coordinates, ELA + perceptual-hash image forensics, authenticated submission with a 3-reports/day limit and reputation scoring, and a verification verdict (status, distance, forensics, reputation) surfaced to both clients. Reports persist to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
 
 ---
 
@@ -140,7 +145,7 @@ ProjectTrack/
 ├── CODE_OF_CONDUCT.md                   <-- Contributor Covenant community standards
 ├── SECURITY.md                          <-- Vulnerability reporting and threat policy
 ├── LICENSE                              <-- MIT Open-Source License
-├── .github/                             <-- GitHub issue and pull request templates
+├── .github/                             <-- CI/CD workflows, issue and PR templates
 ├── docs/                                <-- Central technical documentation
 │   ├── 01-getting-started.md
 │   ├── 02-architecture.md
@@ -160,10 +165,11 @@ ProjectTrack/
 
 ProjectTrack is maintained under an open-source model to advance civic technology, data transparency, and public accountability.
 
-* **Contributing**: Review [CONTRIBUTING.md](CONTRIBUTING.md) for pull request workflows and development guidelines.
+* **Contributing**: Review [CONTRIBUTING.md](CONTRIBUTING.md) for branching strategy, commit conventions, and pull request guidelines.
 * **Code of Conduct**: Adherence to the [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) is expected across all project channels.
 * **Security & Responsible Disclosure**: Read [SECURITY.md](SECURITY.md) before reporting vulnerabilities.
 * **Issue Tracking**: Report technical defects or submit architectural proposals through our [GitHub Issue Templates](.github/ISSUE_TEMPLATE/).
+* **CI/CD**: Automated lint, test, and security audit workflows run on every push and pull request via [GitHub Actions](.github/workflows/).
 
 ---
 

@@ -23,7 +23,19 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "ProjectTRACK uses your location to verify you are on-site (within 150m) before you can file a geofenced field report."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ProjectTRACK uses the camera for live on-site photo capture. Gallery uploads are disabled to preserve ground-truth integrity."
+        }
+      ]
     ]
   }
 }

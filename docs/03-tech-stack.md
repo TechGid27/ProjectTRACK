@@ -15,7 +15,7 @@ This document outlines the architectural trade-offs, technology evaluations, and
 | **Web Presentation Tier** | **React 19 + Vite 8** | Next.js, Vue 3, Angular | High-performance client-side rendering, sub-second Hot Module Replacement (HMR), minimal bundle footprint, and concurrent rendering support. |
 | **Geospatial & Cartography** | **Leaflet + React-Leaflet** | Mapbox GL JS, Google Maps Platform | Fully open-source, zero per-tile commercial API costs, lightweight GeoJSON polygon rendering for 53 LGUs without satellite bandwidth bottlenecks. |
 | **Styling & Design System** | **Tailwind CSS v4** | CSS Modules, MUI, Chakra UI | Zero-runtime CSS engine, rapid utility-first responsiveness, and inline color scale customization. |
-| **LLM & Reasoning Engine** | **Xiaomi MiMo-V2-Flash** | OpenAI GPT-4o, Anthropic Claude 3.5 | Free-tier inference via Hugging Face Inference Router, high context window (2048+ tokens), sub-second token generation, with Ollama local fallback. |
+| **LLM & Reasoning Engine** | **Configurable** (Groq `qwen/qwen3.8-27b` default, MiMo-V2-Flash via HF, or local Ollama) | OpenAI GPT-4o, Anthropic Claude 3.5 | Pluggable provider via environment variables. Groq delivers ~500 tok/s; HuggingFace free tier offers zero-cost evaluation; Ollama local fallback (`qwen2.5:0.5b`) ensures offline operation. |
 | **Mobile Field Client** | **React Native with Expo** | Flutter, Native Kotlin/Swift | Managed mobile toolchain with Expo Location, Expo Camera, Expo SQLite, cross-platform Android/iOS deployment, and zero-config device testing via Expo Go. |
 
 ---
@@ -39,8 +39,8 @@ This document outlines the architectural trade-offs, technology evaluations, and
 * **Low-Bandwidth Accessibility**: Rural and coastal communities across Cebu often experience constrained network speeds. Relying on satellite tile layers (such as Google Maps or Mapbox) consumes megabytes of image data per session.
 * **Vector Polygon Rendering**: ProjectTrack utilizes simplified GeoJSON polygon boundaries (`gbOpen PHL/ADM3` from NAMRIA/PSA data) rendered as flat vector geometries. This reduces initial cartographic payload transfer to under 100 KB while allowing custom status styling and smooth boundary zooming.
 
-### 2.4 Language Model: Xiaomi MiMo-V2-Flash
-* **Zero-Cost Accessibility for Civic Initiatives**: Open-source civic oversight platforms face long-term sustainability hurdles when tied to costly proprietary LLM token billing. Xiaomi MiMo (`XiaomiMiMo/MiMo-V2-Flash`), accessible via Hugging Face's free inference tier, provides high-quality contextual synthesis with zero mandatory API costs.
+### 2.4 Language Model: Configurable LLM Provider
+* **Zero-Cost Accessibility for Civic Initiatives**: The LLM provider is fully configurable via environment variables. The code defaults to Groq's `qwen/qwen3.8-27b` for high-throughput inference (~500 tok/s). For zero-cost evaluation, contributors can point to Xiaomi MiMo (`XiaomiMiMo/MiMo-V2-Flash`) via the Hugging Face free inference tier.
 * **Local Offline Fallback (Ollama)**: In air-gapped or localized environments, the system automatically routes inference to a local Ollama instance running on `localhost:11434`, ensuring complete sovereign data privacy when required.
 
 ### 2.5 Mobile Architecture: React Native with Expo

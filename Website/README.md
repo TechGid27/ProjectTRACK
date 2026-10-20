@@ -25,8 +25,10 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 * **Location Intel Panel**: Per-LGU project list with statuses, budgets, and paginated full-details modal.
 * **Contractor Rankings**: `/contractors` page ranking contractors by awarded budget.
 * **Auth**: Email/password and OAuth sign-in via the backend (`src/services/auth.js`); session-aware header with avatar menu.
+* **Field Report Verification**: Authenticated anomaly reporting from any project (`ReportAnomalyModal` in `src/features/map/CebuMap.jsx`). Attaches browser geolocation (lower-trust; re-validated server-side), handles sign-in (401) and the 3-per-day limit (429), and renders the backend verification verdict — status, distance from site, image-forensics result, reporter reputation, and timestamp — via `VerificationBadges`.
 * **GraphRAG Chat with Memory**: Floating chat assistant streaming from the backend SSE endpoint (non-streaming fallback). Context-aware follow-ups ("tell me more about it", "what about in Cordova?") keep the prior topic.
 * **Chat-Synchronized Map**: Chat answers drive the map camera - location questions fly to the LGU, while singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Clicking any pin highlights it too.
+* **Verified Anomaly Reporting**: The report modal captures browser GPS on submit (`src/services/geolocation.js`, non-blocking — denial/timeout degrades gracefully) and sends it to the backend geofence; the project detail panel lists **all** community reports newest-first — each with its verification badge (colored diamond + "On-Site Verified" / "Unverified" / "Photo Flagged"), distance, timestamp, description, and photo — topped by an aggregate summary line (e.g. "4 reports · 3 On-Site Verified · 1 Photo Flagged") so on-site consensus against official status is visible at a glance (`src/features/map/CebuMap.jsx`). Verification uses a violet/rose/white palette distinct from the amber/emerald/cyan project-status hues, and the **Project Map Legend** shows a matching non-interactive "Report Verification" color key — each state rendered as a colored diamond + label pill, same visual language as the status filter symbols.
 
 ---
 
@@ -70,3 +72,9 @@ npm run preview  # Locally preview production build
 ## 📁 Project Structure
 
 This package is part of the ProjectTrack open-source monorepo, licensed under the MIT License.
+
+---
+
+## Contributing
+
+See the root [CONTRIBUTING.md](../CONTRIBUTING.md) for branching strategy, commit conventions, and pull request guidelines.

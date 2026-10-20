@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # Supabase (Document Lake)
     SUPABASE_URL: Optional[str] = Field(default=None, description="Supabase project URL")
     SUPABASE_SERVICE_KEY: Optional[str] = Field(default=None, description="Supabase service role key")
+    SUPABASE_REPORT_BUCKET: str = Field(default="report-photos", description="Supabase Storage bucket for citizen field-report photos")
 
     # Supabase Authentication (GoTrue) - backend-managed session
     SUPABASE_ANON_KEY: Optional[str] = Field(default=None, description="Supabase anon/public API key (required for auth)")

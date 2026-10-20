@@ -6,3 +6,8 @@ httpx>=0.27.0
 neo4j>=5.15.0
 python-dotenv>=1.0.0
 email-validator>=2.0.0
+# Image forensics (Pillar 2): ELA via Pillow, perceptual hashing via imagehash.
+Pillow>=10.0.0
+imagehash>=4.3.0
+numpy>=1.26.0
+python-multipart>=0.0.9

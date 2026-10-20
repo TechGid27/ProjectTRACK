@@ -692,9 +692,72 @@ Returns aggregate project counts and budgets per Cebu city/municipality along wi
 
 ---
 
-## 6. Standard Error Responses
+## 6. Field Report Verification (`/api/reports`)
 
-### 6.1 404 Project Not Found
+### 6.1 Submit a Field Report (`POST /api/reports`)
+
+Authenticated `multipart/form-data` submission (session cookie; no Authorization
+header). Fields: `project_id`, `description`, `category`, `latitude`,
+`longitude`, `picture`. The backend re-validates the ≤150m geofence and runs
+ELA + perceptual-hash forensics before trusting the report.
+
+#### **Status: `201 Created`**
+```json
+{
+  "id": "4f1e8c2a-9b7d-4f3a-8c21-0a1b2c3d4e5f",
+  "project_id": "24HH0043",
+  "status": "verified",
+  "distance_meters": 45,
+  "geofence_pass": true,
+  "ela_score": 0.42,
+  "phash_recycled": false,
+  "forensics_verdict": "clean",
+  "reporter_reputation": 59,
+  "created_at": "2026-10-20T12:00:00+00:00"
+}
+```
+
+#### **Status: `429 Too Many Requests`** (4th report within 24h)
+```json
+{
+  "detail": "Daily report limit reached (3 per 24 hours)."
+}
+```
+
+### 6.2 List a Project's Reports (`GET /api/reports/{project_id}`)
+
+#### **Status: `200 OK`**
+```json
+{
+  "project_id": "24HH0043",
+  "count": 1,
+  "reports": [
+    {
+      "id": "4f1e8c2a-9b7d-4f3a-8c21-0a1b2c3d4e5f",
+      "project_id": "24HH0043",
+      "status": "verified",
+      "distance_meters": 45,
+      "geofence_pass": true,
+      "ela_score": 0.42,
+      "phash_recycled": false,
+      "forensics_verdict": "clean",
+      "reporter_reputation": 59,
+      "created_at": "2026-10-20T12:00:00+00:00",
+      "description": "Concrete works match the posted scope and schedule.",
+      "category": "delay",
+      "photo_url": "https://<project>.supabase.co/storage/v1/object/public/report-photos/24HH0043/ab12.jpg",
+      "latitude": 11.0509,
+      "longitude": 124.0055
+    }
+  ]
+}
+```
+
+---
+
+## 7. Standard Error Responses
+
+### 7.1 404 Project Not Found
 
 When querying a non-existent project code via `GET /api/projects/NONEXISTENT999`:
 
@@ -707,7 +770,7 @@ When querying a non-existent project code via `GET /api/projects/NONEXISTENT999`
 
 ---
 
-### 6.2 422 Validation Error
+### 7.2 422 Validation Error
 
 When a required query parameter or body field violates validation constraints (e.g. `POST /api/chat` with empty message `""`):
 

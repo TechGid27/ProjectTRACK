@@ -1,36 +1,37 @@
 ---
 name: Feature Request
-about: Suggest an idea or architectural improvement for ProjectTrack
-title: '[FEAT] '
+about: Suggest an improvement or new capability for ProjectTrack
+title: "[FEAT] "
 labels: enhancement
-assignees: ''
+assignees: ""
 ---
 
-## Feature Summary
+## Summary
 
-A clear and concise description of the feature or capability being proposed.
+<!-- A clear, one-paragraph description of the proposed feature. -->
 
-## Problem Statement
+## Problem or motivation
 
-Is your feature request related to a problem or transparency limitation? (e.g. "I cannot easily filter projects by contractor license classification...")
+<!-- What limitation, pain point, or transparency gap does this address?
+     e.g., "I cannot filter projects by contractor license classification..." -->
 
-## Proposed Solution
+## Proposed solution
 
-Describe how the proposed solution should work from an architectural, API, or user experience standpoint.
+<!-- How should it work? Describe the behavior from a user, API, or architecture perspective. -->
 
-## Target Component
+## Target component
 
-- [ ] Web GIS Map (`Website/`)
-- [ ] Mobile Auditor App (`Mobile/`)
-- [ ] FastAPI Backend (`backend/`)
-- [ ] Neo4j Knowledge Graph Schema
-- [ ] Ingestion & Scraper Pipeline (`backend/pipeline/`)
-- [ ] Documentation Hub (`docs/`)
+- [ ] Website — map, chat, or frontend UI (`Website/`)
+- [ ] Mobile — Expo field client (`mobile/`)
+- [ ] Backend — FastAPI API or services (`backend/`)
+- [ ] Pipeline — scraper or data ingestion (`backend/pipeline/`)
+- [ ] Neo4j — knowledge graph schema or queries
+- [ ] Documentation (`docs/`)
 
-## Technical Considerations / Alternatives
+## Alternatives considered
 
-Describe any alternative solutions, performance trade-offs, or database constraints considered.
+<!-- Any other approaches, trade-offs, or constraints you have thought about. -->
 
-## Additional Context
+## Additional context
 
-Add any mockups, sample DPWH data records, or reference implementations.
+<!-- Mockups, sample DPWH data records, reference implementations, or links. -->

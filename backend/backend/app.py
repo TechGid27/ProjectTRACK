@@ -110,7 +110,8 @@ def create_app() -> FastAPI:
                 "projects": f"{settings.API_PREFIX}/projects",
                 "analytics": f"{settings.API_PREFIX}/analytics",
                 "chat": f"{settings.API_PREFIX}/chat",
-                "pipeline": f"{settings.API_PREFIX}/pipeline"
+                "pipeline": f"{settings.API_PREFIX}/pipeline",
+                "reports": f"{settings.API_PREFIX}/reports"
             }
         }
 

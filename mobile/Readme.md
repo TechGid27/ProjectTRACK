@@ -87,6 +87,7 @@ Key variables:
 | `npm run typecheck` | Run TypeScript type checking (`tsc --noEmit`) |
 | `npm run test` | Run Jest test suite |
 | `npm run test:coverage` | Run tests with coverage report |
+| `npm run audit` | Allowlist-aware `npm audit` gate (see Security note below) |
 
 ---
 
@@ -149,6 +150,27 @@ Coverage thresholds (enforced in `jest.config.js`):
 | Functions | 80% |
 | Lines | 80% |
 | Statements | 80% |
+
+---
+
+## Security / Dependency Audit
+
+The CI **Security Audit** workflow runs `npm run audit` for this package. A plain
+`npm audit --audit-level=high` cannot pass here: the Expo SDK 52 / React Native
+0.76 / jest-expo build toolchain pulls transitive advisories (node-tar,
+node-forge, postcss, braces, @xmldom/xmldom, ...) whose only npm remediation is a
+breaking `expo@44` downgrade. Those advisories are **not** introduced by this
+project's direct dependencies.
+
+`npm run audit` (`scripts/audit-check.js`) is an allowlist-aware gate:
+
+- `mobile/.npm-audit-allow.json` lists the known, documented Expo-toolchain
+  advisory ids that are accepted until the next Expo SDK upgrade.
+- The gate still **fails** on any new high/critical advisory outside that list,
+  so genuinely new vulnerabilities are not masked.
+
+When upgrading the Expo SDK, re-run `npm run audit` and prune any ids that no
+longer appear from `.npm-audit-allow.json`.
 
 ---
 

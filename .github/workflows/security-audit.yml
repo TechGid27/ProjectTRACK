@@ -74,4 +74,10 @@ jobs:
           node-version: "20"
 
       - run: npm ci
-      - run: npm audit --audit-level=high
+      # Allowlist-aware gate: the Expo SDK 52 / React Native build toolchain ships
+      # transitive advisories (node-tar, node-forge, postcss, braces, ...) whose
+      # only npm remediation is a breaking `expo@44` downgrade. Those known ids
+      # are accepted in mobile/.npm-audit-allow.json; the gate still FAILS on any
+      # new high/critical advisory outside that set. Prune the allowlist on each
+      # Expo SDK upgrade.
+      - run: npm run audit

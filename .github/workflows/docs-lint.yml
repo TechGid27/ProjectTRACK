@@ -3,6 +3,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Lints all Markdown files on pull requests that touch documentation.
 # Helps maintain consistent formatting and catches common mistakes.
+# Uses the repo-level .markdownlint.json for rule configuration.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Docs Lint
@@ -12,6 +13,7 @@ on:
     paths:
       - "**/*.md"
       - ".github/workflows/docs-lint.yml"
+      - ".markdownlint.json"
 
 jobs:
   markdown-lint:

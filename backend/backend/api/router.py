@@ -12,6 +12,7 @@ from backend.api.projects import router as projects_router
 from backend.api.analytics import router as analytics_router
 from backend.api.chat import router as chat_router
 from backend.api.pipeline import router as pipeline_router
+from backend.api.reports import router as reports_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -21,3 +22,4 @@ api_router.include_router(projects_router)
 api_router.include_router(analytics_router)
 api_router.include_router(chat_router)
 api_router.include_router(pipeline_router)
+api_router.include_router(reports_router)

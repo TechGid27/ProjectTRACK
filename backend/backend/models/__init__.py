@@ -7,6 +7,16 @@ from .project import ProjectDetail, ProjectSearchResult, LocationSearchResponse
 from .analytics import ContractorLeaderboardItem, TopProjectItem, DatasetSummary, LocationInsightBreakdown
 from .chat import ChatMessage, ChatRequest, ChatResponse, GuardrailStatus
 from .pipeline import SyncRequest, ScrapeRequest, JobStatus
+from .report import (
+    ReportCreate,
+    ReportVerification,
+    ReportRecord,
+    ReportListResponse,
+    ReputationRecord,
+    REPORT_CATEGORIES,
+    REPORT_STATUSES,
+    FORENSICS_VERDICTS,
+)
 
 __all__ = [
     "StandardResponse",
@@ -26,4 +36,12 @@ __all__ = [
     "SyncRequest",
     "ScrapeRequest",
     "JobStatus",
+    "ReportCreate",
+    "ReportVerification",
+    "ReportRecord",
+    "ReportListResponse",
+    "ReputationRecord",
+    "REPORT_CATEGORIES",
+    "REPORT_STATUSES",
+    "FORENSICS_VERDICTS",
 ]

@@ -374,3 +374,111 @@ Returns round-trip query latency to the Neo4j cluster.
   "node_count": 18920
 }
 ```
+
+---
+
+## 5. Field Report Verification Endpoints
+
+Citizen field reports are verified across four pillars before they are trusted:
+**Physical Presence (Geofence Lock)**, **Digital Image Forensics (ELA + pHash)**,
+**Identity & Sybil Resistance** (authenticated, 3 reports/day/user, reputation),
+and **Epistemic UI Badging** (status, distance, forensics, timestamp). Reports are
+persisted in Supabase Postgres + Storage, with a lightweight `:Report` node added
+to Neo4j for graph/chat visibility.
+
+### Shared Verification Verdict Schema
+
+Both clients render the same verdict object:
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `status` | `verified \| pending \| flagged \| rejected` | Overall verdict (Pillar 5) |
+| `distance_meters` | int \| null | Server-recomputed distance to the DPWH centroid (Pillar 1) |
+| `geofence_pass` | bool | Whether the reporter was within ≤150m (Pillar 1) |
+| `ela_score` | float \| null | Error Level Analysis score — higher = more edited (Pillar 2) |
+| `phash_recycled` | bool | Photo matches a prior report's perceptual hash (Pillar 2) |
+| `forensics_verdict` | `clean \| suspicious \| recycled` | Combined image verdict (Pillar 2) |
+| `reporter_reputation` | int | Reporter's current reputation 0–100 (Pillar 3) |
+| `created_at` | ISO-8601 | Submission timestamp (Pillar 5) |
+
+### 5.1 Submit a Field Report
+`POST /api/reports`
+
+Authenticated, geofenced, forensic submission. Requires a valid session cookie
+(`credentials: 'include'`); there is **no** Authorization header. Encoded as
+`multipart/form-data`.
+
+#### Form Fields
+* `project_id` *(required)*: DPWH Project ID the report concerns.
+* `description` *(required, 10–2000 chars)*: What the reporter observed.
+* `category` *(optional)*: `ghost_project | delay | substandard_materials | safety_hazard | other`.
+* `latitude`, `longitude` *(optional)*: Reporter device coordinates (WGS84). Mobile uses hardware GPS; the web uses browser geolocation (treated as lower-trust). The server always re-validates the geofence against the project's authoritative coordinates.
+* `picture` *(optional, image/jpeg|png|webp, ≤10 MB)*: On-site photo for forensic analysis.
+
+#### Response Payload (`201 Created`)
+```json
+{
+  "id": "4f1e8c2a-...",
+  "project_id": "24HH0043",
+  "status": "verified",
+  "distance_meters": 45,
+  "geofence_pass": true,
+  "ela_score": 0.42,
+  "phash_recycled": false,
+  "forensics_verdict": "clean",
+  "reporter_reputation": 59,
+  "created_at": "2026-10-20T12:00:00+00:00"
+}
+```
+
+#### Status Codes
+* `201 Created` — report accepted (status may still be `flagged`/`pending`).
+* `401 Unauthorized` — no valid session; the client should prompt sign-in.
+* `404 Not Found` — unknown `project_id`.
+* `413 Payload Too Large` — photo exceeds 10 MB.
+* `422 Unprocessable Entity` — invalid image or too-short description.
+* `429 Too Many Requests` — more than 3 reports in a rolling 24h window; includes a `Retry-After` header.
+
+### 5.2 List a Project's Reports
+`GET /api/reports/{project_id}`
+
+Public, newest-first list of a project's reports with their verification badges.
+
+#### Response Payload (`200 OK`)
+```json
+{
+  "project_id": "24HH0043",
+  "count": 2,
+  "reports": [
+    {
+      "id": "4f1e8c2a-...",
+      "project_id": "24HH0043",
+      "status": "verified",
+      "distance_meters": 45,
+      "geofence_pass": true,
+      "ela_score": 0.42,
+      "phash_recycled": false,
+      "forensics_verdict": "clean",
+      "reporter_reputation": 59,
+      "created_at": "2026-10-20T12:00:00+00:00",
+      "description": "Concrete works match the posted scope and schedule.",
+      "category": "delay",
+      "photo_url": "https://<project>.supabase.co/storage/v1/object/public/report-photos/24HH0043/ab12.jpg",
+      "latitude": 11.0509,
+      "longitude": 124.0055
+    }
+  ]
+}
+```
+
+> **Reputation & Consensus**: Reputation (Pillar 3) is driven by geofence +
+> forensics + account-activity signals. Crowdsourced Peer Consensus (Pillar 4)
+> is out of scope for this release; `reputation.register_consensus_outcome()` is
+> a wired hook so confirm/dispute events can feed the same score when consensus
+> ships — no schema change required.
+
+#### Provisioning
+Apply `backend/supabase/migrations/0001_reports_verification.sql` and
+`0002_storage_report_photos.sql` (see `backend/supabase/README.md`). Set
+`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, and optionally
+`SUPABASE_REPORT_BUCKET` (defaults to `report-photos`).

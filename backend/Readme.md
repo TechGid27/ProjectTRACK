@@ -25,6 +25,7 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 * **Conversational Memory**: Context-aware follow-ups that remember the prior topic (a location, e.g. "tell me more about it" after "projects in Cordova", or a project). A deterministic heuristic handles common cues; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying strictly DB-locked and injection-safe.
 * **Spatial Answer Targeting**: Location questions fly the map to the LGU; singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Superlative intent is inherited across location switches ("what about in Cordova?").
 * **📊 Instant Graph Analytics**: Sub-millisecond aggregation calculates total budget, contractor rankings, project counts, and sector breakdowns directly from graph relationships.
+* **📍 Field Report Verification (`/api/reports`)**: Authenticated citizen reports with a server-authoritative ≤150m geofence check (Pillar 1), ELA + perceptual-hash image forensics against prior photos (Pillar 2), a 3-reports/day limit with reputation scoring (Pillar 3), and verification badging surfaced to web/mobile (Pillar 5). Rows and photos persist to Supabase Postgres + Storage; a lightweight `:Report` node is linked in Neo4j. Apply `supabase/migrations/*.sql` (see `supabase/README.md`).
 
 ---
 

@@ -617,6 +617,36 @@ class Neo4jService:
             "average_project_cost": 0.0,
         }
 
+    def add_report_link(self, project_id: str, report_id: str, status: str) -> Optional[int]:
+        """
+        Create a lightweight :Report node linked to its :Project and bump the
+        project's report_count (Pillar 5 graph/chat visibility). Returns the new
+        report_count, or None if the graph is unavailable (non-fatal: the report
+        is already persisted in Supabase, which is the system of record).
+        """
+        driver = self.get_driver()
+        if not driver:
+            logger.warning("Neo4j unavailable; skipping :Report graph link for %s", report_id)
+            return None
+
+        cypher = """
+        MATCH (p:Project)
+        WHERE toLower(p.project_id) = toLower($pid)
+        MERGE (r:Report {id: $rid})
+          ON CREATE SET r.status = $status, r.created_at = datetime()
+          ON MATCH  SET r.status = $status
+        MERGE (r)-[:REPORTS_ON]->(p)
+        SET p.report_count = coalesce(p.report_count, 0) + 1
+        RETURN p.report_count AS report_count
+        """
+        try:
+            with driver.session() as s:
+                row = s.run(cypher, pid=project_id.strip(), rid=report_id, status=status).single()
+                return row["report_count"] if row else None
+        except Exception as e:
+            logger.error(f"Error linking report {report_id} to project {project_id}: {e}")
+            return None
+
 
 # Global singleton instance
 neo4j_service = Neo4jService()

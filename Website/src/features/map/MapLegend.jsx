@@ -127,20 +127,23 @@ export default function MapLegend() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span
                     title="Citizen report with GPS confirmed on-site"
-                    className="rounded-full bg-violet-400/25 px-2.5 py-1 text-[11px] font-bold text-violet-200 ring-1 ring-violet-400/60"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-violet-400/25 px-2.5 py-1 text-[11px] font-bold text-violet-200 ring-1 ring-violet-400/60"
                   >
+                    <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-violet-400 shadow-[0_0_6px_#8b5cf6]" />
                     On-Site Verified
                   </span>
                   <span
                     title="Citizen report flagged by photo forensics"
-                    className="rounded-full bg-rose-400/25 px-2.5 py-1 text-[11px] font-bold text-rose-200 ring-1 ring-rose-400/60"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-rose-400/25 px-2.5 py-1 text-[11px] font-bold text-rose-200 ring-1 ring-rose-400/60"
                   >
+                    <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-rose-400 shadow-[0_0_6px_#f43f5e]" />
                     Photo Flagged
                   </span>
                   <span
                     title="Citizen report without location or forensics verification"
-                    className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60 ring-1 ring-white/15"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60 ring-1 ring-white/15"
                   >
+                    <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-white/75 shadow-[0_0_6px_#ffffff80]" />
                     Unverified
                   </span>
                 </div>

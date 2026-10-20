@@ -1562,7 +1562,7 @@ function ProjectDetailModal({ entity, onClose }) {
                   {report.badge && (
                     <span
                       data-testid="report-verification-badge"
-                      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${
                         report.badge.tone === 'success'
                           ? 'bg-violet-400/25 text-violet-200 ring-violet-400/60'
                           : report.badge.tone === 'warning'
@@ -1570,6 +1570,16 @@ function ProjectDetailModal({ entity, onClose }) {
                             : 'bg-white/10 text-white/60 ring-white/15'
                       }`}
                     >
+                      <span
+                        aria-hidden="true"
+                        className={`inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] ${
+                          report.badge.tone === 'success'
+                            ? 'bg-violet-400 shadow-[0_0_6px_#8b5cf6]'
+                            : report.badge.tone === 'warning'
+                              ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]'
+                              : 'bg-white/75 shadow-[0_0_6px_#ffffff80]'
+                        }`}
+                      />
                       {report.badge.label}
                     </span>
                   )}

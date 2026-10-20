@@ -53,3 +53,27 @@ class MunicipalityGeoSummary(BaseModel):
     total_projects: int = Field(description="Total DPWH projects in municipality")
     total_budget: float = Field(description="Cumulative allocated budget in PHP")
     total_budget_formatted: str = Field(description="Formatted budget string")
+
+
+class AppropriationSummary(BaseModel):
+    """GAA (General Appropriations Act) totals for a DPWH Cebu district office."""
+    office: str = Field(description="DPWH district engineering office (operating unit)")
+    line_count: int = Field(description="Number of GAA appropriation line items")
+    total_amount: float = Field(description="Cumulative appropriated amount in PHP")
+    total_amount_formatted: str = Field(description="Formatted total in PHP")
+    years: List[int] = Field(default_factory=list, description="Distinct appropriation years covered")
+
+
+class ProcurementAwardItem(BaseModel):
+    """PhilGEPS procurement/bidding award linked to a DPWH Cebu contractor."""
+    contractor: str = Field(description="Awardee / contractor name")
+    reference_id: Optional[str] = Field(default=None, description="PhilGEPS reference ID")
+    award_title: Optional[str] = Field(default=None, description="Award title")
+    notice_title: Optional[str] = Field(default=None, description="Bid notice / invitation title")
+    organization: Optional[str] = Field(default=None, description="Procuring organization")
+    business_category: Optional[str] = Field(default=None, description="PhilGEPS business category")
+    contract_amount: float = Field(default=0.0, description="Awarded contract amount in PHP")
+    contract_amount_formatted: Optional[str] = Field(default=None, description="Formatted contract amount")
+    award_date: Optional[str] = Field(default=None, description="Award date")
+    award_status: Optional[str] = Field(default=None, description="Award status (e.g. active)")
+    match_confidence: Optional[str] = Field(default=None, description="DPWH linkage confidence (e.g. 'exact_name_cebu')")

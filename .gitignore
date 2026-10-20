@@ -44,6 +44,7 @@ node_modules/
 Website/dist/
 dist/
 dist-ssr/
+.expo/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

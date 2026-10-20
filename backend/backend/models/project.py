@@ -19,12 +19,34 @@ class GeocodingInfo(BaseModel):
     confidence: Optional[str] = Field(default=None, description="Geocoding accuracy level ('barangay' | 'municipality' | 'district' | 'province')")
 
 
+class ProcurementAward(BaseModel):
+    """PhilGEPS procurement/bidding award linked to a project's contractor."""
+    reference_id: Optional[str] = Field(default=None, description="PhilGEPS reference ID")
+    award_title: Optional[str] = Field(default=None, description="Award title")
+    notice_title: Optional[str] = Field(default=None, description="Bid notice / invitation title")
+    organization: Optional[str] = Field(default=None, description="Procuring organization name")
+    business_category: Optional[str] = Field(default=None, description="PhilGEPS business category")
+    contract_amount: Optional[float] = Field(default=None, description="Awarded contract amount in PHP")
+    award_date: Optional[str] = Field(default=None, description="Award date")
+    award_status: Optional[str] = Field(default=None, description="Award status (e.g. active)")
+    match_confidence: Optional[str] = Field(default=None, description="Confidence of the DPWH linkage (e.g. 'exact_name_cebu')")
+
+
 class ProjectDetail(BaseModel):
     """Full detail card for a DPWH project including WGS84 spatial coordinates."""
     id: str = Field(description="DPWH Project ID e.g. '24HH0043'")
     description: Optional[str] = Field(default=None, description="Detailed project title / scope of work")
     budget: Optional[str] = Field(default=None, description="Raw formatted budget string e.g. '₱ 49,000,000.00'")
     budget_num: Optional[float] = Field(default=None, description="Parsed numeric budget in Philippine Pesos")
+    amount_paid: Optional[float] = Field(default=None, description="Amount disbursed / paid to date in PHP")
+    source_of_funds: Optional[str] = Field(default=None, description="Funding source / appropriation line (e.g. 'Regular Infra - GAA 2024 CP')")
+    funding_source: Optional[str] = Field(default=None, description="Linked FundingSource node name")
+    program_name: Optional[str] = Field(default=None, description="DPWH program name (e.g. 'Regular Infra')")
+    component_categories: Optional[str] = Field(default=None, description="Detailed component categories")
+    region: Optional[str] = Field(default=None, description="DPWH region (e.g. 'Region VII')")
+    report_count: Optional[int] = Field(default=None, description="Number of citizen reports filed")
+    has_satellite_image: Optional[bool] = Field(default=None, description="Whether a satellite image is available")
+    gps_source: Optional[str] = Field(default=None, description="Provenance of coordinates ('dpwh_bettergov' | 'geocoded')")
     status: Optional[str] = Field(default=None, description="Project status (e.g. Completed, Ongoing)")
     timeline: Optional[str] = Field(default=None, description="Project timeline or contract duration")
     url: Optional[str] = Field(default=None, description="DPWH source document URL")
@@ -39,6 +61,7 @@ class ProjectDetail(BaseModel):
     barangay: Optional[str] = Field(default=None, description="Geocoded Barangay")
     formatted_address: Optional[str] = Field(default=None, description="Formatted display address")
     geocoding: Optional[GeocodingInfo] = Field(default=None, description="Structured spatial coordinates and metadata")
+    procurements: Optional[List[ProcurementAward]] = Field(default_factory=list, description="Linked PhilGEPS procurement awards (conservative name+area match)")
 
 
 class ProjectRelation(BaseModel):
@@ -55,6 +78,8 @@ class ProjectSearchResult(BaseModel):
     description: Optional[str] = None
     budget: Optional[str] = None
     budget_num: Optional[float] = None
+    amount_paid: Optional[float] = Field(default=None, description="Amount disbursed / paid to date in PHP")
+    source_of_funds: Optional[str] = Field(default=None, description="Funding source / appropriation line")
     status: Optional[str] = None
     url: Optional[str] = None
     score: Optional[float] = Field(default=1.0, description="Search relevance score")
@@ -92,4 +117,6 @@ class ProjectMapPoint(BaseModel):
     status: Optional[str] = Field(default=None, description="Project Status")
     budget: Optional[str] = Field(default=None, description="Formatted budget")
     budget_num: Optional[float] = Field(default=None, description="Numeric budget in PHP")
+    amount_paid: Optional[float] = Field(default=None, description="Amount disbursed / paid to date in PHP")
+    source_of_funds: Optional[str] = Field(default=None, description="Funding source / appropriation line")
     contractor: Optional[str] = Field(default=None, description="Contractor firm name")

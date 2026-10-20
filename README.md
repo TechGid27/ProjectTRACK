@@ -29,8 +29,8 @@ Every fiscal year, billions of Philippine Pesos are allocated for Department of 
 ## System Features
 
 ### Web Platform (`Website`)
-* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers and district clusters.
-* **GraphRAG-Powered AI Assistant**: Contextual natural language query engine grounded in the Neo4j knowledge graph, with domain guardrails and a configurable LLM provider (Groq by default).
+* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers. Overlapping projects are grouped by zoom-aware proximity clustering, and the map stays synchronized with the chat - flying to a selected LGU or zooming to and highlighting a single project for superlative/locating questions.
+* **GraphRAG-Powered AI Assistant**: Contextual natural language query engine grounded in the Neo4j knowledge graph, with domain guardrails and a configurable LLM provider (Groq by default). Supports conversational memory for follow-ups ("tell me more about it", "what about in Cordova?") via a sandboxed, whitelist-validated reference resolver that stays strictly database-locked and injection-safe. User input and conversation history are sanitized and screened for prompt-injection before reaching the model.
 * **Image Forensics Verification**: Built-in Error Level Analysis (ELA) and cryptographic metadata inspection to detect digital manipulation, timestamp tampering, or image recycling.
 * **Budget and Expenditure Transparency**: Real-time auditing of allocated funds, expenditure disbursements, variance indicators, and source funding across municipalities.
 * **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store.
@@ -41,6 +41,8 @@ Every fiscal year, billions of Philippine Pesos are allocated for Department of 
 
 ### Core Backend and Services (`backend`)
 * **Personnel and Entity Graph Mapping**: Models relationships between contractors, authorized managing officers, district engineers, and procurement awards into a traversable graph.
+* **Spatial Data Integrity**: Exact, canonicalized municipality matching eliminates cross-LGU leakage, and a polygon reverse-geocoding pipeline reassigns each project to the LGU that actually contains its authentic DPWH coordinates (projects outside Cebu are flagged and excluded).
+* **Supabase Authentication**: Backend-managed Supabase (GoTrue) auth under `/api/auth` (OAuth, email/password, session, sign-out) with HTTP-only session cookies, auto token refresh, and a reusable route-guard dependency - ready for the web and mobile clients to hook into.
 * **High-Throughput RESTful and SSE API**: Production-grade FastAPI endpoints supporting sub-20ms instant Cypher queries, Server-Sent Events (SSE) streaming, and standardized GeoJSON feeds.
 
 ---
@@ -94,7 +96,7 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Start FastAPI application
-python -m uvicorn backend.main:create_app --factory --reload --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --port 8000
 ```
 The REST API will be accessible at `http://localhost:8000` (Interactive documentation at `http://localhost:8000/docs`).
 

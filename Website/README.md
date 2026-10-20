@@ -8,8 +8,10 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 
 * **UI Framework**: [React 19](https://react.dev)
 * **Build Tool**: [Vite 8](https://vite.dev)
+* **Routing**: History API pathname routing (`src/app/router.js`)
 * **Cartography & GIS**: [Leaflet](https://leafletjs.com) via [react-leaflet 5](https://react-leaflet.vercel.app)
 * **Styling**: [Tailwind CSS 4](https://tailwindcss.com) (color palettes configured in `src/index.css`)
+* **Testing**: [Vitest](https://vitest.dev) + Testing Library
 * **Linting**: ESLint (Flat Configuration)
 
 ---
@@ -18,9 +20,13 @@ The web presentation tier of ProjectTrack provides an interactive, low-latency g
 
 * **Vector Boundary Rendering**: Renders all 53 Local Government Units (LGUs) of Cebu Province (44 municipalities and 9 cities) as styled vector polygons without requiring external raster satellite tile services.
 * **Barangay Zoom Intelligence**: Dynamic polygon rendering for barangay boundaries at high zoom levels (~Zoom 12+).
-* **Project Status Markers**: Interactive spatial markers with detailed status, budget, and contractor inspection panels.
-* **GraphRAG Client**: Connects to the backend REST and SSE endpoints for natural language question answering and instant Cypher search cards.
-* **Resilient Offline / Mock Fallbacks**: Includes static GeoJSON fixtures and mock data providers in `src/data/mockApi.js` for standalone evaluation.
+* **Project Status Markers**: Teal diamonds for ongoing projects (with completion %), blue diamonds for completed.
+* **Proximity Marker Clustering**: Projects that overlap on screen are clustered by a zoom-aware pixel distance (`src/features/map/cluster.js`), not just by identical coordinates. Clusters collapse to one pin with a count and a nearby-projects list, and separate again as you zoom in.
+* **Location Intel Panel**: Per-LGU project list with statuses, budgets, and paginated full-details modal.
+* **Contractor Rankings**: `/contractors` page ranking contractors by awarded budget.
+* **Auth**: Email/password and OAuth sign-in via the backend (`src/services/auth.js`); session-aware header with avatar menu.
+* **GraphRAG Chat with Memory**: Floating chat assistant streaming from the backend SSE endpoint (non-streaming fallback). Context-aware follow-ups ("tell me more about it", "what about in Cordova?") keep the prior topic.
+* **Chat-Synchronized Map**: Chat answers drive the map camera - location questions fly to the LGU, while singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Clicking any pin highlights it too.
 
 ---
 
@@ -46,6 +52,7 @@ Ensure `VITE_API_URL` points to your backend instance (default: `http://localhos
 ```bash
 npm run dev      # Launch Vite development server (http://localhost:5173)
 npm run lint     # Run ESLint validation
+npm run test     # Run Vitest suite
 npm run build    # Compile production bundle to dist/
 npm run preview  # Locally preview production build
 ```
@@ -54,9 +61,9 @@ npm run preview  # Locally preview production build
 
 ## Spatial Data Sources
 
-* `src/assets/cebuMunicipalities.json`: GeoJSON `FeatureCollection` covering the 53 LGUs of Cebu Province (mainland, Bantayan, Camotes, Mactan, Olango). Sourced from [geoBoundaries](https://www.geoboundaries.org) `PHL/ADM3` (gbOpen), based on NAMRIA/PSA data.
-* `public/data/cebu-barangays.json`: High-resolution administrative polygon boundaries for all Cebu barangays.
-* `src/data/pins.js`: Baseline project coordinates and status markers.
+* `public/data/cebuMunicipalities.json`: GeoJSON `FeatureCollection` covering the 53 LGUs of Cebu Province (mainland, Bantayan, Camotes, Mactan, Olango). Sourced from [geoBoundaries](https://www.geoboundaries.org) `PHL/ADM3` (gbOpen), based on NAMRIA/PSA data. Lazy-loaded at runtime to keep the initial bundle small.
+* `src/data/cebuLguNames.js`: Lightweight list of the 53 LGU names used for text sections and the municipality browser grid.
+* `src/services/overpass.js`: Barangay boundaries fetched from Overpass mirrors with timeout, retry, and failure cooldown.
 
 ---
 

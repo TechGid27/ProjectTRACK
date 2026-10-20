@@ -10,17 +10,20 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 
 * **⚡ Sub-20ms Graph Traversal**: Direct Cypher queries and full-text index lookups across 4,370+ DPWH projects, contractors, budgets, and locations in Cebu.
 * **🛡️ 5-Layer Domain Guardrails**: Bulletproof domain lock that intercepts programming questions, generic dictionary definitions, persona overrides (`act as a teacher`), and off-topic queries in `<0.1ms` before hitting Neo4j or the LLM.
+* **🧼 Prompt-Injection Hardening**: Every user message and client-supplied history turn is normalized before the guardrail (NFKC folding, zero-width / bidi / control-character stripping, whitespace de-flooding, length cap). The intent gate blocks common injection phrasings (ignore/disregard/forget previous instructions, persona and developer-mode jailbreaks, prompt exfiltration, and chat-template delimiters like `</system>` or `<|im_start|>`), and instruction-override content planted in history is rejected too.
+* **🔐 Supabase Authentication (Backend-Managed)**: Ready-to-use `/api/auth` endpoints (OAuth URL, callback, session, sign-in, sign-up, sign-out) backed by Supabase GoTrue. Tokens are kept in an HTTP-only session cookie and auto-refreshed; a `get_current_user` dependency guards protected routes.
 * **🤖 Multi-Tier Fallback Resilience (100% Uptime / Zero Crash)**:
   * **Tier 0 (Primary Cloud AI)**: Groq LPU running `qwen/qwen3.8-27b` delivering ~500+ tok/s response speed with situational token budgeting.
-  * **Tier 1 (Offline Local AI Fallback)**: Lightweight local model **`qwen2.5:0.5b` (~398 MB)** via Ollama, accessible via 1-command installer (`python main.py --setup-local-ai`).
+  * **Tier 1 (Offline Local AI Fallback)**: Lightweight local model **`qwen2.5:0.5b` (~398 MB)** via Ollama, accessible via 1-command installer (`python cli.py --setup-local-ai`).
   * **Tier 2 (Instant Graph Deterministic Synthesizer)**: Zero-token, sub-5ms fact synthesizer that computes fluent, plain-English engineering summaries directly from Neo4j facts when external LLMs hit rate limits (HTTP 429) or are offline.
 * **📦 1-Command Permission-Gated Local AI Setup**:
-  * Run `python main.py --setup-local-ai` to configure local Ollama and pull `qwen2.5:0.5b` (~398 MB, <600MB RAM, CPU-friendly).
+  * Run `python cli.py --setup-local-ai` to configure local Ollama and pull `qwen2.5:0.5b` (~398 MB, <600MB RAM, CPU-friendly).
   * Always prompts the user for explicit permission (`[y/N]`) before installing or downloading anything.
 * **📍 Batch Geocoding & Mapping**:
-  * Run `python main.py --geocode` to batch-geocode all Neo4j location and project nodes with verified WGS84 coordinates.
+  * Run `python cli.py --geocode` to batch-geocode all Neo4j location and project nodes with verified WGS84 coordinates.
 * **⚡ Instant Cypher Mode (Zero AI Needed)**: Full instant lookup cards, analytics, and full-text search run purely on Neo4j Aura in `<10ms`—no local LLM or API keys required.
-* **💬 Conversational Memory**: Context-aware follow-ups (e.g. asking *"who is the contractor?"* or *"what was the budget for it?"* after viewing a project).
+* **Conversational Memory**: Context-aware follow-ups that remember the prior topic (a location, e.g. "tell me more about it" after "projects in Cordova", or a project). A deterministic heuristic handles common cues; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying strictly DB-locked and injection-safe.
+* **Spatial Answer Targeting**: Location questions fly the map to the LGU; singular/superlative follow-ups ("what's the most expensive one?", "where is it located?") zoom to that one project and highlight its pin. Superlative intent is inherited across location switches ("what about in Cordova?").
 * **📊 Instant Graph Analytics**: Sub-millisecond aggregation calculates total budget, contractor rankings, project counts, and sector breakdowns directly from graph relationships.
 
 ---
@@ -30,26 +33,35 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 ```text
 backend/
 ├── backend/                    # ⚡ FastAPI REST & SSE Streaming Backend
-│   ├── main.py                 # FastAPI application, CORS, lifespan & error handlers
-│   ├── run.py                  # Server runner CLI (python backend/run.py)
+│   ├── app.py                 # FastAPI application factory, CORS, lifespan & error handlers
 │   ├── config.py               # Pydantic Settings configuration
 │   ├── setup_local_ai.py       # 1-command permission-gated local AI installer (qwen2.5:0.5b)
-│   ├── api/                    # Modular routes (projects, analytics, chat, pipeline, health)
+│   ├── api/                    # Modular routes (auth, projects, analytics, chat, pipeline, health)
 │   ├── models/                 # Pydantic data schemas
 │   ├── services/               # Services:
 │   │   ├── neo4j_service.py    # Connection pool & Cypher queries
+│   │   ├── supabase_auth.py # Supabase GoTrue auth client (OAuth/password/session)
 │   │   ├── guardrail_service.py# Pre-retrieval classifier & stream rail
 │   │   ├── llm_service.py      # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   │   ├── graph_synthesizer.py# Instant Graph Deterministic Synthesizer (<5ms)
 │   │   └── pipeline_service.py # Background job execution & state tracker
-│   └── tests/                  # Test suite (18 unit & integration tests)
-│       ├── test_api.py         # API endpoints & guardrails tests (13 tests)
+│   └── tests/                  # Test suite (55 unit & integration tests)
+│       ├── test_api.py         # API, guardrails & chat tests (33 tests)
+│       ├── test_auth.py        # Supabase auth endpoint tests (12 tests)
+│       ├── test_pipeline_enrichment.py # DPWH metadata, PhilGEPS & GAA ingestion tests (13 tests)
 │       └── test_fallback.py    # LLM fallback & synthesizer tests (5 tests)
-├── main.py                     # ⚡ Master CLI runner (interactive menu, CLI queries, analytics, --api)
+├── run.py                      # Start the web API server: `python run.py`
+├── cli.py                      # Master CLI (interactive menu, queries, analytics, --sync, --scrape)
 ├── pipeline/                   # 📦 Core modular pipeline package
 │   ├── __init__.py             # Unified package exports
-│   ├── scrape_cebu_dpwh.py     # BetterGov scraper -> Apify & Supabase
-│   ├── sync_to_neo4j.py        # Paginated batch ingestion -> Neo4j Aura
+│   ├── scrape_cebu_dpwh.py     # BetterGov scraper -> Apify & Supabase (full structured metadata)
+│   ├── sync_to_neo4j.py        # Paginated batch ingestion -> Neo4j Aura (metadata-first + FundingSource)
+│   ├── fetch_philgeps.py       # PhilGEPS procurement fetch + conservative Neo4j ingestion
+│   ├── fetch_gaa.py            # GAA (appropriations) fetch + Neo4j ingestion
+│   ├── geocoding.py            # Deterministic WGS84 geocoding engine
+│   ├── enrich_neo4j_gps.py     # Authentic DPWH/BetterGov GPS enrichment
+│   ├── lgu_boundaries.py       # Point-in-polygon LGU reverse-geocoder
+│   ├── correct_municipalities.py # Reassign projects to the LGU that contains their coordinates
 │   └── query_graph.py          # Cypher queries, Guardrails, Instant Insights & Streaming QA
 ├── .env.example                # Template for required environment variables
 ├── requirements.txt            # Python dependencies (includes FastAPI, Uvicorn, Neo4j, HTTPX)
@@ -65,7 +77,7 @@ backend/
 3. Free Accounts / Services for:
    * **[Neo4j AuraDB](https://neo4j.com/cloud/platform/aura-graph-database/)** (Free cloud graph database instance)
    * **[Groq Cloud](https://console.groq.com/keys)** (Free ultra-fast LLM inference API)
-   * **[Ollama](https://ollama.com/)** (Optional: only needed for offline local AI summaries; installable via `python main.py --setup-local-ai`)
+   * **[Ollama](https://ollama.com/)** (Optional: only needed for offline local AI summaries; installable via `python cli.py --setup-local-ai`)
    * **[Supabase](https://supabase.com/)** (Optional: only needed if syncing or scraping)
    * **[Apify](https://apify.com/)** (Optional: only needed if running the scraper)
 
@@ -147,7 +159,7 @@ SUPABASE_SERVICE_KEY="your_supabase_service_role_key"
 To enable zero-cost offline local summaries when Groq reaches its rate limit (429) or when internet connectivity is disrupted:
 
 ```powershell
-python main.py --setup-local-ai
+python cli.py --setup-local-ai
 ```
 
 The installer will:
@@ -163,7 +175,7 @@ Everything is executed through [`main.py`](file:///C:/Users/User/VSCode_Programm
 
 ### 1. Interactive Console (Default Mode)
 ```powershell
-python main.py
+python cli.py
 ```
 Connects to Neo4j Aura and launches the interactive query environment:
 ```text
@@ -188,15 +200,15 @@ Commands:
 ### 2. Direct Command-Line Lookups
 ```powershell
 # Instant project card (<10ms lookup directly from graph)
-python main.py 24HH0043
+python cli.py 24HH0043
 
 # Natural language query (streams grounded answer in ~500 tok/s)
-python main.py "any projects in bogo?"
-python main.py "what projects are in cordova?"
-python main.py "who is the contractor for 24HH0043?"
+python cli.py "any projects in bogo?"
+python cli.py "what projects are in cordova?"
+python cli.py "who is the contractor for 24HH0043?"
 
 # Sub-second instant mode (pure Neo4j, skips AI summaries)
-python main.py --instant
+python cli.py --instant
 ```
 
 ---
@@ -204,13 +216,13 @@ python main.py --instant
 ### 3. Analytics and Graph Insights
 ```powershell
 # Top 10 Contractors by Total Awarded Budget
-python main.py --top-contractors
+python cli.py --top-contractors
 
 # Top 10 Largest Infrastructure Projects by Budget
-python main.py --top-budgets
+python cli.py --top-budgets
 
 # Overall Dataset Summary
-python main.py --summary
+python cli.py --summary
 ```
 
 ---
@@ -218,19 +230,25 @@ python main.py --summary
 ### 4. Data Scraping, Neo4j Ingestion & Geocoding
 ```powershell
 # Ingest Supabase projects into Neo4j Aura
-python main.py --sync
+# (automatically reassigns each project to the LGU polygon containing its
+#  authentic GPS, so per-municipality counts stay accurate)
+python cli.py --sync
 
 # Scrape projects from BetterGov into Apify & Supabase
-python main.py --scrape
+python cli.py --scrape
 
 # Run full pipeline: Scrape -> Sync -> Open Console
-python main.py --all
+python cli.py --all
+
+# Enrich the graph with PhilGEPS procurement + GAA appropriations
+# (run after --sync so Contractor nodes exist for conservative matching)
+python cli.py --enrich
 
 # Batch geocode Neo4j graph locations & projects (WGS84 coordinates)
-python main.py --geocode
+python cli.py --geocode
 
 # Configure offline local AI fallback (qwen2.5:0.5b ~398MB)
-python main.py --setup-local-ai
+python cli.py --setup-local-ai
 ```
 
 ---
@@ -238,13 +256,13 @@ python main.py --setup-local-ai
 ### 5. Launch FastAPI Backend Server (REST & SSE Streaming)
 ```powershell
 # Option A: From backend root using master runner
-python main.py --api
+python cli.py --api
 
 # Option B: Using backend runner
-python backend/run.py
+python run.py
 
 # Option C: Using Uvicorn directly
-python -m uvicorn backend.main:create_app --factory --reload --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --port 8000
 ```
 
 * **Interactive Swagger UI**: `http://localhost:8000/docs`
@@ -289,9 +307,42 @@ flowchart TD
 
 ---
 
+## 🗺️ Knowledge Graph Schema (Enriched)
+
+The ingestion pipeline builds the following node and relationship model in Neo4j
+(all nodes also carry the `:base` label for LightRAG compatibility):
+
+```text
+(:Project)-[:CONTRACTED_TO]->(:Contractor)
+(:Project)-[:LOCATED_IN]->(:Location)
+(:Project)-[:SUPERVISED_BY]->(:Office)
+(:Project)-[:CATEGORIZED_AS]->(:Category)
+(:Project)-[:FUNDED_BY]->(:FundingSource)          # source of funds / program
+(:Contractor)-[:AWARDED]->(:Procurement)           # PhilGEPS award (name+Cebu match)
+(:Procurement)-[:PROCURED_BY]->(:Organization)     # procuring entity
+(:Office)-[:APPROPRIATED_UNDER]->(:Appropriation)  # GAA budget line item
+```
+
+Enriched `Project` properties sourced from the BetterGov `dpwh` index via
+structured Supabase `metadata` (not fragile Markdown parsing): `amount_paid`
+(disbursement), `source_of_funds`, `program_name`, `component_categories`,
+`region`, `report_count`, `has_satellite_image`, plus authentic
+`latitude`/`longitude` (`gps_source = "dpwh_bettergov"` when inside the Cebu
+bounding box, else `"geocoded"`).
+
+**Data sources** (BetterGov search backend, search-scoped key):
+`dpwh` (projects), `philgeps` (procurement/bidding awards), `gaa` (General
+Appropriations Act line items). PhilGEPS linkage is **conservative** — an award
+is attached only when the awardee name matches an existing `Contractor` *and*
+the `area_of_delivery` is a Cebu LGU; each `Procurement` node stores
+`match_confidence = "exact_name_cebu"` and never overwrites authoritative DPWH
+facts.
+
+---
+
 ## 🧪 Running Unit & Integration Tests
 
-Run the full automated test suite (18 unit & integration tests):
+Run the full automated test suite (55 unit & integration tests):
 
 ```powershell
 python -m unittest discover -s backend/tests -p "test_*.py"
@@ -316,7 +367,7 @@ The test suite validates:
 | Issue | Solution |
 | :--- | :--- |
 | **Missing Neo4j credentials** | Ensure `.env` exists with `NEO4J_URI` and `NEO4J_PASSWORD`. |
-| **Groq 429 rate limit reached** | System automatically falls back to local Ollama or Instant Graph Synthesis (<5ms). To enable local AI, run `python main.py --setup-local-ai`. |
+| **Groq 429 rate limit reached** | System automatically falls back to local Ollama or Instant Graph Synthesis (<5ms). To enable local AI, run `python cli.py --setup-local-ai`. |
 | **Groq 401 invalid API key** | Verify `GROQ_API_KEY="gsk_..."` in `.env` from [console.groq.com/keys](https://console.groq.com/keys). |
 | **AuraDB pauses after inactivity** | Neo4j Aura Free instances pause after 3 days of no queries. Open the [Neo4j Aura Console](https://console.neo4j.io/) and click **Resume**. |
 | **Console character encoding error** | Run with UTF-8 flag: `python -X utf8 main.py`. |

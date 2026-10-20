@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "ProjectTRACK",
+    "slug": "projecttrack-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1f3d3c"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.projecttrack.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1f3d3c"
+      },
+      "package": "com.projecttrack.mobile"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}

@@ -33,6 +33,50 @@ def format_currency(amount: Optional[float]) -> str:
     return f"₱ {amount:,.2f}"
 
 
+def canonical_municipality(name: Optional[str]) -> str:
+    """
+    Reduce an LGU name to a canonical comparison token.
+
+    Reconciles the two city-naming conventions present in the dataset and the
+    frontend (``"City of Bogo"`` vs ``"Bogo City"``) and tolerates bare names
+    (``"Bogo"``). The result is lowercased, trimmed, stripped of a leading
+    ``"city of "`` and a trailing ``" city"``, and of any ``", cebu"`` province
+    suffix so that equality comparison isolates a single municipality without
+    the substring leakage that pulled in province-wide records.
+    """
+    if not name:
+        return ""
+    token = str(name).strip().lower()
+    # Drop trailing province qualifier, e.g. "Cebu City, Cebu" -> "cebu city".
+    if token.endswith(", cebu"):
+        token = token[: -len(", cebu")].strip()
+    if token.startswith("city of "):
+        token = token[len("city of "):]
+    elif token.endswith(" city"):
+        token = token[: -len(" city")]
+    return token.strip()
+
+
+# Cypher expression mirroring :func:`canonical_municipality` so that the stored
+# ``p.municipality`` is normalized the same way as the Python-normalized
+# ``$muni_token`` parameter. Both sides are reduced to a bare token before an
+# exact equality comparison, eliminating cross-LGU substring matches.
+#
+# Built in stages for readability:
+#   base = lower(trim(municipality)) with any trailing ", cebu" removed
+#   then strip a leading "city of " or a trailing " city".
+_CYPHER_MUNI_BASE = "replace(toLower(trim(coalesce(p.municipality, ''))), ', cebu', '')"
+_CYPHER_MUNI_CANON = (
+    "CASE"
+    f"  WHEN {_CYPHER_MUNI_BASE} STARTS WITH 'city of '"
+    f"    THEN substring({_CYPHER_MUNI_BASE}, 8)"
+    f"  WHEN {_CYPHER_MUNI_BASE} ENDS WITH ' city'"
+    f"    THEN left({_CYPHER_MUNI_BASE}, size({_CYPHER_MUNI_BASE}) - 5)"
+    f"  ELSE {_CYPHER_MUNI_BASE}"
+    " END"
+)
+
+
 class Neo4jService:
     """Singleton Neo4j service for high-performance Cypher traversals."""
 
@@ -114,10 +158,32 @@ class Neo4jService:
         OPTIONAL MATCH (p)-[:LOCATED_IN]->(loc:Location)
         OPTIONAL MATCH (p)-[:SUPERVISED_BY]->(off:Office)
         OPTIONAL MATCH (p)-[:CATEGORIZED_AS]->(cat:Category)
+        OPTIONAL MATCH (p)-[:FUNDED_BY]->(fund:FundingSource)
+        OPTIONAL MATCH (c)-[:AWARDED]->(pr:Procurement)
+        WITH p, c, loc, off, cat, fund,
+             collect(DISTINCT CASE WHEN pr IS NULL THEN NULL ELSE {
+                 reference_id: pr.reference_id,
+                 award_title: pr.award_title,
+                 notice_title: pr.notice_title,
+                 organization: pr.organization_name,
+                 business_category: pr.business_category,
+                 contract_amount: pr.contract_amount,
+                 award_date: pr.award_date,
+                 award_status: pr.award_status,
+                 match_confidence: pr.match_confidence
+             } END) AS procurement_raw
         RETURN p.project_id AS id,
                p.description AS description,
                p.budget_raw AS budget,
                p.budget_numeric AS budget_num,
+               p.amount_paid AS amount_paid,
+               p.source_of_funds AS source_of_funds,
+               p.program_name AS program_name,
+               p.component_categories AS component_categories,
+               p.region AS region,
+               p.report_count AS report_count,
+               p.has_satellite_image AS has_satellite_image,
+               p.gps_source AS gps_source,
                p.status AS status,
                p.timeline AS timeline,
                p.url AS url,
@@ -130,7 +196,9 @@ class Neo4jService:
                coalesce(p.barangay, loc.barangay) AS barangay,
                coalesce(p.formatted_address, loc.formatted_address) AS formatted_address,
                off.name AS office,
-               cat.name AS category
+               cat.name AS category,
+               coalesce(fund.name, p.source_of_funds) AS funding_source,
+               [x IN procurement_raw WHERE x IS NOT NULL] AS procurements
         LIMIT 1
         """
         try:
@@ -169,18 +237,27 @@ class Neo4jService:
         if not clean_loc or len(clean_loc) < 3:
             return [], 0, 0.0
 
+        # Canonicalize the RAW location name, not the FTS-sanitized form.
+        # sanitize_search_query collapses e.g. "Lapu-Lapu City" -> "Lapu City",
+        # which would then canonicalize to "lapu" and never match the stored
+        # "Lapu-Lapu City" (canonical "lapu-lapu").
+        loc_token = canonical_municipality(location_name)
+        if not loc_token:
+            return [], 0, 0.0
+
         cypher_count = """
-        MATCH (p:Project)-[:LOCATED_IN]->(loc:Location)
-        WHERE toLower(loc.name) CONTAINS toLower($loc)
+        MATCH (p:Project)
+        WHERE """ + _CYPHER_MUNI_CANON + """ = $loc_token
         RETURN count(DISTINCT p) AS cnt, sum(p.budget_numeric) AS total_budget
         """
         cypher_samples = """
-        MATCH (p:Project)-[:LOCATED_IN]->(loc:Location)
-        WHERE toLower(loc.name) CONTAINS toLower($loc)
-        WITH DISTINCT p, loc
+        MATCH (p:Project)
+        WHERE """ + _CYPHER_MUNI_CANON + """ = $loc_token
+        WITH DISTINCT p
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
         OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
+        OPTIONAL MATCH (p)-[:LOCATED_IN]->(loc:Location)
         RETURN p.project_id AS entity,
                ['Project'] AS labels,
                p.description AS description,
@@ -188,26 +265,26 @@ class Neo4jService:
                p.budget_numeric AS budget_num,
                p.status AS status,
                p.url AS url,
-               coalesce(p.latitude, loc.latitude) AS latitude,
-               coalesce(p.longitude, loc.longitude) AS longitude,
-               coalesce(p.municipality, loc.municipality) AS municipality,
-               coalesce(p.barangay, loc.barangay) AS barangay,
+               p.latitude AS latitude,
+               p.longitude AS longitude,
+               p.municipality AS municipality,
+               p.barangay AS barangay,
                coalesce(p.formatted_address, loc.formatted_address) AS formatted_address,
                1.0 AS score,
                [
-                   {rel: 'LOCATED_IN', target: loc.name, desc: loc.name},
+                   {rel: 'LOCATED_IN', target: coalesce(loc.name, p.municipality), desc: coalesce(loc.name, p.municipality)},
                    {rel: 'CONTRACTED_TO', target: coalesce(c.name, 'N/A'), desc: coalesce(c.name, 'N/A')}
                ] AS relations
         """
         try:
             with driver.session() as s:
-                cnt_row = s.run(cypher_count, loc=clean_loc).single()
+                cnt_row = s.run(cypher_count, loc_token=loc_token).single()
                 if not cnt_row or cnt_row["cnt"] == 0:
                     return [], 0, 0.0
                 total_cnt = cnt_row["cnt"]
                 total_b = float(cnt_row["total_budget"] or 0.0)
 
-                samples = s.run(cypher_samples, loc=clean_loc, limit=limit).data()
+                samples = s.run(cypher_samples, loc_token=loc_token, limit=limit).data()
                 for sample in samples:
                     sample["description"] = clean_description(sample.get("description"))
                 return samples, total_cnt, total_b
@@ -239,6 +316,8 @@ class Neo4jService:
                node.description AS description,
                node.budget_raw AS budget,
                node.budget_numeric AS budget_num,
+               node.amount_paid AS amount_paid,
+               node.source_of_funds AS source_of_funds,
                node.status AS status,
                node.url AS url,
                node.latitude AS latitude,
@@ -277,6 +356,8 @@ class Neo4jService:
                node.description AS description,
                node.budget_raw AS budget,
                node.budget_numeric AS budget_num,
+               node.amount_paid AS amount_paid,
+               node.source_of_funds AS source_of_funds,
                node.status AS status,
                node.url AS url,
                node.latitude AS latitude,
@@ -307,7 +388,10 @@ class Neo4jService:
         cypher = """
         MATCH (p:Project)
         WHERE p.latitude IS NOT NULL
-          AND ($muni IS NULL OR toLower(p.municipality) CONTAINS toLower($muni) OR toLower(p.location) CONTAINS toLower($muni))
+          AND (
+            $muni_token IS NULL
+            OR """ + _CYPHER_MUNI_CANON + """ = $muni_token
+          )
         OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
         RETURN p.project_id AS id,
                p.latitude AS latitude,
@@ -315,17 +399,23 @@ class Neo4jService:
                p.municipality AS municipality,
                p.barangay AS barangay,
                p.formatted_address AS formatted_address,
+               p.description AS description,
                p.category AS category,
                p.status AS status,
                p.budget_raw AS budget,
                p.budget_numeric AS budget_num,
+               p.amount_paid AS amount_paid,
+               p.source_of_funds AS source_of_funds,
                c.name AS contractor
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
         """
+        muni_token = canonical_municipality(municipality) if municipality else None
+        if municipality and not muni_token:
+            return []
         try:
             with driver.session() as s:
-                return s.run(cypher, muni=municipality, limit=limit).data()
+                return s.run(cypher, muni_token=muni_token, limit=limit).data()
         except Exception as e:
             logger.error(f"Error fetching map projects: {e}")
             return []
@@ -356,6 +446,72 @@ class Neo4jService:
                 return rows
         except Exception as e:
             logger.error(f"Error fetching location breakdown: {e}")
+            return []
+
+    def get_appropriations_by_office(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """GAA appropriations aggregated per DPWH Cebu district engineering office."""
+        driver = self.get_driver()
+        if not driver:
+            return []
+
+        cypher = """
+        MATCH (o:Office)-[:APPROPRIATED_UNDER]->(a:Appropriation)
+        RETURN o.name AS office,
+               count(a) AS line_count,
+               sum(a.amount) AS total_amount,
+               [y IN collect(DISTINCT a.year) WHERE y IS NOT NULL] AS years
+        ORDER BY total_amount DESC
+        LIMIT $limit
+        """
+        try:
+            with driver.session() as s:
+                rows = s.run(cypher, limit=limit).data()
+                for r in rows:
+                    r["total_amount"] = float(r.get("total_amount") or 0.0)
+                    r["total_amount_formatted"] = format_currency(r["total_amount"])
+                    r["years"] = sorted([int(y) for y in (r.get("years") or [])])
+                return rows
+        except Exception as e:
+            logger.error(f"Error fetching appropriations: {e}")
+            return []
+
+    def get_procurement_awards(
+        self, contractor: Optional[str] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List PhilGEPS procurement awards linked to DPWH Cebu contractors.
+
+        Optionally filter by (partial, case-insensitive) contractor name.
+        """
+        driver = self.get_driver()
+        if not driver:
+            return []
+
+        cypher = """
+        MATCH (c:Contractor)-[:AWARDED]->(pr:Procurement)
+        WHERE $contractor IS NULL OR toLower(c.name) CONTAINS toLower($contractor)
+        OPTIONAL MATCH (pr)-[:PROCURED_BY]->(org:Organization)
+        RETURN c.name AS contractor,
+               pr.reference_id AS reference_id,
+               pr.award_title AS award_title,
+               pr.notice_title AS notice_title,
+               coalesce(org.name, pr.organization_name) AS organization,
+               pr.business_category AS business_category,
+               pr.contract_amount AS contract_amount,
+               pr.award_date AS award_date,
+               pr.award_status AS award_status,
+               pr.match_confidence AS match_confidence
+        ORDER BY pr.contract_amount DESC
+        LIMIT $limit
+        """
+        try:
+            with driver.session() as s:
+                rows = s.run(cypher, contractor=contractor, limit=limit).data()
+                for r in rows:
+                    r["contract_amount"] = float(r.get("contract_amount") or 0.0)
+                    r["contract_amount_formatted"] = format_currency(r["contract_amount"])
+                return rows
+        except Exception as e:
+            logger.error(f"Error fetching procurement awards: {e}")
             return []
 
     def get_top_contractors(self, limit: int = 10) -> List[Dict[str, Any]]:

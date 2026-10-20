@@ -6,18 +6,19 @@ Unified entry point for scraping, syncing, analyzing, and querying
 the DPWH Cebu Knowledge Graph (2022 - Present).
 
 Usage:
-  python main.py                            # Interactive menu / console
-  python main.py 25H00064                   # Instant project card (<100ms)
-  python main.py "any project in bogo?"     # Direct AI natural language query
-  python main.py --instant                  # Sub-second search mode (no LLM wait)
-  python main.py --sync                     # Sync Supabase data into Neo4j Aura
-  python main.py --scrape                   # Scrape BetterGov to Apify & Supabase
-  python main.py --all                      # Run full pipeline: Scrape -> Sync -> Console
-  python main.py --top-contractors          # View top contractors by budget
-  python main.py --summary                  # View total dataset statistics
-  python main.py --api                      # Launch FastAPI backend server (http://localhost:8000)
-  python main.py --geocode                  # Batch geocode all Neo4j location and project nodes
-  python main.py --setup-local-ai           # Configure offline local AI fallback (qwen2.5:0.5b)
+  python cli.py                            # Interactive menu / console
+  python cli.py 25H00064                   # Instant project card (<100ms)
+  python cli.py "any project in bogo?"     # Direct AI natural language query
+  python cli.py --instant                  # Sub-second search mode (no LLM wait)
+  python cli.py --sync                     # Sync Supabase data into Neo4j Aura
+  python cli.py --scrape                   # Scrape BetterGov to Apify & Supabase
+  python cli.py --all                      # Run full pipeline: Scrape -> Sync -> Enrich -> Console
+  python cli.py --enrich                    # Ingest PhilGEPS procurement + GAA appropriations into Neo4j
+  python cli.py --top-contractors          # View top contractors by budget
+  python cli.py --summary                  # View total dataset statistics
+  python cli.py --api                      # Launch FastAPI backend server (http://localhost:8000)
+  python cli.py --geocode                  # Batch geocode all Neo4j location and project nodes
+  python cli.py --setup-local-ai           # Configure offline local AI fallback (qwen2.5:0.5b)
 """
 
 import sys
@@ -51,6 +52,8 @@ from pipeline import (
     check_neo4j_connectivity,
     geocode_location,
     geocode_neo4j_graph,
+    sync_procurement_to_neo4j,
+    sync_appropriations_to_neo4j,
 )
 
 
@@ -99,7 +102,7 @@ def show_scraper_missing_error():
     print('  SUPABASE_URL="https://xxx.supabase.co"')
     print('  SUPABASE_SERVICE_KEY="your_key"')
     print("\n💡 Tip: If you only want to query the existing knowledge graph,")
-    print("   run: python main.py (no scraper keys needed!)")
+    print("   run: python cli.py (no scraper keys needed!)")
     print("=" * 68 + "\n")
 
 
@@ -160,8 +163,49 @@ def run_full_pipeline():
     print("\n[Step 2/2] Ingesting all projects into Neo4j Aura Knowledge Graph...")
     sync_projects_to_neo4j(reset=False)
 
+    run_enrichment()
+
     print("\n🎉 Pipeline Complete! Launching Knowledge Graph Console...")
     run_console()
+
+
+def run_enrichment():
+    """Fetch & ingest PhilGEPS procurement and GAA appropriations into Neo4j.
+
+    Runs after DPWH projects/contractors exist so the conservative PhilGEPS
+    name+area matching has Contractor nodes to attach to.
+    """
+    if not check_neo4j_credentials():
+        show_neo4j_missing_error()
+        return
+
+    # Own a single Neo4j driver for the whole enrichment run and inject it into
+    # both sync steps. This avoids each step closing the shared singleton driver
+    # (which previously left the GAA step with a "Driver closed" error).
+    from pipeline.sync_to_neo4j import get_clients, close_driver
+    _, driver = get_clients()
+    if driver is None:
+        show_neo4j_missing_error()
+        return
+
+    print("\n" + "=" * 68)
+    print("🧩 ENRICHMENT: PhilGEPS Procurement + GAA Appropriations")
+    print("=" * 68)
+    try:
+        print("\n[Enrich 1/2] PhilGEPS procurement (conservative name+Cebu match)...")
+        try:
+            sync_procurement_to_neo4j(driver=driver)
+        except Exception as e:
+            print(f"⚠️ PhilGEPS enrichment skipped: {e}")
+
+        print("\n[Enrich 2/2] GAA appropriations (DPWH Cebu offices)...")
+        try:
+            sync_appropriations_to_neo4j(driver=driver)
+        except Exception as e:
+            print(f"⚠️ GAA enrichment skipped: {e}")
+    finally:
+        close_driver()
+    print("\n✅ Enrichment complete.")
 
 
 def handle_menu_choice(choice: str) -> bool:
@@ -254,7 +298,7 @@ def handle_menu_choice(choice: str) -> bool:
         print(f"\n🚀 Launching FastAPI Backend on http://{settings.HOST}:{settings.PORT}")
         print(f"📖 Interactive Swagger Docs: http://localhost:{settings.PORT}/docs")
         print(f"📑 ReDoc Documentation:      http://localhost:{settings.PORT}/redoc\n")
-        uvicorn.run("backend.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+        uvicorn.run("backend.app:app", host=settings.HOST, port=settings.PORT, reload=True)
         return True
 
     elif choice in ("10", "geocode", "geo"):
@@ -326,6 +370,10 @@ def main():
 
         if first_arg in ("--all", "all", "full"):
             run_full_pipeline()
+            return
+
+        if first_arg in ("--enrich", "enrich", "--procurement", "--gaa"):
+            run_enrichment()
             return
 
         if first_arg in ("--geocode", "-g", "geocode"):
@@ -423,7 +471,7 @@ def main():
 
     print_banner()
     print("🚀 Auto-launching Interactive Query & AI Console (Default Option [1])...")
-    print("💡 (To access batch scraping, sync, or dataset stats menu, run: python main.py --menu)\n")
+    print("💡 (To access batch scraping, sync, or dataset stats menu, run: python cli.py --menu)\n")
     try:
         handle_menu_choice("1")
     except (KeyboardInterrupt, EOFError):

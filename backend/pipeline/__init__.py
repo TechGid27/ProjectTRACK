@@ -27,10 +27,16 @@ from .query_graph import (
     check_neo4j_connectivity,
 )
 from .geocoding import geocode_location, geocode_neo4j_graph
+from .fetch_philgeps import fetch_philgeps_cebu, sync_procurement_to_neo4j
+from .fetch_gaa import fetch_gaa_dpwh_cebu, sync_appropriations_to_neo4j
 
 __all__ = [
     "run_scraper",
     "sync_projects_to_neo4j",
+    "fetch_philgeps_cebu",
+    "sync_procurement_to_neo4j",
+    "fetch_gaa_dpwh_cebu",
+    "sync_appropriations_to_neo4j",
     "run_console",
     "ensure_ollama_running",
     "ask_llm_stream",

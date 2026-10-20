@@ -151,6 +151,11 @@ Retrieves complete attributes, spatial coordinates, financial summaries, and con
   "category": "Flood Control and Drainage",
   "budget": 34300000.0,
   "formatted_budget": "PHP 34,300,000.00",
+  "amount_paid": 12500000.0,
+  "source_of_funds": "Regular Infra - GAA 2024 CP",
+  "funding_source": "Regular Infra - GAA 2024 CP",
+  "program_name": "Regular Infra",
+  "region": "Region VII",
   "status": "Ongoing",
   "completion_percentage": 68.5,
   "year": 2024,
@@ -160,6 +165,18 @@ Retrieves complete attributes, spatial coordinates, financial summaries, and con
     "classification": "General Engineering",
     "total_awarded_budget": 412500000.0
   },
+  "procurements": [
+    {
+      "reference_id": "2024-00123",
+      "award_title": "Construction Project",
+      "notice_title": "Invitation to Bid - Drainage along Colon St.",
+      "organization": "DPWH Cebu City DEO",
+      "contract_amount": 34300000.0,
+      "award_date": "2024-01-15 00:00:00",
+      "award_status": "active",
+      "match_confidence": "exact_name_cebu"
+    }
+  ],
   "location": {
     "municipality": "Cebu City",
     "barangay": "Parian",
@@ -269,6 +286,61 @@ Returns province-wide infrastructure statistics aggregated directly from the Neo
   ]
 }
 ```
+
+---
+
+### 3.3 GAA Appropriations by District Office
+`GET /api/analytics/appropriations`
+
+Aggregates General Appropriations Act (GAA) budget line items per DPWH Cebu district engineering office, sourced from the BetterGov `gaa` index.
+
+#### Parameters
+* `limit` *(query, optional, default: 50, max: 100)*: Number of district offices to retrieve.
+
+#### Response Payload (`200 OK`)
+```json
+[
+  {
+    "office": "Cebu 6th District Engineering Office",
+    "line_count": 627,
+    "total_amount": 8299116.0,
+    "total_amount_formatted": "₱ 8.30M",
+    "years": [2020, 2021, 2022, 2023, 2024, 2025, 2026]
+  }
+]
+```
+
+---
+
+### 3.4 PhilGEPS Procurement Awards
+`GET /api/analytics/procurement`
+
+Lists PhilGEPS procurement/bidding awards conservatively linked to DPWH Cebu contractors (awardee-name + Cebu `area_of_delivery` match). Each item carries a `match_confidence` flag and never overwrites authoritative DPWH facts.
+
+#### Parameters
+* `contractor` *(query, optional)*: Partial, case-insensitive contractor-name filter.
+* `limit` *(query, optional, default: 50, max: 200)*: Maximum awards to return.
+
+#### Response Payload (`200 OK`)
+```json
+[
+  {
+    "contractor": "ARQ BUILDERS",
+    "reference_id": "2024-00123",
+    "award_title": "Construction Project",
+    "notice_title": "Invitation to Bid - Access Road",
+    "organization": "TOURISM INFRASTRUCTURE AND ENTERPRISE ZONE AUTHORITY",
+    "business_category": "Construction Projects",
+    "contract_amount": 49980000.0,
+    "contract_amount_formatted": "₱ 49.98M",
+    "award_date": "2024-01-15 00:00:00",
+    "award_status": "active",
+    "match_confidence": "exact_name_cebu"
+  }
+]
+```
+
+> **Note**: `GET /api/projects/{project_id}` also returns a nested `procurements` array and the project-level `amount_paid`, `source_of_funds`, and `funding_source` fields. `GET /api/projects/map` and `GET /api/projects/search` now include `amount_paid` and `source_of_funds` on each item.
 
 ---
 

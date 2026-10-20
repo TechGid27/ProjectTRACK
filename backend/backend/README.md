@@ -10,12 +10,14 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 * **⚡ Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
 * **🛡️ 5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
+* **🧼 Prompt-Injection Hardening**: User messages and client-supplied history are normalized (NFKC, zero-width/control-char stripping, whitespace de-flooding, length cap) and screened for common injection phrasings (instruction-override, persona/developer-mode jailbreaks, prompt exfiltration, chat-template delimiters). Instruction-override content planted in history is also rejected.
 * **🤖 Multi-Tier Fallback Resilience**:
   * **Groq LPU**: Primary high-speed cloud generation at ~500+ tok/s.
   * **Local Ollama Fallback**: Lightweight `qwen2.5:0.5b` (~398 MB) offline fallback via `python main.py --setup-local-ai`.
   * **Deterministic Graph Synthesizer**: Sub-5ms zero-token factual synthesizer ensuring zero failures on rate limits (HTTP 429).
 * **⚡ Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
 * **🌊 Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
+* **Conversational Memory & Spatial Targeting**: Follow-ups remember the prior location or project; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying DB-locked and injection-safe. Chat answers carry map coordinates that fly to an LGU or zoom to a single project.
 * **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
 * **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
 * **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
@@ -26,9 +28,9 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 ```text
 backend/
-├── main.py                  # FastAPI app factory, CORS, routers & lifespan
+├── app.py                  # FastAPI app factory, CORS, routers & lifespan
 ├── config.py                # Typed settings via Pydantic Settings & .env
-├── run.py                   # Development server CLI runner
+# (run.py now lives at backend/run.py -> start with `python run.py`)
 ├── setup_local_ai.py        # Permission-gated 1-command installer for local Ollama & qwen2.5:0.5b
 ├── requirements.txt         # FastAPI backend dependencies
 ├── README.md                # Documentation & API reference
@@ -38,7 +40,7 @@ backend/
 │   ├── router.py            # Unified API router (/api)
 │   ├── health.py            # /api/health, /api/health/neo4j, /api/health/llm
 │   ├── projects.py          # /api/projects/{id}, /api/projects/search, /api/projects/by-location
-│   ├── analytics.py         # /api/analytics/summary, /api/analytics/top-contractors, /api/analytics/top-projects
+│   ├── analytics.py         # /api/analytics/summary, /top-contractors, /top-projects, /appropriations, /procurement
 │   ├── chat.py              # /api/chat (JSON), /api/chat/stream (SSE streaming)
 │   └── pipeline.py          # /api/pipeline/sync, /api/pipeline/scrape, /api/pipeline/jobs
 ├── models/                  # Pydantic validation & response schemas
@@ -55,10 +57,11 @@ backend/
 │   ├── llm_service.py       # Multi-tier LLM execution (Groq -> Ollama -> Synthesizer)
 │   ├── graph_synthesizer.py # Deterministic Graph Synthesizer (<5ms)
 │   └── pipeline_service.py  # Background job execution & state tracker
-└── tests/                   # Test suite (18 unit & integration tests)
+└── tests/                   # Test suite (55 unit & integration tests)
     ├── __init__.py
-    ├── test_api.py          # API endpoints & guardrails tests (13 tests)
+    ├── test_api.py          # API endpoints & guardrails tests (33 tests)
     └── test_fallback.py     # Fallback resilience & synthesizer tests (5 tests)
+    └── test_auth.py          # Supabase auth endpoint tests (12 tests)
 ```
 
 ---
@@ -101,10 +104,10 @@ Start the development server with auto-reload:
 
 ```bash
 # Option A: Using the convenience runner
-python backend/run.py
+python run.py
 
 # Option B: Using Uvicorn directly
-python -m uvicorn backend.main:create_app --factory --reload --host 0.0.0.0 --port 8000
+python -m uvicorn backend.app:create_app --factory --reload --host 0.0.0.0 --port 8000
 ```
 
 Once running:
@@ -116,7 +119,7 @@ Once running:
 
 ## Running Tests
 
-Run the full automated test suite (18 unit & integration tests):
+Run the full automated test suite (55 unit & integration tests):
 
 ```bash
 python -m unittest discover -s backend/tests -p "test_*.py"
@@ -154,6 +157,8 @@ The test suite validates:
 | `GET` | `/api/projects/search?q=...` | Full-text search across projects, contractors, locations |
 | `GET` | `/api/projects/by-location?location=...` | Aggregate projects, total count & budget for a municipality |
 
+> Location matching is exact and canonicalized: `Cebu City`, `City of Bogo`/`Bogo City`, and hyphenated names like `Lapu-Lapu City` resolve to a single LGU without cross-LGU leakage.
+
 ---
 
 ### Analytics
@@ -163,6 +168,8 @@ The test suite validates:
 | `GET` | `/api/analytics/summary` | Overall dataset metrics (total projects, total budget, contractors) |
 | `GET` | `/api/analytics/top-contractors?limit=10` | Ranked contractors by cumulative awarded budget |
 | `GET` | `/api/analytics/top-projects?limit=10` | Most expensive DPWH infrastructure projects in Cebu |
+| `GET` | `/api/analytics/appropriations?limit=50` | GAA appropriation totals per DPWH Cebu district office |
+| `GET` | `/api/analytics/procurement?contractor=&limit=50` | PhilGEPS procurement awards linked to Cebu contractors |
 
 ---
 
@@ -184,6 +191,39 @@ The test suite validates:
 
 * `mode="ai"`: Graph retrieval + Groq / Local Ollama / Deterministic Synthesizer.
 * `mode="instant"`: Instant Cypher lookup (`<10ms`, zero AI latency).
+
+---
+
+### Authentication (Supabase-backed)
+
+Backend-managed Supabase (GoTrue) auth. The server exchanges credentials/OAuth
+tokens with Supabase and stores the session in an **HTTP-only cookie**, so the
+browser never handles raw tokens. The web client calls these with
+`fetch(..., { credentials: 'include' })` (see `Website/src/services/auth.js`).
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET`  | `/api/auth/oauth/{provider}?redirect=...` | OAuth authorize URL for `google`, `github`, `facebook`, ... |
+| `POST` | `/api/auth/callback` | Persist `{ access_token, refresh_token }` from an OAuth redirect into the session cookie |
+| `GET`  | `/api/auth/session` | Current user (`{ user }` or `{ user: null }`); auto-refreshes an expired token |
+| `POST` | `/api/auth/signin` | Email/password sign-in; opens the session cookie |
+| `POST` | `/api/auth/signup` | Email/password registration (honors Supabase email-confirmation) |
+| `POST` | `/api/auth/signout` | Revoke the session and clear the cookie |
+
+**Setup:** add `SUPABASE_ANON_KEY` (and keep `SUPABASE_URL`) to the backend
+`.env`, and set `FRONTEND_URL` to your web origin so credentialed cookies and
+the default OAuth redirect work. For a cross-site frontend over HTTPS, set
+`AUTH_COOKIE_SECURE=true` and `AUTH_COOKIE_SAMESITE=none`.
+
+**Protecting a route (for teammates):**
+```python
+from fastapi import Depends
+from backend.api.auth import get_current_user
+
+@router.get("/private")
+async def private(user = Depends(get_current_user)):
+    return {"you_are": user.email}
+```
 
 ---
 

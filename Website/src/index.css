@@ -155,36 +155,54 @@
   background: #0f766e;
   border: 1.5px solid rgba(255, 244, 232, 0.9);
   transform: rotate(45deg);
-  animation: pin-glow 2.8s ease-in-out infinite;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-.pin {
-  display: block;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #5d1b22;
-  border: 1.5px solid rgba(255, 244, 232, 0.85);
-  animation: pin-glow 2.8s ease-in-out infinite;
+.project-pin--completed {
+  background: #0369a1;
+}
+
+.pin--emerald {
+  background: #10b981 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .pin--amber {
-  background: #a85b1c;
+  background: #f59e0b !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+  animation: pin-glow-amber 2.2s infinite ease-in-out;
 }
 
-@keyframes pin-glow {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 4px rgba(255, 236, 214, 0.16),
-      0 0 10px 2px rgba(255, 228, 200, 0.4);
+.pin--cyan {
+  background: #06b6d4 !important;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.pin--slate {
+  background: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.pin--highlighted {
+  box-shadow: 0 0 18px 4px #ec4899, 0 0 0 3px #ffffff !important;
+  transform: rotate(45deg) scale(1.4) !important;
+  z-index: 1000 !important;
+}
+
+@keyframes pin-glow-amber {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+    transform: rotate(45deg) scale(1);
   }
   50% {
-    box-shadow:
-      0 0 0 7px rgba(255, 236, 214, 0.06),
-      0 0 14px 3px rgba(255, 228, 200, 0.55);
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.95);
+    transform: rotate(45deg) scale(1.18);
   }
 }
+
+
 .muni-label {
   display: none;
   position: absolute;

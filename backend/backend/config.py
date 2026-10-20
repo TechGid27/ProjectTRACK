@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = Field(default=None, description="Supabase project URL")
     SUPABASE_SERVICE_KEY: Optional[str] = Field(default=None, description="Supabase service role key")
 
+    # Supabase Authentication (GoTrue) - backend-managed session
+    SUPABASE_ANON_KEY: Optional[str] = Field(default=None, description="Supabase anon/public API key (required for auth)")
+    SUPABASE_JWT_SECRET: Optional[str] = Field(default=None, description="Optional: JWT secret for local token verification")
+    FRONTEND_URL: str = Field(default="http://localhost:5173", description="Allowed web origin and default OAuth redirect target")
+
+    # Session cookie behavior (the backend stores Supabase tokens in an HTTP-only cookie)
+    AUTH_COOKIE_NAME: str = Field(default="pt_session", description="Name of the HTTP-only session cookie")
+    AUTH_COOKIE_SECURE: bool = Field(default=False, description="Set True in production (HTTPS) so the cookie is Secure")
+    AUTH_COOKIE_SAMESITE: str = Field(default="lax", description="Cookie SameSite policy: lax | strict | none")
+    AUTH_COOKIE_MAX_AGE: int = Field(default=60 * 60 * 24 * 7, description="Session cookie lifetime in seconds (default 7 days)")
+
     # Apify (Web Scraper)
     APIFY_TOKEN: Optional[str] = Field(default=None, description="Apify API Token")
 

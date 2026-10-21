@@ -66,7 +66,6 @@ export default function HomeScreen({
   const [selectedLgu, setSelectedLgu] = useState<string | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectDetail | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
@@ -76,7 +75,6 @@ export default function HomeScreen({
   const [lguModalSearch, setLguModalSearch] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
-  const [liveSearchResults, setLiveSearchResults] = useState<ProjectDetail[] | null>(null);
 
   const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
   const [backendStats, setBackendStats] = useState({
@@ -122,44 +120,13 @@ export default function HomeScreen({
   }, []);
 
 
-  // Live full-text search across projects and LGUs
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setLiveSearchResults(null);
-      return;
-    }
-    let isMounted = true;
-    api.searchProjects(searchQuery, 15).then((results) => {
-      if (isMounted) {
-        setLiveSearchResults(results);
-      }
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [searchQuery]);
-
-  // Filtered projects based on search
-  const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) return mockProjects;
-    const q = searchQuery.trim().toLowerCase();
-    return mockProjects.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.lgu.toLowerCase().includes(q) ||
-        p.contractor.toLowerCase().includes(q) ||
-        (p.scope && p.scope.toLowerCase().includes(q)),
-    );
-  }, [searchQuery]);
-
   // High impact projects for carousel
   const highImpactProjects = useMemo(() => {
-    if (liveSearchResults !== null) return liveSearchResults;
     if (liveTopProjects && liveTopProjects.length > 0) return liveTopProjects;
-    return [...filteredProjects]
+    return [...mockProjects]
       .sort((a, b) => b.budget - a.budget)
       .slice(0, 8);
-  }, [liveSearchResults, liveTopProjects, filteredProjects]);
+  }, [liveTopProjects]);
 
   // Delayed projects count
   const delayedCount =
@@ -274,28 +241,7 @@ export default function HomeScreen({
           )}
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search civil works or municipality..."
-            placeholderTextColor="#869e9a"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            testID="home-search-input"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              style={styles.clearSearchBtn}
-              testID="clear-home-search"
-            >
-              <Text style={styles.clearSearchText}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+
       </View>
 
       {/* Main Landing Page ScrollView */}

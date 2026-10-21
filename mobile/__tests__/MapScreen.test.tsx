@@ -113,4 +113,19 @@ describe('MapScreen Component', () => {
 
     expect(getByTestId('project-detail-modal')).toBeTruthy();
   });
+
+  test('typing a place name live matches location and selects municipality', () => {
+    const { getByTestId, getAllByText } = render(
+      <MapScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    const searchInput = getByTestId('map-search-input');
+    fireEvent.changeText(searchInput, 'bogo');
+
+    expect(getAllByText(/Bogo/i).length).toBeGreaterThan(0);
+  });
 });

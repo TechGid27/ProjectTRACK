@@ -235,6 +235,39 @@ export default function MapScreen({
     return result;
   }, [mapPins, selectedLgu, searchQuery, activeFilter]);
 
+  const handleSearchQueryChange = (query: string) => {
+    setSearchQuery(query);
+    const clean = query.trim().toLowerCase();
+    if (clean.length >= 3) {
+      const matchedFeature = cebuDataRaw?.features?.find((f: any) => {
+        const rawName = (f.properties?.name || '').toLowerCase();
+        const normName = normalizeLguName(f.properties?.name || '').toLowerCase();
+        return (
+          rawName === clean ||
+          normName === clean ||
+          rawName.startsWith(clean) ||
+          normName.startsWith(clean)
+        );
+      });
+
+      if (matchedFeature) {
+        const matchedName = normalizeLguName(matchedFeature.properties.name);
+        setSelectedLgu(matchedName);
+        setSelectedPinId(null);
+        if (sheetState === 'hidden') {
+          setSheetState('minimized');
+        }
+        const label = (matchedFeature as any)?.properties?.label;
+        if (Array.isArray(label) && label.length === 2) {
+          mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
+        }
+      }
+    } else if (clean.length === 0 && selectedLgu) {
+      setSelectedLgu(null);
+      setSelectedPinId(null);
+    }
+  };
+
   const handleSelectMunicipality = (name: string) => {
     const normalized = normalizeLguName(name);
     setSelectedLgu(normalized);
@@ -330,7 +363,7 @@ export default function MapScreen({
         totalLgus={53}
         totalPins={mapPins.length}
         currentUser={currentUser}
-        onSearch={setSearchQuery}
+        onSearch={handleSearchQueryChange}
         onSignInPress={onNavigateToSignIn}
         onNavigateToContractors={onNavigateToContractors}
         onNavigateToHome={handleResetSelection}

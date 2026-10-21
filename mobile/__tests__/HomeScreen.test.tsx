@@ -165,8 +165,8 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
     ).toBeNull();
   });
 
-  test('filtering projects via home search bar', () => {
-    const { getByTestId } = render(
+  test('does not render search bar on home page', () => {
+    const { queryByTestId } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
@@ -174,11 +174,7 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
       />,
     );
 
-    const searchInput = getByTestId('home-search-input');
-    fireEvent.changeText(searchInput, 'Flood Control');
-
-    expect(getByTestId('clear-home-search')).toBeTruthy();
-    fireEvent.press(getByTestId('clear-home-search'));
+    expect(queryByTestId('home-search-input')).toBeNull();
   });
 
   test('renders user avatar when currentUser is provided and triggers onSignOut', () => {

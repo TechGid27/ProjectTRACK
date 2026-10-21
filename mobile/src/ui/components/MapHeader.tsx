@@ -48,8 +48,8 @@ export default function MapHeader({
 
   return (
     <View style={styles.container} testID="map-header">
-      <View style={styles.headerRow}>
-        {/* 1. App Name */}
+      {/* 1. App Name on Top */}
+      <View style={styles.brandRow}>
         <TouchableOpacity
           onPress={() => {
             onResetSelection?.();
@@ -62,8 +62,10 @@ export default function MapHeader({
           <View style={styles.badgeIndicator} />
           <Text style={styles.brandTitle}>ProjectTRACK</Text>
         </TouchableOpacity>
+      </View>
 
-        {/* 2. Compact Centered Search Bar */}
+      {/* 2. Search Bar - Sign In Button Below */}
+      <View style={styles.actionRow}>
         <View style={styles.searchContainer}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
@@ -90,7 +92,6 @@ export default function MapHeader({
           )}
         </View>
 
-        {/* 3. Sign In / Profile Button */}
         <View style={styles.authContainer}>
           {currentUser ? (
             <TouchableOpacity
@@ -126,9 +127,9 @@ export default function MapHeader({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#1f3d3c',
-    paddingTop: Platform.OS === 'ios' ? 50 : 38,
-    paddingBottom: 10,
-    paddingHorizontal: 14,
+    paddingTop: Platform.OS === 'ios' ? 48 : 34,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
     elevation: 8,
@@ -137,29 +138,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     zIndex: 10,
+    gap: 10,
   },
-  headerRow: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    justifyContent: 'flex-start',
   },
   brandContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   badgeIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
     backgroundColor: '#34d399',
   },
   brandTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#ffffff',
     letterSpacing: -0.3,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   searchContainer: {
     flex: 1,
@@ -167,8 +173,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 20,
-    paddingHorizontal: 10,
-    height: 38,
+    paddingHorizontal: 12,
+    height: 40,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
@@ -180,7 +186,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
     paddingVertical: 0,
     ...Platform.select({
@@ -203,9 +209,9 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     backgroundColor: '#34d399',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -219,9 +225,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 18,
   },
   avatarCircle: {
     width: 22,

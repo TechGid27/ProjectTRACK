@@ -157,4 +157,37 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(projects[0].budget).toBe(49000000);
     expect(projects[0].lgu).toBe('Bogo City');
   });
+
+  test('fetchMapPins marks hotspot strictly when real reports exist', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: 'PROJ-NORMAL',
+          latitude: 10.315,
+          longitude: 123.885,
+          status: 'Ongoing',
+          report_count: 0,
+        },
+        {
+          id: 'PROJ-HOTSPOT',
+          latitude: 11.054,
+          longitude: 124.006,
+          status: 'Ongoing',
+          report_count: 2,
+        },
+      ],
+    } as any);
+
+    const pins = await api.fetchMapPins();
+    expect(pins.length).toBe(2);
+
+    const normalPin = pins.find((p) => p.id === 'PROJ-NORMAL');
+    expect(normalPin?.is_hotspot).toBe(false);
+    expect(normalPin?.tone).toBe('default');
+
+    const hotspotPin = pins.find((p) => p.id === 'PROJ-HOTSPOT');
+    expect(hotspotPin?.is_hotspot).toBe(true);
+    expect(hotspotPin?.tone).toBe('hotspot');
+  });
 });

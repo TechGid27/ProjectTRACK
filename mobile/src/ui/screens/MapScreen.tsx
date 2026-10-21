@@ -33,6 +33,7 @@ interface MapScreenProps {
   onSignOut?: () => void;
   initialLgu?: string | null;
   initialProjectId?: string | null;
+  initialSheetState?: SheetDisplayState;
 }
 
 export default function MapScreen({
@@ -42,6 +43,7 @@ export default function MapScreen({
   onSignOut,
   initialLgu = null,
   initialProjectId = null,
+  initialSheetState = 'hidden',
 }: MapScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
@@ -55,7 +57,7 @@ export default function MapScreen({
   const [isAuditorModalOpen, setIsAuditorModalOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<MapFilterOption>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sheetState, setSheetState] = useState<SheetDisplayState>('expanded');
+  const [sheetState, setSheetState] = useState<SheetDisplayState>(initialSheetState);
   const [mapPins, setMapPins] = useState<Pin[]>(initialPins || pins || []);
   const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>(
     initialLgu ? getProjectsByLocation(initialLgu) : mockProjects,
@@ -64,7 +66,9 @@ export default function MapScreen({
   useEffect(() => {
     if (initialLgu) {
       setSelectedLgu(normalizeLguName(initialLgu));
-      setSheetState('expanded');
+      if (initialSheetState === 'expanded') {
+        setSheetState('expanded');
+      }
     }
   }, [initialLgu]);
 
@@ -163,9 +167,6 @@ export default function MapScreen({
   const handleSelectPin = (pin: Pin) => {
     setSelectedPinId(pin.id);
     setSelectedLgu(pin.lgu);
-    if (sheetState === 'hidden') {
-      setSheetState('expanded');
-    }
 
     const optimisticProject: ProjectDetail = getProjectById(pin.id) || {
       id: pin.id,
@@ -397,24 +398,26 @@ const styles = StyleSheet.create({
   },
   floatingChatBtn: {
     position: 'absolute',
-    bottom: 24,
-    right: 20,
+    bottom: 76,
+    right: 16,
     backgroundColor: '#1f3d3c',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 8,
-    zIndex: 99,
+    zIndex: 90,
   },
   floatingChatIcon: {
-    fontSize: 16,
+    fontSize: 15,
   },
   floatingChatText: {
     fontSize: 13,
@@ -423,20 +426,22 @@ const styles = StyleSheet.create({
   },
   floatingAboutBtn: {
     position: 'absolute',
-    bottom: 24,
-    left: 20,
-    backgroundColor: 'rgba(31, 61, 60, 0.9)',
+    bottom: 76,
+    left: 16,
+    backgroundColor: 'rgba(31, 61, 60, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 6,
-    zIndex: 99,
+    zIndex: 90,
   },
   floatingAboutText: {
     fontSize: 12,
@@ -445,7 +450,7 @@ const styles = StyleSheet.create({
   },
   floatingShowSheetPill: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 16,
     alignSelf: 'center',
     backgroundColor: '#162e2d',
     borderWidth: 1.5,
@@ -456,6 +461,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 24,
+    maxWidth: '90%',
     ...Platform.select({
       web: {
         boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
@@ -468,7 +474,7 @@ const styles = StyleSheet.create({
         elevation: 10,
       },
     }),
-    zIndex: 95,
+    zIndex: 90,
   },
   floatingShowSheetIcon: {
     fontSize: 16,

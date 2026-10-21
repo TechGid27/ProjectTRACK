@@ -58,6 +58,12 @@ export default function CebuVectorMap({
   const initialDistance = useRef<number | null>(null);
   const initialScale = useRef(1.0);
 
+  // 1. Calculate map bounds once
+  const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
+
+
+
+
   // Auto-zoom to selected municipality
   useEffect(() => {
     if (!selectedMunicipality) {
@@ -92,10 +98,10 @@ export default function CebuVectorMap({
     }
   }, [selectedMunicipality, bounds, width, height]);
 
-  // 1. Calculate map bounds once
-  const bounds = useMemo(() => {
-    return computeBoundingBox(cebuData?.features || []);
-  }, []);
+
+
+
+
 
   // 2. Build SVG path commands for all municipalities
   const pathsData = useMemo(() => {
@@ -333,11 +339,11 @@ export default function CebuVectorMap({
 
               const pin = item.pins[0];
               const isSelected = selectedPinId === pin.id;
+              const reportCount = typeof pin.report_count === 'number' ? pin.report_count : 0;
               const isHotspot =
+                reportCount > 0 ||
                 pin.tone === 'hotspot' ||
-                pin.tone === 'danger' ||
-                Boolean(pin.is_hotspot) ||
-                (typeof pin.report_count === 'number' && pin.report_count >= 2);
+                Boolean(pin.is_hotspot);
               const coreColor = isHotspot ? '#ef4444' : pin.tone === 'warning' ? '#f59e0b' : '#10b981';
               const glowColor =
                 isHotspot

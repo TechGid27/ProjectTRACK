@@ -11,7 +11,7 @@ describe('MapScreen Component', () => {
     jest.clearAllMocks();
   });
 
-  test('renders MapHeader, CebuVectorMap, and LocationIntelSheet', () => {
+  test('renders MapHeader, CebuVectorMap, and Show Details pill when sheet is initially closed', () => {
     const { getByTestId } = render(
       <MapScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
@@ -24,18 +24,22 @@ describe('MapScreen Component', () => {
     expect(getByTestId('cebu-vector-map')).toBeTruthy();
     expect(getByTestId('map-header')).toBeTruthy();
     expect(getByTestId('map-filter-bar')).toBeTruthy();
+    expect(getByTestId('sheet-show-pill-btn')).toBeTruthy();
+    expect(getByTestId('open-chat-bot-btn')).toBeTruthy();
+    expect(getByTestId('open-about-map-btn')).toBeTruthy();
   });
 
   test('minimizing the sheet renders the compact peek bar and gives more room to the map', () => {
     const { getByTestId, queryByText } = render(
       <MapScreen
+        initialSheetState="expanded"
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
         onSignOut={mockOnSignOut}
       />,
     );
 
-    // Initially expanded
+    // Initially expanded when initialSheetState="expanded"
     expect(getByTestId('location-intel-sheet')).toBeTruthy();
 
     // Minimize it
@@ -52,6 +56,7 @@ describe('MapScreen Component', () => {
   test('hiding the sheet completely reveals the floating show pill', () => {
     const { getByTestId, queryByTestId } = render(
       <MapScreen
+        initialSheetState="expanded"
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
         onSignOut={mockOnSignOut}
@@ -84,9 +89,8 @@ describe('MapScreen Component', () => {
       />,
     );
 
-    // Hide sheet first
-    const closeBtn = getByTestId('sheet-close-btn');
-    fireEvent.press(closeBtn);
+    // Sheet is initially closed
+    expect(getByTestId('sheet-show-pill-btn')).toBeTruthy();
 
     // Tap Bogo City on the map
     const bogoPath = getByTestId('muni-path-City of Bogo');

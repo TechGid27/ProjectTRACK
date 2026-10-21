@@ -27,6 +27,10 @@ const getInitialBaseUrl = (): string => {
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:8000/api';
   }
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    return `http://${host}:8000/api`;
+  }
   return 'http://localhost:8000/api';
 };
 
@@ -264,7 +268,7 @@ class ApiService {
       if (Array.isArray(data) && data.length > 0) {
         return data.map((p: any) => {
           const reportCount = typeof p.report_count === 'number' ? p.report_count : 0;
-          const isHotspot = reportCount >= 2 || p.status === 'Flagged';
+          const isHotspot = reportCount > 0;
           return {
             id: p.id,
             name: p.title || p.description || `Project ${p.id}`,

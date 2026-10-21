@@ -147,6 +147,42 @@ class TestUploadPhoto(ReportStoreTestBase):
         self.assertEqual(call["content"], b"\xff\xd8")
 
 
+class TestReportCountsByProject(ReportStoreTestBase):
+    async def test_tallies_counts_per_project(self):
+        rows = [
+            {"project_id": "24HH0001"},
+            {"project_id": "24HH0001"},
+            {"project_id": "24HH0002"},
+        ]
+        with self._patch(FakeResponse(200, rows)):
+            counts = await self.store.report_counts_by_project()
+        self.assertEqual(counts, {"24HH0001": 2, "24HH0002": 1})
+        call = FakeAsyncClient.last_call
+        self.assertEqual(call["params"]["select"], "project_id")
+        self.assertNotIn("status", call["params"])
+
+    async def test_status_filter_applied(self):
+        with self._patch(FakeResponse(200, [{"project_id": "24HH0003"}])):
+            counts = await self.store.report_counts_by_project(status="flagged")
+        self.assertEqual(counts, {"24HH0003": 1})
+        self.assertEqual(FakeAsyncClient.last_call["params"]["status"], "eq.flagged")
+
+    async def test_error_degrades_to_empty(self):
+        with self._patch(FakeResponse(500, {"message": "boom"})):
+            counts = await self.store.report_counts_by_project()
+        self.assertEqual(counts, {})
+
+    async def test_unconfigured_returns_empty(self):
+        from backend.config import settings
+        saved_url = settings.SUPABASE_URL
+        settings.SUPABASE_URL = None
+        try:
+            counts = await ReportStore().report_counts_by_project()
+            self.assertEqual(counts, {})
+        finally:
+            settings.SUPABASE_URL = saved_url
+
+
 class TestReputation(ReportStoreTestBase):
     async def test_get_reputation_returns_row_or_none(self):
         with self._patch(FakeResponse(200, [{"user_id": "u1", "score": 5}])):

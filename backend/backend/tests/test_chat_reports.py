@@ -1,0 +1,104 @@
+"""
+Chat Reports-Intent Tests
+=========================
+Covers the "most reported" / "most flagged" single-project focus added on top
+of the existing superlative machinery: intent detection, project selection
+(graph count vs. status-aware Supabase count), province-wide focus, LGU-scoped
+focus, and seamless intent switching across a location continuation.
+
+Neo4j and Supabase are mocked, so no live services are required.
+"""
+
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.api import chat as chat_mod
+
+
+class TestIntentDetection(unittest.TestCase):
+    def test_reports_cues(self):
+        f = chat_mod._detect_single_project_intent
+        self.assertEqual(f("which is the most reported project"), "most_reported")
+        self.assertEqual(f("show the most complained about project"), "most_reported")
+        self.assertEqual(f("project with the highest number of reports"), "most_reported")
+        self.assertEqual(f("the most flagged project"), "most_flagged")
+        self.assertEqual(f("most suspicious reports"), "most_flagged")
+
+    def test_other_intents_unaffected(self):
+        f = chat_mod._detect_single_project_intent
+        self.assertEqual(f("the most expensive one"), "max_budget")
+        self.assertEqual(f("cheapest project"), "min_budget")
+        self.assertIsNone(f("projects in Cordova"))
+
+
+class TestSelectProjectForIntent(unittest.TestCase):
+    def _rows(self):
+        return [
+            {"id": "24HH0001", "latitude": 10.3, "longitude": 123.9, "report_count": 2, "budget_num": 5e6},
+            {"id": "24HH0002", "latitude": 10.4, "longitude": 123.8, "report_count": 9, "budget_num": 1e6},
+        ]
+
+    def test_most_reported_uses_graph_count(self):
+        chosen = chat_mod._select_project_for_intent("most_reported", self._rows(), None)
+        self.assertEqual(chosen["id"], "24HH0002")  # highest report_count
+
+    def test_most_flagged_uses_override_counts(self):
+        counts = {"24HH0001": 7, "24HH0002": 1}  # flips the ranking
+        chosen = chat_mod._select_project_for_intent(
+            "most_flagged", self._rows(), None, report_counts=counts
+        )
+        self.assertEqual(chosen["id"], "24HH0001")
+
+    def test_returns_none_when_no_reports(self):
+        rows = [{"id": "x", "latitude": 1, "longitude": 1, "report_count": 0}]
+        self.assertIsNone(chat_mod._select_project_for_intent("most_reported", rows, None))
+
+
+class TestProvinceWideResolution(unittest.IsolatedAsyncioTestCase):
+    async def test_province_wide_most_reported_focus(self):
+        top_row = {
+            "id": "24HH0099", "entity": "24HH0099", "latitude": 10.5, "longitude": 123.7,
+            "municipality": "Toledo City", "description": "flood control",
+            "status": "Ongoing", "budget": "P5M", "budget_num": 5e6, "report_count": 12,
+        }
+        with patch.object(chat_mod.neo4j_service, "get_top_reported_projects", return_value=[top_row]), \
+             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value={"id": "24HH0099"}):
+            _, matched, graph_context, spatial = await chat_mod.resolve_project_context(
+                "which project is the most reported in Cebu?", history=[]
+            )
+        self.assertIn("Field Reports: 12", graph_context)
+        self.assertIsNotNone(spatial)
+        self.assertEqual(spatial.total_count, 1)
+        self.assertEqual(spatial.zoom, 16)
+        self.assertEqual(spatial.projects[0].report_count, 12)
+        self.assertEqual(spatial.projects[0].id, "24HH0099")
+
+
+class TestScopedResolution(unittest.IsolatedAsyncioTestCase):
+    async def test_scoped_most_reported_in_lgu(self):
+        loc_rows = [
+            {"entity": "24HH0001", "latitude": 10.3, "longitude": 123.9, "report_count": 2,
+             "budget_num": 5e6, "description": "road", "status": "Ongoing", "municipality": "Toledo City"},
+            {"entity": "24HH0002", "latitude": 10.4, "longitude": 123.8, "report_count": 9,
+             "budget_num": 1e6, "description": "bridge", "status": "Completed", "municipality": "Toledo City"},
+        ]
+        with patch.object(chat_mod.neo4j_service, "search_projects_by_location",
+                          return_value=(loc_rows, 2, 6e6)), \
+             patch.object(chat_mod.neo4j_service, "get_map_projects", return_value=loc_rows), \
+             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value={"id": "24HH0002"}):
+            _, _, graph_context, spatial = await chat_mod.resolve_project_context(
+                "most reported project in Toledo", history=[]
+            )
+        self.assertEqual(spatial.projects[0].id, "24HH0002")  # 9 reports wins
+        self.assertIn("Field Reports: 9", graph_context)
+        self.assertEqual(spatial.zoom, 16)
+
+
+if __name__ == "__main__":
+    unittest.main()

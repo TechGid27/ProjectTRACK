@@ -43,6 +43,7 @@ class SpatialProjectPoint(BaseModel):
     municipality: Optional[str] = Field(default=None, description="Municipality or city name")
     barangay: Optional[str] = Field(default=None, description="Barangay name")
     formatted_address: Optional[str] = Field(default=None, description="Address or location name")
+    report_count: Optional[int] = Field(default=None, description="Number of citizen field reports filed against this project")
 
 
 class SpatialContext(BaseModel):

@@ -13,7 +13,7 @@ const CITY_RE = /^(City of |.* City$)/
 const FAQS = [
   {
     q: 'What data does ProjectTRACK show?',
-    a: 'ProjectTRACK loads DPWH public-works projects for Cebu Province from a Neo4j database — including project ID, description, location, contractor, budget, and status (ongoing or completed with completion percentage).',
+    a: 'ProjectTRACK loads DPWH public-works projects for Cebu Province from a Neo4j database — including project ID, description, location, contractor, budget, and status (ongoing, completed with completion percentage, or bidding/procurement).',
   },
   {
     q: 'How do I find projects in my municipality?',
@@ -21,7 +21,7 @@ const FAQS = [
   },
   {
     q: 'What do the map pin colors mean?',
-    a: 'Teal diamonds mark ongoing projects and blue diamonds mark completed projects. When multiple projects share the same coordinate, one pin is drawn — click it to open the full list.',
+    a: 'Amber diamonds mark ongoing projects, green diamonds completed (100%), cyan diamonds bidding/procurement/planning, and grey diamonds other statuses. The legend’s Report Verification chips (On-Site Verified, Photo Flagged, Unverified) filter the map to projects with citizen reports of that verification tone and re-color the pins to match. When multiple projects share the same coordinate, one pin is drawn — click it to open the full list.',
   },
   {
     q: 'How current is the data?',
@@ -29,7 +29,7 @@ const FAQS = [
   },
   {
     q: 'Can I report an incorrect or anomalous entry?',
-    a: 'Yes. Open any project’s details from the map and use the Report Anomaly button to flag issues such as wrong budgets, stale statuses, or incorrect locations.',
+    a: 'Yes — sign in, open any project’s details from the map, and use the Report Anomaly button to flag issues such as wrong budgets, stale statuses, or incorrect locations. Each report carries your GPS location and photo, and the server verifies it: On-Site Verified (within the site geofence), Photo Flagged (photo forensics or far from the site), or Unverified.',
   },
 ]
 
@@ -66,22 +66,55 @@ function AboutMapModal({ onClose }) {
           The interactive map shows every DPWH project site in Cebu Province
           loaded from the Neo4j database. Click a municipality polygon to zoom
           in and see its projects, budgets, and statuses in the Location Intel
-          panel. Click a diamond pin to open the full project details.
+          panel. Click a diamond pin to open the full project details. Use the
+          legend at the top-right to filter projects by status — and to show
+          only sites with citizen reports of a given verification tone.
         </p>
         <ul className="mt-5 space-y-2.5 text-sm text-gray-a11">
           <li className="flex items-center gap-2.5">
-            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-teal-600" />
-            Teal diamond — Ongoing project (shows completion %)
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-amber-500" />
+            Amber diamond — Ongoing project (shows completion %)
           </li>
           <li className="flex items-center gap-2.5">
-            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-sky-600" />
-            Blue diamond — Completed project (100%)
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-emerald-500" />
+            Green diamond — Completed project (100%)
+          </li>
+          <li className="flex items-center gap-2.5">
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-cyan-500" />
+            Cyan diamond — Bidding / procurement / planning
+          </li>
+          <li className="flex items-center gap-2.5">
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-slate-400" />
+            Grey diamond — Other status
           </li>
           <li className="flex items-center gap-2.5">
             <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-gray-a8" />
             Grey outline — Municipality boundary (click to select)
           </li>
         </ul>
+        <p className="mt-5 text-sm font-semibold text-gray-a12">
+          Report verification legend
+        </p>
+        <ul className="mt-2.5 space-y-2.5 text-sm text-gray-a11">
+          <li className="flex items-center gap-2.5">
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-violet-500" />
+            Violet diamond — On-Site Verified citizen report (GPS within the
+            project geofence)
+          </li>
+          <li className="flex items-center gap-2.5">
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-rose-500" />
+            Red diamond — Photo Flagged (photo forensics or far from the site)
+          </li>
+          <li className="flex items-center gap-2.5">
+            <span className="inline-block h-3 w-3 shrink-0 rotate-45 bg-gray-400" />
+            White diamond — Unverified report (no GPS or forensics signal)
+          </li>
+        </ul>
+        <p className="mt-4 text-sm leading-6 text-gray-a10">
+          Click a verification chip in the legend to show only projects with
+          that report tone — the visible pins are re-colored to match, and the
+          filter stays active while you pan around the open municipality.
+        </p>
         <p className="mt-4 text-sm leading-6 text-gray-a10">
           When several projects share the same coordinate, a single pin is
           drawn — clicking it opens a group list so you can pick which project
@@ -142,8 +175,11 @@ function HomePage() {
           <p className="mt-4 text-base leading-7 text-gray-a11">
             ProjectTRACK maps public works and infrastructure projects across
             Cebu Province. The map above is interactive — each diamond marker
-            is a tracked project site. The pages below present the same
-            material as plain text, one page per municipality.
+            is a tracked project site, and its color shows the project’s status
+            (ongoing, completed, or bidding) or, when a Report Verification
+            filter is on, the verification tone of citizen reports filed for
+            it (On-Site Verified, Photo Flagged, Unverified). The pages below
+            present the same material as plain text, one page per municipality.
           </p>
           <p className="mt-5 text-sm text-gray-a10">
             {names.length} LGUs ·{' '}

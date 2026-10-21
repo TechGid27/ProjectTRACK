@@ -197,5 +197,53 @@ class TestListReports(ReportsTestBase):
         self.assertEqual(body["reports"][1]["status"], "flagged")
 
 
+class TestReportSummaries(ReportsTestBase):
+    def test_summaries_aggregate_badge_tones(self):
+        rows = [
+            {"project_id": "24HH0043", "status": "verified"},
+            {"project_id": "24HH0043", "status": "flagged"},
+            {"project_id": "24HH0043", "status": "pending"},
+            {"project_id": "24HH0043", "status": "rejected"},
+            {"project_id": "24HH0050", "status": "mystery"},  # -> unverified
+        ]
+        with patch.object(reports_module.report_store, "summarize_reports", new=AsyncMock(return_value=rows)):
+            resp = self.client.get("/api/reports/summaries")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["count"], 2)
+        by_id = {s["project_id"]: s for s in body["summaries"]}
+        self.assertEqual(by_id["24HH0043"]["on_site"], 1)
+        self.assertEqual(by_id["24HH0043"]["flagged"], 3)  # pending + flagged + rejected
+        self.assertEqual(by_id["24HH0043"]["unverified"], 0)
+        self.assertEqual(by_id["24HH0043"]["total"], 4)
+        self.assertEqual(by_id["24HH0050"]["unverified"], 1)
+
+    def test_summaries_is_public_and_skips_blank_project_ids(self):
+        app.dependency_overrides.clear()  # no authenticated session
+        rows = [{"project_id": "", "status": "verified"}, {"project_id": None, "status": "flagged"}]
+        with patch.object(reports_module.report_store, "summarize_reports", new=AsyncMock(return_value=rows)):
+            resp = self.client.get("/api/reports/summaries")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["count"], 0)
+
+    def test_project_route_still_resolves_after_summaries(self):
+        # /summaries must not shadow GET /reports/{project_id}
+        with patch.object(reports_module.report_store, "list_reports_by_project", new=AsyncMock(return_value=[])):
+            resp = self.client.get("/api/reports/24HH0043")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["project_id"], "24HH0043")
+
+    def test_summaries_propagates_store_errors(self):
+        from backend.services.report_store import ReportStoreError
+
+        with patch.object(
+            reports_module.report_store,
+            "summarize_reports",
+            new=AsyncMock(side_effect=ReportStoreError(404, "Could not find the table 'public.reports'")),
+        ):
+            resp = self.client.get("/api/reports/summaries")
+        self.assertEqual(resp.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

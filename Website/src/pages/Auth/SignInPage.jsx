@@ -31,17 +31,6 @@ function GoogleIcon() {
   )
 }
 
-function FacebookIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-      <path
-        fill="#1877F2"
-        d="M24 12c0-6.6-5.4-12-12-12S0 5.4 0 12c0 6 4.4 11 10.1 11.9v-8.4H7.1V12h3v-2.6c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.3l-.5 3.5h-2.8v8.4C19.6 23 24 18 24 12z"
-      />
-    </svg>
-  )
-}
-
 function SignInPage() {
   const [status, setStatus] = useState(null)
   const [busy, setBusy] = useState(null)
@@ -112,8 +101,8 @@ function SignInPage() {
         <div className="mx-auto max-w-md px-6 py-16">
           <h1 className="font-serif text-3xl text-gray-a12">Sign in</h1>
           <p className="mt-2 text-sm text-gray-a11">
-            Access ProjectTRACK with your Facebook or Google account, or with
-            your email and password.
+            Access ProjectTRACK with your Google account, or with your email
+            and password.
           </p>
 
           {session ? (
@@ -139,15 +128,6 @@ function SignInPage() {
               >
                 <GoogleIcon />
                 Continue with Google
-              </button>
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => signIn('facebook')}
-                className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-a6 bg-white px-6 py-3 text-sm font-semibold text-gray-a12 transition hover:bg-gray-a2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] disabled:opacity-60"
-              >
-                <FacebookIcon />
-                Continue with Facebook
               </button>
 
               <div className="relative py-2 text-center text-xs text-gray-a10">

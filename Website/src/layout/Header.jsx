@@ -118,7 +118,12 @@ function Header({ name, links }) {
           href="/"
           className="flex shrink-0 items-center gap-2.5 text-inherit no-underline"
         >
-          <span
+          <img
+            src="/image/reyalopake.png"
+            alt={`${name} logo`}
+            className="h-10 w-10 object-contain"
+          />
+          {/* <span
             aria-hidden="true"
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1f3d3c] text-sm font-bold text-white"
           >
@@ -126,7 +131,7 @@ function Header({ name, links }) {
           </span>
           <span className="text-base font-bold tracking-tight text-gray-a12">
             {name}
-          </span>
+          </span> */}
         </a>
 
         <nav aria-label="Main" className="hidden md:block">
@@ -182,40 +187,6 @@ function Header({ name, links }) {
         </nav>
 
         <div className="flex items-center gap-2 md:hidden">
-          {user && (
-            <div className="relative" ref={mobileRef}>
-              <button
-                type="button"
-                aria-label="Account menu"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((open) => !open)}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-2 border-[#1f3d3c] bg-[#1f3d3c] text-sm font-bold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
-              >
-                {initial}
-              </button>
-              {menuOpen && (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-full z-[1001] mt-2 w-56 overflow-hidden rounded-xl border border-gray-a5 bg-white shadow-lg"
-                >
-                  <div className="border-b border-gray-a5 px-4 py-3">
-                    <p className="truncate text-sm font-semibold text-gray-a12">
-                      {email}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleSignOut}
-                    className="w-full cursor-pointer px-4 py-2.5 text-left text-sm text-red-a11 transition hover:bg-red-a3 hover:text-red-a12 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-red-a8"
-                  >
-                    Log out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
           <button
             type="button"
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
@@ -238,6 +209,7 @@ function Header({ name, links }) {
 
       {mobileOpen && (
         <nav
+          ref={mobileRef}
           aria-label="Mobile"
           className="border-t border-gray-a5 bg-white px-4 py-3 md:hidden"
         >
@@ -257,6 +229,28 @@ function Header({ name, links }) {
               )
             })}
           </ul>
+          {user && (
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-a5 pt-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#1f3d3c] bg-[#1f3d3c] text-sm font-bold text-white">
+                  {initial}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-a12">
+                    {user?.user_metadata?.full_name || email}
+                  </p>
+                  <p className="truncate text-xs text-gray-a10">{email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="shrink-0 cursor-pointer rounded-lg bg-red-a3 px-3 py-1.5 text-xs font-semibold text-red-a11 transition hover:bg-red-a4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-a8"
+              >
+                Log out
+              </button>
+            </div>
+          )}
         </nav>
       )}
     </header>

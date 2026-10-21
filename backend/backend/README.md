@@ -20,7 +20,7 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 * **Conversational Memory & Spatial Targeting**: Follow-ups remember the prior location or project; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying DB-locked and injection-safe. Chat answers carry map coordinates that fly to an LGU or zoom to a single project.
 * **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
 * **📍 Field Report Verification**: Authenticated citizen reports (`/api/reports`) with a server-authoritative ≤150m geofence check against DPWH coordinates (Pillar 1), ELA + perceptual-hash image forensics (Pillar 2), identity gating with a 3-reports/day limit and reputation scoring (Pillar 3), and verification badging (Pillar 5). Persisted to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
-* **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping.
+* **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping, plus a **passive periodic scraper** (APScheduler) that re-scrapes DPWH/PhilGEPS on a recurring interval (default ~90 days) and re-syncs into Neo4j automatically — even when deployed — with durable last-run state in Supabase (`/api/pipeline/schedule`).
 * **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
 
 ---
@@ -109,6 +109,17 @@ AUTH_COOKIE_SAMESITE="lax"
 
 # Apify (optional: only needed when running the scraper)
 APIFY_TOKEN="your_apify_api_token"
+
+# Passive periodic scraper (APScheduler) — keeps the deployed graph fresh by
+# re-scraping DPWH/PhilGEPS on a recurring interval and syncing into Neo4j.
+# Durable last-run state lives in Supabase (apply migration 0003). Disabled by
+# default; enable in production.
+PASSIVE_SCRAPE_ENABLED="false"
+PASSIVE_SCRAPE_INTERVAL_DAYS="90"      # ~3 months
+PASSIVE_SCRAPE_MAX_ITEMS="500"
+PASSIVE_SCRAPE_SYNC_AFTER="true"       # run Supabase→Neo4j sync after each scrape
+PASSIVE_SCRAPE_RUN_ON_STARTUP="false"  # if overdue at boot, run ~1 min after startup
+PASSIVE_SCRAPE_JOB_NAME="passive_scrape"
 ```
 
 > **Note**: Supabase is **no longer optional** — `SUPABASE_URL` + `SUPABASE_ANON_KEY`
@@ -254,6 +265,8 @@ async def private(user = Depends(get_current_user)):
 | `POST` | `/api/pipeline/scrape` | Trigger Apify DPWH portal web scraper in background task |
 | `GET` | `/api/pipeline/jobs` | List recent background jobs |
 | `GET` | `/api/pipeline/jobs/{job_id}` | Check status and logs of a specific background task |
+| `GET` | `/api/pipeline/schedule` | Passive scraper state: enabled, interval, last/next run |
+| `POST` | `/api/pipeline/schedule/run-now` | Force a passive scrape+sync cycle immediately (bypasses the interval guard) |
 
 ---
 

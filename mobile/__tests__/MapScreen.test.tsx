@@ -11,7 +11,7 @@ describe('MapScreen Component', () => {
     jest.clearAllMocks();
   });
 
-  test('renders MapHeader, CebuVectorMap, and Show Details pill when sheet is initially closed', () => {
+  test('renders MapHeader, Map View, and Show Details pill when sheet is initially closed', () => {
     const { getByTestId } = render(
       <MapScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
@@ -21,7 +21,7 @@ describe('MapScreen Component', () => {
     );
 
     expect(getByTestId('map-screen')).toBeTruthy();
-    expect(getByTestId('cebu-vector-map')).toBeTruthy();
+    expect(getByTestId('unified-cebu-map')).toBeTruthy();
     expect(getByTestId('map-header')).toBeTruthy();
     expect(getByTestId('map-filter-bar')).toBeTruthy();
     expect(getByTestId('sheet-show-pill-btn')).toBeTruthy();

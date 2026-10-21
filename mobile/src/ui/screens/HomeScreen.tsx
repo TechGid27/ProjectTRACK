@@ -78,6 +78,7 @@ export default function HomeScreen({
   const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
   const [liveSearchResults, setLiveSearchResults] = useState<ProjectDetail[] | null>(null);
 
+  const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
   const [backendStats, setBackendStats] = useState({
     total_projects: mockProjects.length,
     total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),
@@ -91,6 +92,17 @@ export default function HomeScreen({
     api.fetchTopProjects(8).then((res) => {
       if (isMounted && res && res.length > 0) {
         setLiveTopProjects(res);
+      }
+    });
+    api.fetchMapPins().then((pins) => {
+      if (isMounted && pins && pins.length > 0) {
+        const delayed = pins.filter(
+          (p) =>
+            p.tone === 'warning' ||
+            (p as any).status === 'Delayed' ||
+            (p as any).is_hotspot,
+        );
+        setLiveDelayedCount(delayed.length);
       }
     });
     api.fetchSummary().then((sum) => {
@@ -150,13 +162,21 @@ export default function HomeScreen({
   }, [liveSearchResults, liveTopProjects, filteredProjects]);
 
   // Delayed projects count
-  const delayedCount = useMemo(() => {
+  const delayedCount =
+    liveDelayedCount !== null
+      ? liveDelayedCount
+      : mockProjects.filter((p) => p.status === 'Delayed').length;
+  const _unusedDelayed = useMemo(() => {
+    if (liveDelayedCount !== null) return liveDelayedCount;
     return mockProjects.filter((p) => p.status === 'Delayed').length;
   }, []);
 
   // Total monitored budget
   // Total monitored budget calculated dynamically
-  const totalMonitoredBudget = useMemo(() => {
+  const totalMonitoredBudget =
+    backendStats.total_budget ||
+    mockProjects.reduce((sum, p) => sum + p.budget, 0);
+  const _unusedBudget = useMemo(() => {
     return backendStats.total_budget || mockProjects.reduce((sum, p) => sum + p.budget, 0);
   }, []);
 
@@ -319,7 +339,9 @@ export default function HomeScreen({
 
             <View style={[styles.kpiCard, styles.kpiCardInfo]}>
               <Text style={styles.kpiIcon}>🏛️</Text>
-              <Text style={styles.kpiValue}>53 of 53</Text>
+              <Text style={styles.kpiValue}>
+                {backendStats.total_lgus ? `${backendStats.total_lgus} of 53` : '53 of 53'}
+              </Text>
               <Text style={styles.kpiLabel}>LGUs Monitored</Text>
             </View>
           </View>

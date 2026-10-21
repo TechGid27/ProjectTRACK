@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -25,7 +25,7 @@ const cebuData = cebuDataRaw as unknown as MunicipalityCollection;
 const MIN_SCALE = 0.7;
 const MAX_SCALE = 12.0;
 
-interface CebuVectorMapProps {
+export interface CebuVectorMapProps {
   selectedMunicipality?: string | null;
   selectedPinId?: string | null;
   pins?: Pin[];
@@ -33,9 +33,15 @@ interface CebuVectorMapProps {
   onSelectPin?: (pin: Pin) => void;
   width?: number;
   height?: number;
+  testID?: string;
 }
 
-export default function CebuVectorMap({
+export interface CebuVectorMapRef {
+  animateToCoordinates: (lat: number, lng: number, zoom?: number) => void;
+  recenter: () => void;
+}
+
+function CebuVectorMapImpl({
   selectedMunicipality,
   selectedPinId,
   pins = [],
@@ -43,7 +49,8 @@ export default function CebuVectorMap({
   onSelectPin,
   width: propWidth,
   height: propHeight,
-}: CebuVectorMapProps) {
+  testID = 'cebu-vector-map',
+}: CebuVectorMapProps, ref) {
   const windowDims = useWindowDimensions();
 
   // Robust dimensions that will never collapse to 0 on web or initial mount
@@ -66,6 +73,26 @@ export default function CebuVectorMap({
 
   // 1. Calculate map bounds once
   const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      animateToCoordinates: (lat: number, lng: number, zoom = 3.5) => {
+        const pt = geoToSvgCoordinates(lng, lat, bounds, width, height, 16);
+        const targetScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoom));
+        const targetX = (width / 2 - pt.x) * targetScale;
+        const targetY = (height / 2 - pt.y) * targetScale;
+        scaleRef.current = targetScale;
+        offsetRef.current = { x: targetX, y: targetY };
+        setScale(targetScale);
+        setOffset({ x: targetX, y: targetY });
+      },
+      recenter: () => {
+        handleReset();
+      },
+    }),
+    [bounds, width, height],
+  );
 
   // Auto-zoom to selected municipality
   useEffect(() => {
@@ -325,7 +352,7 @@ export default function CebuVectorMap({
   return (
     <View
       style={[styles.container, { width, height }]}
-      testID="cebu-vector-map"
+      testID={testID}
       {...panResponder.panHandlers}
     >
       <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -652,6 +679,9 @@ export default function CebuVectorMap({
     </View>
   );
 }
+
+const CebuVectorMap = forwardRef<CebuVectorMapRef, CebuVectorMapProps>(CebuVectorMapImpl);
+export default CebuVectorMap;
 
 const styles = StyleSheet.create({
   container: {

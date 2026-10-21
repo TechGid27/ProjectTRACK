@@ -197,4 +197,21 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
 
     expect(mockOnSignOut).toHaveBeenCalledTimes(1);
   });
+
+  test('dynamically fetches and renders the 4 vital stats from api', async () => {
+    const { getByText, findByText } = render(
+      <HomeScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
+      />,
+    );
+
+    expect(getByText('Tracked Projects')).toBeTruthy();
+    expect(getByText('Monitored Budget')).toBeTruthy();
+    expect(getByText('Delayed / Flagged')).toBeTruthy();
+    expect(getByText('LGUs Monitored')).toBeTruthy();
+
+    expect(await findByText(/53 of 53/i)).toBeTruthy();
+  });
 });

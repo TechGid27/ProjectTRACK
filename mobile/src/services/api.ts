@@ -209,6 +209,8 @@ class ApiService {
           program_name: p.program_name,
           region: p.region,
           procurements: p.procurements || [],
+        report_count: typeof p.report_count === 'number' ? p.report_count : 0,
+        is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
         }));
       }
       return getProjectsByLocation(cleanLocation);
@@ -242,6 +244,8 @@ class ApiService {
         program_name: p.program_name,
         region: p.region,
         procurements: p.procurements || [],
+        report_count: typeof p.report_count === 'number' ? p.report_count : 0,
+        is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
       };
     } catch {
       return getProjectById(cleanId);
@@ -258,15 +262,21 @@ class ApiService {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        return data.map((p: any) => ({
-          id: p.id,
-          name: p.title || p.description || `Project ${p.id}`,
-          lat: p.latitude,
-          lng: p.longitude,
-          tone: p.status === 'Delayed' ? 'warning' : 'default',
-          lgu: p.location || p.municipality || cleanMunicipality || 'Cebu Province',
-          description: p.description || p.category,
-        }));
+        return data.map((p: any) => {
+          const reportCount = typeof p.report_count === 'number' ? p.report_count : 0;
+          const isHotspot = reportCount >= 2 || p.status === 'Flagged';
+          return {
+            id: p.id,
+            name: p.title || p.description || `Project ${p.id}`,
+            lat: p.latitude,
+            lng: p.longitude,
+            tone: (isHotspot ? 'hotspot' : p.status === 'Delayed' ? 'warning' : 'default') as Pin['tone'],
+            lgu: p.location || p.municipality || cleanMunicipality || 'Cebu Province',
+            description: p.description || p.category,
+            report_count: reportCount,
+            is_hotspot: isHotspot,
+          };
+        });
       }
       return localPins;
     } catch {

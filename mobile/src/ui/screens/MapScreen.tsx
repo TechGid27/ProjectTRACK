@@ -32,6 +32,7 @@ interface MapScreenProps {
   onNavigateToContractors: () => void;
   onSignOut?: () => void;
   initialLgu?: string | null;
+  initialProjectId?: string | null;
 }
 
 export default function MapScreen({
@@ -40,6 +41,7 @@ export default function MapScreen({
   onNavigateToContractors,
   onSignOut,
   initialLgu = null,
+  initialProjectId = null,
 }: MapScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
@@ -65,6 +67,12 @@ export default function MapScreen({
       setSheetState('expanded');
     }
   }, [initialLgu]);
+
+  useEffect(() => {
+    if (initialProjectId) {
+      handleSelectProjectById(initialProjectId);
+    }
+  }, [initialProjectId]);
 
   // Fetch live map pins on mount
   useEffect(() => {
@@ -235,12 +243,12 @@ export default function MapScreen({
   const mapHeight = useMemo(() => {
     const screenH = windowHeight || 640;
     if (sheetState === 'hidden') {
-      return Math.max(450, screenH - 160);
+      return Math.max(500, screenH - 100);
     }
     if (sheetState === 'minimized') {
-      return Math.max(380, screenH - 225);
+      return Math.max(420, screenH - 160);
     }
-    return Math.max(280, screenH * 0.48);
+    return Math.max(340, screenH * 0.55);
   }, [windowHeight, sheetState]);
 
   const mapWidth = Math.max(320, windowWidth || 360);

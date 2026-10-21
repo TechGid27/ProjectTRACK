@@ -96,4 +96,17 @@ describe('MapScreen Component', () => {
     expect(getByTestId('location-intel-sheet')).toBeTruthy();
     expect(getAllByText(/Bogo/i).length).toBeGreaterThan(0);
   });
+
+  test('passing initialProjectId selects project and opens detail modal', () => {
+    const { getByTestId } = render(
+      <MapScreen
+        initialProjectId="24HD0012"
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    expect(getByTestId('project-detail-modal')).toBeTruthy();
+  });
 });

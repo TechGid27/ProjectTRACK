@@ -94,6 +94,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [authScreen, setAuthScreen] = useState<AuthScreenName>(null);
   const [focusedLgu, setFocusedLgu] = useState<string | null>(null);
+  const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<{
     email: string;
   } | null>(null);
@@ -158,6 +159,7 @@ export default function App() {
                   <MapScreen
                     currentUser={currentUser}
                     initialLgu={focusedLgu}
+                    initialProjectId={focusedProjectId}
                     onNavigateToSignIn={() => setAuthScreen('signin')}
                     onNavigateToContractors={() => setActiveTab('contractors')}
                     onSignOut={handleSignOut}
@@ -167,6 +169,11 @@ export default function App() {
                 {activeTab === 'contractors' && (
                   <ContractorRankingScreen
                     onBackToMap={() => setActiveTab('map')}
+                    onNavigateToProjectOnMap={(lgu, projectId) => {
+                      setFocusedLgu(lgu || null);
+                      setFocusedProjectId(projectId);
+                      setActiveTab('map');
+                    }}
                   />
                 )}
               </View>

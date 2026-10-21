@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -57,6 +57,40 @@ export default function CebuVectorMap({
   const startOffset = useRef({ x: 0, y: 0 });
   const initialDistance = useRef<number | null>(null);
   const initialScale = useRef(1.0);
+
+  // Auto-zoom to selected municipality
+  useEffect(() => {
+    if (!selectedMunicipality) {
+      scaleRef.current = 1.0;
+      offsetRef.current = { x: 0, y: 0 };
+      setScale(1.0);
+      setOffset({ x: 0, y: 0 });
+      return;
+    }
+
+    const normTarget = normalizeLguName(selectedMunicipality).toLowerCase();
+    const targetFeature = (cebuData?.features || []).find(
+      (f: any) => normalizeLguName(f.properties?.name || '').toLowerCase() === normTarget,
+    );
+
+    if (targetFeature) {
+      const box = computeBoundingBox([targetFeature]);
+      if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
+        const centerLng = (box.minLng + box.maxLng) / 2;
+        const centerLat = (box.minLat + box.maxLat) / 2;
+        const centerPt = geoToSvgCoordinates(centerLng, centerLat, bounds, width, height, 16);
+
+        const zoomScale = 2.6;
+        const targetX = (width / 2 - centerPt.x) * zoomScale;
+        const targetY = (height / 2 - centerPt.y) * zoomScale;
+
+        scaleRef.current = zoomScale;
+        offsetRef.current = { x: targetX, y: targetY };
+        setScale(zoomScale);
+        setOffset({ x: targetX, y: targetY });
+      }
+    }
+  }, [selectedMunicipality, bounds, width, height]);
 
   // 1. Calculate map bounds once
   const bounds = useMemo(() => {
@@ -299,9 +333,16 @@ export default function CebuVectorMap({
 
               const pin = item.pins[0];
               const isSelected = selectedPinId === pin.id;
-              const coreColor = pin.tone === 'warning' ? '#f59e0b' : '#10b981';
+              const isHotspot =
+                pin.tone === 'hotspot' ||
+                pin.tone === 'danger' ||
+                Boolean(pin.is_hotspot) ||
+                (typeof pin.report_count === 'number' && pin.report_count >= 2);
+              const coreColor = isHotspot ? '#ef4444' : pin.tone === 'warning' ? '#f59e0b' : '#10b981';
               const glowColor =
-                pin.tone === 'warning'
+                isHotspot
+                  ? 'rgba(239, 68, 68, 0.45)'
+                  : pin.tone === 'warning'
                   ? 'rgba(245, 158, 11, 0.4)'
                   : 'rgba(16, 185, 129, 0.4)';
 
@@ -322,6 +363,27 @@ export default function CebuVectorMap({
                     });
                   }}
                 >
+                  {/* Concentric Hotspot Radar Rings */}
+                  {isHotspot && (
+                    <>
+                      <Circle
+                        cx={pin.x}
+                        cy={pin.y}
+                        r={isSelected ? 18 : 13}
+                        fill="none"
+                        stroke="#ef4444"
+                        strokeWidth={1.5}
+                        strokeDasharray="2,2"
+                        opacity={0.85}
+                      />
+                      <Circle
+                        cx={pin.x}
+                        cy={pin.y}
+                        r={isSelected ? 12 : 9}
+                        fill="rgba(239, 68, 68, 0.25)"
+                      />
+                    </>
+                  )}
                   {/* Outer Glow Circle */}
                   <Circle
                     cx={pin.x}

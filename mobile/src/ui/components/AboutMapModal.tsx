@@ -65,6 +65,14 @@ export default function AboutMapModal({ visible, onClose }: AboutMapModalProps) 
                 </View>
 
                 <View style={styles.legendItem}>
+                  <View style={[styles.diamondPin, styles.diamondRed]} />
+                  <Text style={styles.legendText}>
+                    <Text style={[styles.bold, { color: '#ef4444' }]}>Red Hotspot dot</Text> —
+                    Citizen anomaly hotspot (site flagged with multiple field reports)
+                  </Text>
+                </View>
+
+                <View style={styles.legendItem}>
                   <View style={styles.circleOutline} />
                   <Text style={styles.legendText}>
                     <Text style={styles.bold}>Grey outline</Text> — Municipality
@@ -177,6 +185,9 @@ const styles = StyleSheet.create({
   },
   diamondBlue: {
     backgroundColor: '#0284c7',
+  },
+  diamondRed: {
+    backgroundColor: '#ef4444',
   },
   circleOutline: {
     width: 12,

@@ -83,6 +83,19 @@ export default function ProjectDetailModal({
               style={styles.content}
               showsVerticalScrollIndicator={false}
             >
+              {/* Citizen Hotspot Alert Banner */}
+              {Boolean(project.is_hotspot || (project.report_count && project.report_count >= 2)) && (
+                <View style={styles.hotspotBanner}>
+                  <Text style={styles.hotspotIcon}>🚨</Text>
+                  <View style={styles.hotspotTextCol}>
+                    <Text style={styles.hotspotTitle}>Citizen Anomaly Hotspot</Text>
+                    <Text style={styles.hotspotDesc}>
+                      {project.report_count || 'Multiple'} citizen reports filed for this project site.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               {/* Main Title */}
               <Text style={styles.title}>{project.title}</Text>
 
@@ -231,6 +244,33 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 24,
     elevation: 20,
+  },
+  hotspotBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+    gap: 10,
+  },
+  hotspotIcon: {
+    fontSize: 20,
+  },
+  hotspotTextCol: {
+    flex: 1,
+  },
+  hotspotTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#b91c1c',
+  },
+  hotspotDesc: {
+    fontSize: 11,
+    color: '#991b1b',
+    marginTop: 2,
   },
   header: {
     flexDirection: 'row',

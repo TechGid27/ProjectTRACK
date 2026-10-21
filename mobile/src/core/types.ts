@@ -3,7 +3,9 @@ export interface Pin {
   name: string;
   lat: number;
   lng: number;
-  tone?: 'default' | 'accent' | 'warning';
+  tone?: 'default' | 'accent' | 'warning' | 'danger' | 'hotspot';
+  report_count?: number;
+  is_hotspot?: boolean;
   lgu: string;
   description?: string;
 }
@@ -56,6 +58,8 @@ export interface ProjectDetail {
   program_name?: string;
   region?: string;
   procurements?: ProcurementAward[];
+  report_count?: number;
+  is_hotspot?: boolean;
 }
 
 export interface BoundingBox {

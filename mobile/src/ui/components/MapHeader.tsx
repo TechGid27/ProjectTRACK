@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 
 interface MapHeaderProps {
-  totalLgus: number;
-  totalPins: number;
+  totalLgus?: number;
+  totalPins?: number;
   activeScreen?: 'home' | 'contractors' | 'signin' | 'signup';
   currentUser?: { email: string } | null;
   onSearch: (query: string) => void;
@@ -22,13 +22,9 @@ interface MapHeaderProps {
 }
 
 export default function MapHeader({
-  totalLgus,
-  totalPins,
-  activeScreen = 'home',
   currentUser,
   onSearch,
   onSignInPress,
-  onNavigateToContractors,
   onNavigateToHome,
   onSignOut,
   onResetSelection,
@@ -52,8 +48,8 @@ export default function MapHeader({
 
   return (
     <View style={styles.container} testID="map-header">
-      {/* Top Bar with Brand & Actions */}
-      <View style={styles.topRow}>
+      <View style={styles.headerRow}>
+        {/* 1. App Name */}
         <TouchableOpacity
           onPress={() => {
             onResetSelection?.();
@@ -64,32 +60,38 @@ export default function MapHeader({
           testID="brand-home-btn"
         >
           <View style={styles.badgeIndicator} />
-          <Text style={styles.brandTitle}>Reyal Or Pake</Text>
+          <Text style={styles.brandTitle}>ProjectTRACK</Text>
         </TouchableOpacity>
 
-        {/* Navigation Tabs & Auth */}
-        <View style={styles.actionRow}>
-          {onNavigateToContractors && (
+        {/* 2. Compact Centered Search Bar */}
+        <View style={styles.searchContainer}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search municipality or project..."
+            placeholderTextColor="#869e9a"
+            value={query}
+            onChangeText={handleChangeText}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            returnKeyType="search"
+            testID="map-search-input"
+          />
+          {query.length > 0 && (
             <TouchableOpacity
-              style={[
-                styles.navTab,
-                activeScreen === 'contractors' && styles.navTabActive,
-              ]}
-              onPress={onNavigateToContractors}
-              activeOpacity={0.7}
-              testID="nav-contractors-btn"
+              onPress={handleClear}
+              style={styles.clearButton}
+              accessibilityLabel="Clear search"
+              testID="clear-search-btn"
             >
-              <Text
-                style={[
-                  styles.navTabText,
-                  activeScreen === 'contractors' && styles.navTabTextActive,
-                ]}
-              >
-                Contractors
-              </Text>
+              <Text style={styles.clearText}>✕</Text>
             </TouchableOpacity>
           )}
+        </View>
 
+        {/* 3. Sign In / Profile Button */}
+        <View style={styles.authContainer}>
           {currentUser ? (
             <TouchableOpacity
               style={styles.userProfileBtn}
@@ -117,54 +119,16 @@ export default function MapHeader({
           )}
         </View>
       </View>
-
-      {/* Sub-header with LGU Stats and Search */}
-      <View style={styles.subHeaderRow}>
-        <View style={styles.statsBadge}>
-          <Text style={styles.statsBadgeText}>
-            {totalLgus} LGUs · {totalPins} Sites
-          </Text>
-        </View>
-      </View>
-
-      {/* Search Input Row */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchInputContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search municipality or project..."
-            placeholderTextColor="#869e9a"
-            value={query}
-            onChangeText={handleChangeText}
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-            returnKeyType="search"
-            testID="map-search-input"
-          />
-          {query.length > 0 && (
-            <TouchableOpacity
-              onPress={handleClear}
-              style={styles.clearButton}
-              accessibilityLabel="Clear search"
-              testID="clear-search-btn"
-            >
-              <Text style={styles.clearText}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1f3d3c', // Deep teal matching ProjectTRACK web theme
-    paddingTop: Platform.OS === 'ios' ? 48 : 36,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
+    backgroundColor: '#1f3d3c',
+    paddingTop: Platform.OS === 'ios' ? 50 : 38,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
     elevation: 8,
@@ -174,135 +138,107 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     zIndex: 10,
   },
-  topRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    gap: 10,
   },
   brandContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  badgeIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10b981', // Emerald active dot
-  },
-  brandTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: 0.3,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  navTab: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  navTabActive: {
-    backgroundColor: '#ffffff',
-  },
-  navTabText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#dceae8',
-  },
-  navTabTextActive: {
-    color: '#1f3d3c',
-  },
-  subHeaderRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  statsBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  statsBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#dceae8',
-  },
-  signInButton: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  signInText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1f3d3c',
-  },
-  userProfileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 12,
     gap: 6,
   },
-  avatarCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#10b981',
-    justifyContent: 'center',
-    alignItems: 'center',
+  badgeIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#34d399',
   },
-  avatarText: {
-    fontSize: 11,
-    fontWeight: '900',
+  brandTitle: {
+    fontSize: 16,
+    fontWeight: '800',
     color: '#ffffff',
+    letterSpacing: -0.3,
   },
-  signOutText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#ffffff',
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  searchInputContainer: {
+  searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
     height: 38,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   searchIcon: {
     fontSize: 13,
     marginRight: 6,
+    color: '#869e9a',
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
-    color: '#1f2937',
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '500',
     paddingVertical: 0,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   clearButton: {
     padding: 4,
   },
   clearText: {
-    color: '#9ca3af',
+    color: '#a3b8b5',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: 'bold',
+  },
+  authContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  signInButton: {
+    backgroundColor: '#34d399',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signInText: {
+    color: '#0f2423',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  userProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+  },
+  avatarCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#34d399',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#0f2423',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  signOutText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

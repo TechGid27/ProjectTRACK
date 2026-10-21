@@ -24,6 +24,9 @@ The mobile client is the planned companion app for on-the-ground infrastructure 
 | **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. |
 | **Client-Side Input Sanitizer** | Strict client-side hardening in `sanitizer.ts` strips Cypher/SQL injection vectors, script tags, control codes, and null bytes before user inputs reach the network. |
 | **Dynamic Backend Integration** | Live REST & GraphRAG queries for map pins (`/api/projects/map`), municipality civil works (`/api/projects/by-location`), contractor leaderboards (`/api/analytics/top-contractors`), and top projects (`/api/analytics/top-projects`) with graceful offline fallbacks. |
+| **Citizen Anomaly Hotspots** | Concentric red beacon markers highlight sites with multiple citizen-submitted field reports and anomalies, visible on the map and detailed in the project modal. |
+| **Contractor Project Drilldown** | Tapping any contractor displays their full civil works portfolio with one-touch `View on Map` navigation to zoom into the project site. |
+| **Maximized Viewport & Auto-Zoom** | Clean 3-item header (App Name, Search, Sign In) maximizes map viewport with automatic camera centering and zoom when an LGU is selected or queried. |
 
 > **Status:** Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up),
 > the API service layer, geofenced hardware capture, live report submission with

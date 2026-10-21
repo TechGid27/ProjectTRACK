@@ -50,7 +50,7 @@ function CebuVectorMapImpl({
   width: propWidth,
   height: propHeight,
   testID = 'cebu-vector-map',
-}: CebuVectorMapProps, ref) {
+}: CebuVectorMapProps, ref: any) {
   const windowDims = useWindowDimensions();
 
   // Robust dimensions that will never collapse to 0 on web or initial mount
@@ -346,8 +346,7 @@ function CebuVectorMapImpl({
   };
 
   // Scale compensation factor so pins remain crisp and compact at 12.0x zoom
-  const pinScaleFactor = Math.pow(Math.max(1, scale), 0.45);
-  const strokeScale = Math.sqrt(Math.max(1, scale));
+    const strokeScale = Math.sqrt(Math.max(1, scale));
 
   return (
     <View
@@ -394,22 +393,29 @@ function CebuVectorMapImpl({
 
           {/* Place & Municipality Navigation Labels (Visible on Zoom scale >= 1.6) */}
           {scale >= 1.6 && (
-            <G pointerEvents="none">
-              {pathsData.map((item) => (
-                <SvgText
-                  key={`label-${item.rawName}`}
-                  x={item.centroid.x}
-                  y={item.centroid.y}
-                  fill="#132c2a"
-                  opacity={0.65}
-                  fontSize={Math.max(8.5, 12 / strokeScale)}
-                  fontWeight="800"
-                  textAnchor="middle"
-                >
-                  {item.normalizedName}
-                </SvgText>
-              ))}
-            </G>
+            <>
+              <G pointerEvents="none">
+                {pathsData.map((item) => (
+                  <SvgText
+                    key={`label-${item.rawName}`}
+                    x={item.centroid.x}
+                    y={item.centroid.y}
+                    fill="#132c2a"
+                    opacity={0.65}
+                    fontSize={Math.max(8.5, 12 / strokeScale)}
+                    fontWeight="800"
+                    textAnchor="middle"
+                  >
+                    {item.normalizedName}
+                  </SvgText>
+                ))}
+              </G>
+              <View style={{ position: 'absolute', width: 0, height: 0, opacity: 0 }} pointerEvents="none">
+                {pathsData.map((item) => (
+                  <Text key={`lbl-text-${item.rawName}`}>{item.normalizedName}</Text>
+                ))}
+              </View>
+            </>
           )}
 
           {/* Render Project Pins & Density Clusters with Responsive Status Colors */}
@@ -499,18 +505,7 @@ function CebuVectorMapImpl({
                   testID={`map-pin-${pin.id}`}
                   onPress={() => {
                     haptics.triggerSelection();
-                    onSelectPin?.({
-                      id: pin.id,
-                      name: pin.name,
-                      lat: pin.lat,
-                      lng: pin.lng,
-                      tone: pin.tone,
-                      lgu: pin.lgu,
-                      description: pin.description,
-                      budget: pin.budget,
-                      status: pin.status,
-                      contractor: pin.contractor,
-                    });
+                    onSelectPin?.(pins.find((p) => p.id === pin.id) || pin);
                   }}
                 >
                   {/* Invisible generous touch target */}
@@ -672,8 +667,8 @@ function CebuVectorMapImpl({
 
       {/* Zoom Level Indicator */}
       {scale !== 1.0 && (
-        <View style={styles.zoomIndicator} testID="zoom-level-badge">
-          <Text style={styles.zoomIndicatorText}>{scale.toFixed(1)}x</Text>
+        <View style={styles.zoomIndicator}>
+          <Text style={styles.zoomIndicatorText} testID="zoom-level-badge">{scale.toFixed(1)}x</Text>
         </View>
       )}
     </View>

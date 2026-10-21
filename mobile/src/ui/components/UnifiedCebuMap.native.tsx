@@ -1,6 +1,14 @@
 import React, { forwardRef } from 'react';
-import MapLibreCebuMap, { MapLibreCebuMapRef } from './MapLibreCebuMap';
+import MapLibreCebuMap from './MapLibreCebuMap';
+import CebuVectorMap from './CebuVectorMap';
 import { Pin } from '../../core/types';
+
+let MapLibreGL: any = null;
+try {
+  MapLibreGL = require('@maplibre/maplibre-react-native');
+} catch {
+  MapLibreGL = null;
+}
 
 export interface UnifiedCebuMapProps {
   selectedMunicipality?: string | null;
@@ -19,6 +27,9 @@ export interface UnifiedCebuMapRef {
 }
 
 const UnifiedCebuMap = forwardRef<UnifiedCebuMapRef, UnifiedCebuMapProps>((props, ref) => {
+  if (!MapLibreGL) {
+    return <CebuVectorMap ref={ref as any} {...props} />;
+  }
   return <MapLibreCebuMap ref={ref as any} {...props} />;
 });
 

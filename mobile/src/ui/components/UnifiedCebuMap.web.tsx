@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import CebuVectorMap, { CebuVectorMapRef } from './CebuVectorMap';
+import CebuVectorMap from './CebuVectorMap';
 import { Pin } from '../../core/types';
 
 export interface UnifiedCebuMapProps {

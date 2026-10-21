@@ -166,19 +166,12 @@ export default function HomeScreen({
     liveDelayedCount !== null
       ? liveDelayedCount
       : mockProjects.filter((p) => p.status === 'Delayed').length;
-  const _unusedDelayed = useMemo(() => {
-    if (liveDelayedCount !== null) return liveDelayedCount;
-    return mockProjects.filter((p) => p.status === 'Delayed').length;
-  }, []);
 
   // Total monitored budget
   // Total monitored budget calculated dynamically
   const totalMonitoredBudget =
     backendStats.total_budget ||
     mockProjects.reduce((sum, p) => sum + p.budget, 0);
-  const _unusedBudget = useMemo(() => {
-    return backendStats.total_budget || mockProjects.reduce((sum, p) => sum + p.budget, 0);
-  }, []);
 
   // Filtered LGUs in modal
   const modalLgus = useMemo(() => {

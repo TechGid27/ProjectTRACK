@@ -1,10 +1,9 @@
-import React, { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
+import React, { useRef, useState, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { Pin } from '../../core/types';
@@ -172,7 +171,7 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
 
     // 2. Responsive Barangay Micro-Labels GeoJSON
     const barangayGeoJson = useMemo(() => {
-      const features = ALL_BARANGAY_FEATURES.map((b, idx) => ({
+      const features = ALL_BARANGAY_FEATURES.map((b: any, idx: number) => ({
         type: 'Feature',
         id: `bgy-${idx}`,
         properties: {
@@ -220,6 +219,13 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
             <TouchableOpacity style={styles.controlBtn} onPress={handleRecenter} testID="recenter-btn">
               <Text style={styles.recenterIcon}>🎯</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Dynamic Zoom Level Badge in Fallback */}
+          <View style={styles.zoomBadge}>
+            <Text style={styles.zoomBadgeText} testID="zoom-level-badge">
+              {currentZoom.toFixed(1)}x
+            </Text>
           </View>
         </View>
       );

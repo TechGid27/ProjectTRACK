@@ -4,12 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
-import MapView, { Marker, Polygon, Region } from 'react-native-maps';
 import { Pin } from '../../core/types';
-import { normalizeCoordinates, normalizeLguName, CEBU_GEO_BOUNDS } from '../../core/geoUtils';
+import { normalizeCoordinates, normalizeLguName } from '../../core/geoUtils';
 import { ALL_BARANGAY_FEATURES } from '../../core/barangayData';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 import { haptics } from '../../services/haptics';
@@ -29,12 +27,56 @@ export interface CebuNativeMapViewRef {
   recenter: () => void;
 }
 
+export interface Region {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}
+
 const INITIAL_REGION: Region = {
   latitude: 10.3157,
   longitude: 123.8854,
   latitudeDelta: 1.8,
   longitudeDelta: 1.2,
 };
+
+let MapView: any = View;
+let Marker: any = TouchableOpacity;
+let Polygon: any = View;
+try {
+  const RNM = require('react-native-maps');
+  MapView = RNM.default || RNM;
+  Marker = RNM.Marker || TouchableOpacity;
+  Polygon = RNM.Polygon || View;
+} catch {
+  MapView = forwardRef((props: any, ref: any) => {
+    useImperativeHandle(ref, () => ({
+      animateToRegion: (_r: any, _d?: number) => {},
+    }));
+    return <View testID={props.testID} {...props} />;
+  });
+  Marker = forwardRef((props: any, ref: any) => (
+    <TouchableOpacity
+      ref={ref}
+      testID={props.testID}
+      onPress={props.onPress}
+      activeOpacity={0.8}
+      {...props}
+    >
+      {props.children}
+    </TouchableOpacity>
+  ));
+  Polygon = forwardRef((props: any, ref: any) => (
+    <TouchableOpacity
+      ref={ref}
+      testID={props.testID}
+      onPress={props.onPress}
+      activeOpacity={0.8}
+      {...props}
+    />
+  ));
+}
 
 // Subtle, clean civic map styling (matching Website's CartoDB Positron aesthetic)
 const CIVIC_MAP_STYLE = [
@@ -109,7 +151,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
     },
     ref,
   ) => {
-    const mapRef = useRef<MapView>(null);
+    const mapRef = useRef<any>(null);
     const windowDims = useWindowDimensions();
     const mapWidth = width || windowDims.width || 360;
     const mapHeight = height || 500;
@@ -134,7 +176,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
     // Expose imperative methods for camera flight from Chatbot or parent screens
     useImperativeHandle(ref, () => ({
       animateToCoordinates: (lat: number, lng: number, delta = 0.06) => {
-        mapRef.current?.animateToRegion(
+        mapRef.current?.animateToRegion?.(
           {
             latitude: lat,
             longitude: lng,
@@ -145,7 +187,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
         );
       },
       recenter: () => {
-        mapRef.current?.animateToRegion(INITIAL_REGION, 600);
+        mapRef.current?.animateToRegion?.(INITIAL_REGION, 600);
       },
     }));
 
@@ -154,7 +196,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
       haptics.triggerLightImpact();
       const nextLatDelta = Math.max(0.005, currentRegion.latitudeDelta * 0.5);
       const nextLngDelta = Math.max(0.005, currentRegion.longitudeDelta * 0.5);
-      mapRef.current?.animateToRegion(
+      mapRef.current?.animateToRegion?.(
         {
           ...currentRegion,
           latitudeDelta: nextLatDelta,
@@ -169,7 +211,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
       haptics.triggerLightImpact();
       const nextLatDelta = Math.min(3.5, currentRegion.latitudeDelta * 2.0);
       const nextLngDelta = Math.min(2.5, currentRegion.longitudeDelta * 2.0);
-      mapRef.current?.animateToRegion(
+      mapRef.current?.animateToRegion?.(
         {
           ...currentRegion,
           latitudeDelta: nextLatDelta,
@@ -182,7 +224,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
     // Center-Right Recenter (🎯)
     const handleRecenter = () => {
       haptics.triggerSelection();
-      mapRef.current?.animateToRegion(INITIAL_REGION, 500);
+      mapRef.current?.animateToRegion?.(INITIAL_REGION, 500);
     };
 
     // Animate to selected LGU center when selectedMunicipality changes
@@ -194,7 +236,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
       );
       if (feature && (feature as any).properties?.center) {
         const center = (feature as any).properties.center;
-        mapRef.current?.animateToRegion(
+        mapRef.current?.animateToRegion?.(
           {
             latitude: center.lat,
             longitude: center.lng,
@@ -303,7 +345,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
       if (selectedMunicipality) {
         const norm = normalizeLguName(selectedMunicipality).toLowerCase();
         return ALL_BARANGAY_FEATURES.filter(
-          (b) => normalizeLguName(b.lgu).toLowerCase() === norm,
+          (b: any) => normalizeLguName(b.lgu).toLowerCase() === norm,
         );
       }
       return ALL_BARANGAY_FEATURES.slice(0, 150);
@@ -367,7 +409,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
 
           {/* Barangay Micro-Labels (rendered ONLY when zoomed in, compact and readable) */}
           {showBarangayLabels &&
-            relevantBarangays.map((b, idx) => (
+            relevantBarangays.map((b: any, idx: number) => (
               <Marker
                 key={`bgy-${b.lgu}-${b.name}-${idx}`}
                 coordinate={{ latitude: b.lat, longitude: b.lng }}
@@ -393,7 +435,7 @@ const CebuNativeMapView = forwardRef<CebuNativeMapViewRef, CebuNativeMapViewProp
                   anchor={{ x: 0.5, y: 0.5 }}
                   onPress={() => {
                     haptics.triggerSelection();
-                    mapRef.current?.animateToRegion(
+                    mapRef.current?.animateToRegion?.(
                       {
                         latitude: item.lat,
                         longitude: item.lng,

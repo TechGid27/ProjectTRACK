@@ -27,6 +27,8 @@ interface ChatBotModalProps {
   onClose: () => void;
   onSelectProject?: (projectId: string) => void;
   onFocusLgu?: (lguName: string) => void;
+  currentLgu?: string | null;
+  activeProjects?: any[];
 }
 
 const SUGGESTIONS = [

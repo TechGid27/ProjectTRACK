@@ -403,8 +403,7 @@ class ApiService {
       }
       return { user: data.user || data };
     } catch {
-      // Offline fallback for testing
-      return { user: { email: cleanEmail, id: 'offline-user' } };
+      return { user: null, error: 'Network error: Unable to reach authentication server.' };
     }
   }
 
@@ -431,7 +430,7 @@ class ApiService {
       }
       return { user: data.user || data, message: data.message };
     } catch {
-      return { user: { email: cleanEmail, id: 'offline-user' }, message: 'Account created (offline mode).' };
+      return { user: null, error: 'Network error: Unable to reach authentication server.' };
     }
   }
 

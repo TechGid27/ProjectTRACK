@@ -46,7 +46,14 @@ function renderTextWithProjectChips(text, onChipClick) {
 }
 
 export default function ChatCopilot() {
-  const { setSpatialData, highlightProject, setSelectedProject, projectDots } = useMapContext()
+  const {
+    setSpatialData,
+    highlightProject,
+    setSelectedProject,
+    clearSpatialData,
+    setHighlightedProjectId,
+    projectDots,
+  } = useMapContext()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -97,6 +104,14 @@ export default function ChatCopilot() {
 
   const handleClear = () => {
     setMessages([])
+    // The map pins, LGU selection, and project highlights came from this
+    // conversation's spatial context — clearing the chat must clear them too.
+    clearSpatialData()
+    setSelectedProject(null)
+    setHighlightedProjectId(null)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('projecttrack:clear-map'))
+    }
   }
 
   const send = async (text) => {
@@ -183,16 +198,15 @@ export default function ChatCopilot() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[1000] font-sans">
+    <div className="fixed bottom-5 right-3 z-[1000] font-sans sm:bottom-5 sm:right-5">
       {!open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="group flex cursor-pointer items-center gap-2.5 rounded-full border border-teal-500/40 bg-black/80 px-4 py-2.5 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl transition hover:scale-105 hover:bg-black/95 hover:border-teal-400 active:scale-95"
+          className="group flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-500/40 bg-black/80 px-3 py-1.5 text-[11px] font-semibold text-white shadow-2xl backdrop-blur-xl transition hover:scale-105 hover:border-teal-400 hover:bg-black/95 active:scale-95"
         >
-          <span className="flex h-2.5 w-2.5 items-center justify-center">
-            <span className="absolute h-2.5 w-2.5 animate-ping rounded-full bg-teal-400 opacity-75" />
-            <span className="relative h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_8px_#2dd4bf]" />
+          <span className="flex h-2 w-2 items-center justify-center">
+            <span className="relative h-1.5 w-1.5 rounded-full bg-teal-400 shadow-[0_0_6px_#2dd4bf]" />
           </span>
           <span className="bg-gradient-to-r from-teal-200 to-emerald-200 bg-clip-text text-transparent">
             ✦ Ask ProjectTRACK AI
@@ -203,7 +217,7 @@ export default function ChatCopilot() {
           role="dialog"
           aria-label="ProjectTRACK AI Copilot"
           aria-modal="false"
-          className="flex h-[520px] w-[375px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-white/20 bg-black/85 shadow-2xl backdrop-blur-2xl transition sm:w-[410px]"
+          className="flex h-[min(32.5rem,calc(100dvh-6.5rem))] w-[375px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-white/20 bg-black/85 shadow-2xl backdrop-blur-2xl transition sm:w-[410px]"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">

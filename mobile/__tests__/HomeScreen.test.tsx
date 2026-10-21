@@ -122,7 +122,7 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
     const bogoPill = getByTestId('muni-grid-btn-City of Bogo');
     fireEvent.press(bogoPill);
 
-    expect(mockOnNavigateToMap).toHaveBeenCalledWith('City of Bogo');
+    expect(mockOnNavigateToMap).toHaveBeenCalledWith('Bogo City');
   });
 
   test('opening and closing All 53 LGUs modal', () => {

@@ -32,6 +32,8 @@ interface MapScreenProps {
   onNavigateToContractors: () => void;
   onSignOut?: () => void;
   initialLgu?: string | null;
+  initialProjectId?: string | null;
+  initialSheetState?: SheetDisplayState;
 }
 
 export default function MapScreen({
@@ -40,6 +42,8 @@ export default function MapScreen({
   onNavigateToContractors,
   onSignOut,
   initialLgu = null,
+  initialProjectId = null,
+  initialSheetState = 'hidden',
 }: MapScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
@@ -53,18 +57,71 @@ export default function MapScreen({
   const [isAuditorModalOpen, setIsAuditorModalOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<MapFilterOption>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sheetState, setSheetState] = useState<SheetDisplayState>('expanded');
+  const [sheetState, setSheetState] = useState<SheetDisplayState>(initialSheetState);
+  const [mapPins, setMapPins] = useState<Pin[]>(initialPins || pins || []);
+  const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>(
+    initialLgu ? getProjectsByLocation(initialLgu) : mockProjects,
+  );
 
   useEffect(() => {
     if (initialLgu) {
       setSelectedLgu(normalizeLguName(initialLgu));
-      setSheetState('expanded');
+      if (initialSheetState === 'expanded') {
+        setSheetState('expanded');
+      }
     }
   }, [initialLgu]);
 
+  useEffect(() => {
+    if (initialProjectId) {
+      handleSelectProjectById(initialProjectId);
+    }
+  }, [initialProjectId]);
+
+  // Fetch live map pins on mount
+  useEffect(() => {
+    let isMounted = true;
+    api
+      .fetchMapPins()
+      .then((livePins) => {
+        if (isMounted && livePins && livePins.length > 0) {
+          setMapPins(livePins);
+        }
+      })
+      .catch(() => {
+        // Retain initial pins
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch live projects by location whenever selectedLgu or searchQuery changes
+  useEffect(() => {
+    const loc = selectedLgu || searchQuery.trim();
+    if (!loc) {
+      setActiveProjects(mockProjects);
+      return;
+    }
+    let isMounted = true;
+    api
+      .fetchProjectsByLocation(loc, 30)
+      .then((projects) => {
+        if (isMounted && projects && projects.length > 0) {
+          setActiveProjects(projects);
+        }
+      })
+      .catch(() => {
+        // Retain current projects
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLgu, searchQuery]);
+
   // 1. Filter pins based on search query, selected LGU, and activeFilter
   const filteredPins = useMemo(() => {
-    let result = initialPins || pins || [];
+    let result = mapPins;
     if (selectedLgu) {
       const norm = normalizeLguName(selectedLgu).toLowerCase();
       result = result.filter(
@@ -96,18 +153,7 @@ export default function MapScreen({
       result = result.filter((p) => highBudgetIds.has(p.id));
     }
     return result;
-  }, [selectedLgu, searchQuery, activeFilter]);
-
-  // 2. Filter projects for Location Intel sheet
-  const activeProjects = useMemo(() => {
-    if (selectedLgu) {
-      return getProjectsByLocation(selectedLgu);
-    }
-    if (searchQuery.trim()) {
-      return getProjectsByLocation(searchQuery);
-    }
-    return mockProjects;
-  }, [selectedLgu, searchQuery]);
+  }, [mapPins, selectedLgu, searchQuery, activeFilter]);
 
   const handleSelectMunicipality = (name: string) => {
     const normalized = normalizeLguName(name);
@@ -121,11 +167,8 @@ export default function MapScreen({
   const handleSelectPin = (pin: Pin) => {
     setSelectedPinId(pin.id);
     setSelectedLgu(pin.lgu);
-    if (sheetState === 'hidden') {
-      setSheetState('expanded');
-    }
 
-    const project = getProjectById(pin.id) || {
+    const optimisticProject: ProjectDetail = getProjectById(pin.id) || {
       id: pin.id,
       title: pin.name,
       contractor: 'Contractor on Record',
@@ -134,13 +177,33 @@ export default function MapScreen({
       lgu: pin.lgu,
       scope: pin.description,
     };
-    setSelectedProject(project);
+    setSelectedProject(optimisticProject);
     setIsDetailModalOpen(true);
+
+    api.fetchProjectById(pin.id).then((live) => {
+      if (live) {
+        setSelectedProject(live);
+      }
+    });
   };
 
   const handleSelectProjectCard = (project: ProjectDetail) => {
     setSelectedProject(project);
     setIsDetailModalOpen(true);
+  };
+
+  const handleSelectProjectById = (projectId: string) => {
+    const optimistic = getProjectById(projectId);
+    if (optimistic) {
+      setSelectedProject(optimistic);
+      setIsDetailModalOpen(true);
+    }
+    api.fetchProjectById(projectId).then((p) => {
+      if (p) {
+        setSelectedProject(p);
+        setIsDetailModalOpen(true);
+      }
+    });
   };
 
   const handleReportAnomaly = (targetLgu: string) => {
@@ -181,12 +244,12 @@ export default function MapScreen({
   const mapHeight = useMemo(() => {
     const screenH = windowHeight || 640;
     if (sheetState === 'hidden') {
-      return Math.max(450, screenH - 160);
+      return Math.max(500, screenH - 100);
     }
     if (sheetState === 'minimized') {
-      return Math.max(380, screenH - 225);
+      return Math.max(420, screenH - 160);
     }
-    return Math.max(280, screenH * 0.48);
+    return Math.max(340, screenH * 0.55);
   }, [windowHeight, sheetState]);
 
   const mapWidth = Math.max(320, windowWidth || 360);
@@ -196,7 +259,7 @@ export default function MapScreen({
       {/* Top Floating App Header with Navigation */}
       <MapHeader
         totalLgus={53}
-        totalPins={(initialPins || pins || []).length}
+        totalPins={mapPins.length}
         currentUser={currentUser}
         onSearch={setSearchQuery}
         onSignInPress={onNavigateToSignIn}
@@ -297,6 +360,8 @@ export default function MapScreen({
       <ChatBotModal
         visible={isChatBotOpen}
         onClose={() => setIsChatBotOpen(false)}
+        onSelectProject={handleSelectProjectById}
+        onFocusLgu={handleSelectMunicipality}
       />
 
       <ProjectDetailModal
@@ -333,24 +398,26 @@ const styles = StyleSheet.create({
   },
   floatingChatBtn: {
     position: 'absolute',
-    bottom: 24,
-    right: 20,
+    bottom: 76,
+    right: 16,
     backgroundColor: '#1f3d3c',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 8,
-    zIndex: 99,
+    zIndex: 90,
   },
   floatingChatIcon: {
-    fontSize: 16,
+    fontSize: 15,
   },
   floatingChatText: {
     fontSize: 13,
@@ -359,20 +426,22 @@ const styles = StyleSheet.create({
   },
   floatingAboutBtn: {
     position: 'absolute',
-    bottom: 24,
-    left: 20,
-    backgroundColor: 'rgba(31, 61, 60, 0.9)',
+    bottom: 76,
+    left: 16,
+    backgroundColor: 'rgba(31, 61, 60, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 6,
-    zIndex: 99,
+    zIndex: 90,
   },
   floatingAboutText: {
     fontSize: 12,
@@ -381,7 +450,7 @@ const styles = StyleSheet.create({
   },
   floatingShowSheetPill: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 16,
     alignSelf: 'center',
     backgroundColor: '#162e2d',
     borderWidth: 1.5,
@@ -392,6 +461,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 24,
+    maxWidth: '90%',
     ...Platform.select({
       web: {
         boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
@@ -404,7 +474,7 @@ const styles = StyleSheet.create({
         elevation: 10,
       },
     }),
-    zIndex: 95,
+    zIndex: 90,
   },
   floatingShowSheetIcon: {
     fontSize: 16,

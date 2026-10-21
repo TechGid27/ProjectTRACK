@@ -22,6 +22,11 @@ The mobile client is the planned companion app for on-the-ground infrastructure 
 | **Offline-First Architecture** | An in-memory outbox queues audits captured offline; `api.syncPendingAudits()` POSTs them to the backend when connectivity returns, marking each synced on success. |
 | **Conversational Field Assistant** | On-device access to the GraphRAG chat via SSE streaming for contextual project queries. |
 | **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. |
+| **Client-Side Input Sanitizer** | Strict client-side hardening in `sanitizer.ts` strips Cypher/SQL injection vectors, script tags, control codes, and null bytes before user inputs reach the network. |
+| **Dynamic Backend Integration** | Live REST & GraphRAG queries for map pins (`/api/projects/map`), municipality civil works (`/api/projects/by-location`), contractor leaderboards (`/api/analytics/top-contractors`), and top projects (`/api/analytics/top-projects`) with graceful offline fallbacks. |
+| **Citizen Anomaly Hotspots** | Concentric red beacon markers highlight sites with multiple citizen-submitted field reports and anomalies, visible on the map and detailed in the project modal. |
+| **Contractor Project Drilldown** | Tapping any contractor displays their full civil works portfolio with one-touch `View on Map` navigation to zoom into the project site. |
+| **Maximized Viewport & Auto-Zoom** | Clean 3-item header (App Name, Search, Sign In) maximizes map viewport with automatic camera centering and zoom when an LGU is selected or queried. |
 
 > **Status:** Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up),
 > the API service layer, geofenced hardware capture, live report submission with
@@ -121,8 +126,19 @@ The mobile client communicates with the ProjectTrack FastAPI backend:
 | Endpoint | Usage |
 | :--- | :--- |
 | `GET /api/projects` | Fetch project listings for map display |
-| `GET /api/projects/{id}` | Retrieve individual project details |
-| `POST /api/chat` | Send queries to the GraphRAG assistant |
+| `GET /api/projects/{id}` | Retrieve individual project details (including disbursements, funding source, PhilGEPS awards) |
+| `GET /api/projects/map` | Retrieve lightweight geocoded pins for map visualization |
+| `GET /api/projects/by-location` | Aggregate project listings, count, and budget for a Cebu municipality |
+| `GET /api/projects/search` | Sub-50ms full-text search across projects, contractors, and locations |
+| `GET /api/analytics/summary` | Knowledge graph statistics across Cebu Province |
+| `GET /api/analytics/top-contractors` | Contractor rankings by cumulative infrastructure budget |
+| `GET /api/analytics/top-projects` | Highest budget infrastructure projects across Cebu |
+| `GET /api/analytics/appropriations` | GAA budget appropriations aggregated by district office |
+| `GET /api/analytics/procurement` | PhilGEPS bidding awards attached to Cebu contractors |
+| `POST /api/auth/signin` | Supabase password authentication with HTTP-only session cookie |
+| `POST /api/auth/signup` | Supabase citizen and verifier account registration |
+| `GET /api/auth/session` | Active session status and transparent token refresh |
+| `POST /api/chat` | Send queries to GraphRAG assistant (returns answers, sources, spatial camera targets) |
 | `GET /api/chat/stream` | SSE streaming for real-time AI responses |
 | `POST /api/reports` | Submit a geofenced, forensic field report (multipart, session cookie) |
 | `GET /api/reports/{id}` | List a project's reports with verification badges |

@@ -1,3 +1,4 @@
+import { topContractors } from './contractors';
 import { ProjectDetail, LguSummary } from '../core/types';
 import { normalizeLguName } from '../core/geoUtils';
 
@@ -159,8 +160,6 @@ export function computeLguSummary(lguName: string): LguSummary {
 }
 
 export function getTopContractors(limit: number = 20) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { topContractors } = require('./contractors');
   return (topContractors || []).slice(0, limit);
 }
 

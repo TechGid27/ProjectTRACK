@@ -79,6 +79,46 @@ describe('api service', () => {
     expect(options.body).toBeInstanceOf(FormData)
     expect(options.body.get('project_id')).toBe('24HH0043')
     expect(options.headers.Authorization).toBeUndefined()
+    // No GPS supplied → fields omitted so backend tags unverified_no_gps.
+    expect(options.body.get('latitude')).toBeNull()
+    expect(options.body.get('longitude')).toBeNull()
+  })
+
+  it('submitAnomalyReport appends GPS coordinates when provided', async () => {
+    const saved = {
+      id: 'def456',
+      project_id: '24HH0043',
+      geofence_status: 'inside',
+      distance_meters: 45,
+      badge: { label: 'On-Site Verified', tone: 'success' },
+    }
+    fetch.mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => saved,
+    })
+    const result = await submitAnomalyReport({
+      projectId: '24HH0043',
+      description: 'On-site observation with GPS verification enabled here.',
+      latitude: 10.3287,
+      longitude: 123.9286,
+    })
+    expect(result.badge).toEqual({ label: 'On-Site Verified', tone: 'success' })
+    const [, options] = fetch.mock.calls[0]
+    expect(options.body.get('latitude')).toBe('10.3287')
+    expect(options.body.get('longitude')).toBe('123.9286')
+  })
+
+  it('submitAnomalyReport omits partial GPS (latitude only)', async () => {
+    fetch.mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 'x' }) })
+    await submitAnomalyReport({
+      projectId: '24HH0043',
+      description: 'Only one coordinate was captured by the client somehow.',
+      latitude: 10.3287,
+    })
+    const [, options] = fetch.mock.calls[0]
+    expect(options.body.get('latitude')).toBeNull()
+    expect(options.body.get('longitude')).toBeNull()
   })
 
   it('submitAnomalyReport throws on server errors', async () => {

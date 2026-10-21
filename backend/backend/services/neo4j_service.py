@@ -178,10 +178,11 @@ class Neo4jService:
                p.budget_numeric AS budget_num,
                p.amount_paid AS amount_paid,
                p.source_of_funds AS source_of_funds,
+               coalesce(p.report_count, 0) AS report_count,
                p.program_name AS program_name,
                p.component_categories AS component_categories,
                p.region AS region,
-               p.report_count AS report_count,
+
                p.has_satellite_image AS has_satellite_image,
                p.gps_source AS gps_source,
                p.status AS status,

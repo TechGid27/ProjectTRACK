@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   PanResponder,
+  Platform,
 } from 'react-native';
 import Svg, { Path, G, Circle, Text as SvgText } from 'react-native-svg';
 import { Pin, MunicipalityCollection } from '../../core/types';
@@ -14,11 +15,15 @@ import {
   geoToSvgCoordinates,
   normalizeLguName,
   clusterPins,
+  formatCurrencyPHP,
 } from '../../core/geoUtils';
 import { haptics } from '../../services/haptics';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 const cebuData = cebuDataRaw as unknown as MunicipalityCollection;
+
+const MIN_SCALE = 0.7;
+const MAX_SCALE = 12.0;
 
 interface CebuVectorMapProps {
   selectedMunicipality?: string | null;
@@ -57,13 +62,46 @@ export default function CebuVectorMap({
   const startOffset = useRef({ x: 0, y: 0 });
   const initialDistance = useRef<number | null>(null);
   const initialScale = useRef(1.0);
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
 
   // 1. Calculate map bounds once
-  const bounds = useMemo(() => {
-    return computeBoundingBox(cebuData?.features || []);
-  }, []);
+  const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
 
-  // 2. Build SVG path commands for all municipalities
+  // Auto-zoom to selected municipality
+  useEffect(() => {
+    if (!selectedMunicipality) {
+      scaleRef.current = 1.0;
+      offsetRef.current = { x: 0, y: 0 };
+      setScale(1.0);
+      setOffset({ x: 0, y: 0 });
+      return;
+    }
+
+    const normTarget = normalizeLguName(selectedMunicipality).toLowerCase();
+    const targetFeature = (cebuData?.features || []).find(
+      (f: any) => normalizeLguName(f.properties?.name || '').toLowerCase() === normTarget,
+    );
+
+    if (targetFeature) {
+      const box = computeBoundingBox([targetFeature]);
+      if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
+        const centerLng = (box.minLng + box.maxLng) / 2;
+        const centerLat = (box.minLat + box.maxLat) / 2;
+        const centerPt = geoToSvgCoordinates(centerLng, centerLat, bounds, width, height, 16);
+
+        const zoomScale = 3.2;
+        const targetX = (width / 2 - centerPt.x) * zoomScale;
+        const targetY = (height / 2 - centerPt.y) * zoomScale;
+
+        scaleRef.current = zoomScale;
+        offsetRef.current = { x: targetX, y: targetY };
+        setScale(zoomScale);
+        setOffset({ x: targetX, y: targetY });
+      }
+    }
+  }, [selectedMunicipality, bounds, width, height]);
+
+  // 2. Build SVG path commands and centroids for all municipalities
   const pathsData = useMemo(() => {
     return (cebuData?.features || []).map((feature) => {
       const name = feature.properties.name;
@@ -100,16 +138,23 @@ export default function CebuVectorMap({
         }
       }
 
+      // Compute centroid for place navigation label
+      const box = computeBoundingBox([feature]);
+      const centerLng = (box.minLng + box.maxLng) / 2;
+      const centerLat = (box.minLat + box.maxLat) / 2;
+      const centroid = geoToSvgCoordinates(centerLng, centerLat, bounds, width, height, 16);
+
       return {
         rawName: name,
         normalizedName: normalized,
         d,
+        centroid,
       };
     });
   }, [bounds, width, height]);
 
-  // 3. Precalculate pin coordinates
-  const renderedPins = useMemo(() => {
+  // 3. Precalculate authentic pin coordinates directly from GPS lat/lng
+  const basePins = useMemo(() => {
     return pins.map((pin) => {
       const coords = geoToSvgCoordinates(
         pin.lng,
@@ -127,12 +172,34 @@ export default function CebuVectorMap({
     });
   }, [pins, bounds, width, height]);
 
-  // 3.1 Density pin clustering for low zoom
+  // 3.1 Density pin clustering for low zoom (preserves true coordinates when unclustered)
   const displayPinClusters = useMemo(() => {
-    return clusterPins(renderedPins, scale, 28);
-  }, [renderedPins, scale]);
+    return clusterPins(basePins, scale, 24);
+  }, [basePins, scale]);
 
-  // 4. Gesture responder for Drag & Pinch-to-zoom
+  // Active selected pin for floating callout card
+  const activeSelectedPin = useMemo(() => {
+    if (!selectedPinId) return null;
+    return basePins.find((p) => p.id === selectedPinId) || null;
+  }, [selectedPinId, basePins]);
+
+  // Calculate screen position for interactive callout
+  const calloutPosition = useMemo(() => {
+    if (!activeSelectedPin) return null;
+    const screenX = width / 2 + (activeSelectedPin.x - width / 2) * scale + offset.x;
+    const screenY = height / 2 + (activeSelectedPin.y - height / 2) * scale + offset.y;
+
+    const cardW = Math.min(270, width - 36);
+    const left = Math.min(Math.max(16, screenX - cardW / 2), width - cardW - 16);
+    const top = screenY > 160 ? screenY - 130 : screenY + 24;
+
+    const visible =
+      screenX > -60 && screenX < width + 60 && screenY > -60 && screenY < height + 60;
+
+    return { left, top, width: cardW, visible };
+  }, [activeSelectedPin, scale, offset, width, height]);
+
+  // 4. Gesture responder for Drag & Pinch-to-zoom (up to 12.0x)
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -148,6 +215,7 @@ export default function CebuVectorMap({
         onMoveShouldSetPanResponderCapture: () => false,
         onPanResponderGrant: (evt) => {
           startOffset.current = { ...offsetRef.current };
+          const now = Date.now();
           if (evt.nativeEvent.touches && evt.nativeEvent.touches.length === 2) {
             const [t1, t2] = evt.nativeEvent.touches;
             initialDistance.current = Math.hypot(
@@ -157,6 +225,35 @@ export default function CebuVectorMap({
             initialScale.current = scaleRef.current;
           } else {
             initialDistance.current = null;
+            // Double-tap zoom detection
+            const touch = evt.nativeEvent;
+            if (
+              lastTapRef.current &&
+              now - lastTapRef.current.time < 320 &&
+              Math.hypot(
+                touch.locationX - lastTapRef.current.x,
+                touch.locationY - lastTapRef.current.y,
+              ) < 36
+            ) {
+              haptics.triggerLightImpact();
+              const targetScale = Math.min(
+                MAX_SCALE,
+                Number((scaleRef.current * 1.8).toFixed(2)),
+              );
+              const targetX = (width / 2 - touch.locationX) * (targetScale / scaleRef.current);
+              const targetY = (height / 2 - touch.locationY) * (targetScale / scaleRef.current);
+              scaleRef.current = targetScale;
+              offsetRef.current = { x: targetX, y: targetY };
+              setScale(targetScale);
+              setOffset({ x: targetX, y: targetY });
+              lastTapRef.current = null;
+              return;
+            }
+            lastTapRef.current = {
+              time: now,
+              x: touch.locationX,
+              y: touch.locationY,
+            };
           }
         },
         onPanResponderMove: (evt, gestureState) => {
@@ -172,15 +269,22 @@ export default function CebuVectorMap({
             );
             const pinchRatio = currentDistance / initialDistance.current;
             const nextScale = Math.min(
-              4.0,
-              Math.max(0.7, Number((initialScale.current * pinchRatio).toFixed(2))),
+              MAX_SCALE,
+              Math.max(MIN_SCALE, Number((initialScale.current * pinchRatio).toFixed(2))),
             );
             scaleRef.current = nextScale;
             setScale(nextScale);
           } else if (!evt.nativeEvent.touches || evt.nativeEvent.touches.length <= 1) {
-            const maxPan = width * scaleRef.current * 0.8;
-            const nextX = Math.min(maxPan, Math.max(-maxPan, startOffset.current.x + gestureState.dx));
-            const nextY = Math.min(maxPan, Math.max(-maxPan, startOffset.current.y + gestureState.dy));
+            const maxPanX = width * scaleRef.current * 1.2;
+            const maxPanY = height * scaleRef.current * 1.6;
+            const nextX = Math.min(
+              maxPanX,
+              Math.max(-maxPanX, startOffset.current.x + gestureState.dx),
+            );
+            const nextY = Math.min(
+              maxPanY,
+              Math.max(-maxPanY, startOffset.current.y + gestureState.dy),
+            );
             offsetRef.current = { x: nextX, y: nextY };
             setOffset({ x: nextX, y: nextY });
           }
@@ -189,19 +293,19 @@ export default function CebuVectorMap({
           initialDistance.current = null;
         },
       }),
-    [width],
+    [width, height],
   );
 
   const handleZoomIn = () => {
     haptics.triggerLightImpact();
-    const next = Math.min(4.0, Number((scaleRef.current + 0.35).toFixed(2)));
+    const next = Math.min(MAX_SCALE, Number((scaleRef.current + 0.75).toFixed(2)));
     scaleRef.current = next;
     setScale(next);
   };
 
   const handleZoomOut = () => {
     haptics.triggerLightImpact();
-    const next = Math.max(0.7, Number((scaleRef.current - 0.35).toFixed(2)));
+    const next = Math.max(MIN_SCALE, Number((scaleRef.current - 0.75).toFixed(2)));
     scaleRef.current = next;
     setScale(next);
   };
@@ -213,6 +317,10 @@ export default function CebuVectorMap({
     setScale(1.0);
     setOffset({ x: 0, y: 0 });
   };
+
+  // Scale compensation factor so pins remain crisp and compact at 12.0x zoom
+  const pinScaleFactor = Math.pow(Math.max(1, scale), 0.45);
+  const strokeScale = Math.sqrt(Math.max(1, scale));
 
   return (
     <View
@@ -238,7 +346,7 @@ export default function CebuVectorMap({
 
               const fillColor = isSelected ? '#1f3d3c' : '#dceae8';
               const strokeColor = isSelected ? '#0f2423' : '#b2d4cf';
-              const strokeWidth = isSelected ? 2 : 0.75;
+              const strokeWidth = (isSelected ? 2 : 0.75) / strokeScale;
 
               return (
                 <Path
@@ -257,10 +365,32 @@ export default function CebuVectorMap({
             })}
           </G>
 
-          {/* Render Project Pins & Density Clusters */}
+          {/* Place & Municipality Navigation Labels (Visible on Zoom scale >= 1.6) */}
+          {scale >= 1.6 && (
+            <G pointerEvents="none">
+              {pathsData.map((item) => (
+                <SvgText
+                  key={`label-${item.rawName}`}
+                  x={item.centroid.x}
+                  y={item.centroid.y}
+                  fill="#132c2a"
+                  opacity={0.65}
+                  fontSize={Math.max(8.5, 12 / strokeScale)}
+                  fontWeight="800"
+                  textAnchor="middle"
+                >
+                  {item.normalizedName}
+                </SvgText>
+              ))}
+            </G>
+          )}
+
+          {/* Render Project Pins & Density Clusters with Responsive Status Colors */}
           <G>
             {displayPinClusters.map((item) => {
               if (item.isCluster) {
+                const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
+                const clusterR = screenClusterR / scale;
                 return (
                   <G
                     key={item.id}
@@ -268,8 +398,8 @@ export default function CebuVectorMap({
                     onPress={() => {
                       haptics.triggerSelection();
                       const nextScale = Math.min(
-                        4.0,
-                        Number((scaleRef.current + 0.8).toFixed(2)),
+                        MAX_SCALE,
+                        Number((scaleRef.current + 1.2).toFixed(2)),
                       );
                       scaleRef.current = nextScale;
                       setScale(nextScale);
@@ -278,16 +408,16 @@ export default function CebuVectorMap({
                     <Circle
                       cx={item.x}
                       cy={item.y}
-                      r={14}
+                      r={clusterR}
                       fill="#1f3d3c"
                       stroke="#ffffff"
-                      strokeWidth={2}
+                      strokeWidth={1.5 / scale}
                     />
                     <SvgText
                       x={item.x}
-                      y={item.y + 4}
+                      y={item.y + 3.5 / scale}
                       fill="#ffffff"
-                      fontSize={11}
+                      fontSize={Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale}
                       fontWeight="bold"
                       textAnchor="middle"
                     >
@@ -299,11 +429,42 @@ export default function CebuVectorMap({
 
               const pin = item.pins[0];
               const isSelected = selectedPinId === pin.id;
-              const coreColor = pin.tone === 'warning' ? '#f59e0b' : '#10b981';
-              const glowColor =
-                pin.tone === 'warning'
-                  ? 'rgba(245, 158, 11, 0.4)'
-                  : 'rgba(16, 185, 129, 0.4)';
+              const reportCount = typeof pin.report_count === 'number' ? pin.report_count : 0;
+              const isHotspot =
+                reportCount > 0 ||
+                pin.tone === 'hotspot' ||
+                Boolean(pin.is_hotspot);
+
+              // Responsive status color mapping
+              const isCompleted = pin.status === 'Completed';
+              const isDelayed = pin.status === 'Delayed' || pin.tone === 'warning';
+
+              const coreColor = isHotspot
+                ? '#ef4444' // Red Hotspot
+                : isDelayed
+                ? '#f59e0b' // Amber Delayed
+                : isCompleted
+                ? '#0284c7' // Blue Completed
+                : '#10b981'; // Emerald Ongoing
+
+              const glowColor = isHotspot
+                ? 'rgba(239, 68, 68, 0.45)'
+                : isDelayed
+                ? 'rgba(245, 158, 11, 0.45)'
+                : isCompleted
+                ? 'rgba(2, 132, 199, 0.45)'
+                : 'rgba(16, 185, 129, 0.45)';
+
+              // Screen size decreases as user zooms in so dots become smaller and pinpoint
+              const screenCoreR = Math.max(2.0, (isSelected ? 6.5 : 4.8) / Math.pow(scale, 0.38));
+              const screenGlowR = Math.max(3.8, (isSelected ? 12.0 : 8.5) / Math.pow(scale, 0.38));
+              const screenRadarR = Math.max(5.5, (isSelected ? 16.0 : 12.0) / Math.pow(scale, 0.38));
+
+              const coreR = screenCoreR / scale;
+              const glowR = screenGlowR / scale;
+              const radarR = screenRadarR / scale;
+              const hitR = Math.max(18 / scale, coreR * 2.5);
+              const strokeW = (isSelected ? 1.5 : 1.0) / scale;
 
               return (
                 <G
@@ -311,26 +472,75 @@ export default function CebuVectorMap({
                   testID={`map-pin-${pin.id}`}
                   onPress={() => {
                     haptics.triggerSelection();
-                    const { x: _x, y: _y, ...originalPin } = pin;
-                    onSelectPin?.(originalPin);
+                    onSelectPin?.({
+                      id: pin.id,
+                      name: pin.name,
+                      lat: pin.lat,
+                      lng: pin.lng,
+                      tone: pin.tone,
+                      lgu: pin.lgu,
+                      description: pin.description,
+                      budget: pin.budget,
+                      status: pin.status,
+                      contractor: pin.contractor,
+                    });
                   }}
                 >
-                  {/* Outer Glow Circle */}
+                  {/* Invisible generous touch target */}
+                  <Circle cx={pin.x} cy={pin.y} r={hitR} fill="transparent" />
+
+                  {/* Concentric Hotspot Radar Rings */}
+                  {isHotspot && (
+                    <>
+                      <Circle
+                        cx={pin.x}
+                        cy={pin.y}
+                        r={radarR}
+                        fill="none"
+                        stroke="#ef4444"
+                        strokeWidth={strokeW}
+                        strokeDasharray={`${2 / scale},${2 / scale}`}
+                        opacity={0.85}
+                      />
+                      <Circle
+                        cx={pin.x}
+                        cy={pin.y}
+                        r={glowR}
+                        fill="rgba(239, 68, 68, 0.25)"
+                      />
+                    </>
+                  )}
+
+                  {/* Outer Glow Halo */}
                   <Circle
                     cx={pin.x}
                     cy={pin.y}
-                    r={isSelected ? 14 : 9}
+                    r={glowR}
                     fill={glowColor}
                   />
+
                   {/* Pin Core */}
                   <Circle
                     cx={pin.x}
                     cy={pin.y}
-                    r={isSelected ? 6 : 4}
+                    r={coreR}
                     fill={coreColor}
                     stroke="#ffffff"
-                    strokeWidth={1.5}
+                    strokeWidth={strokeW}
                   />
+
+                  {/* Selected Ripple Pulse */}
+                  {isSelected && (
+                    <Circle
+                      cx={pin.x}
+                      cy={pin.y}
+                      r={radarR + 2.5 / scale}
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeWidth={strokeW}
+                      opacity={0.9}
+                    />
+                  )}
                 </G>
               );
             })}
@@ -338,7 +548,71 @@ export default function CebuVectorMap({
         </G>
       </Svg>
 
-      {/* Floating Zoom & Pan Controls */}
+      {/* Floating Interactive Callout Card on Selected Project Pin */}
+      {activeSelectedPin && calloutPosition?.visible && (
+        <View
+          style={[
+            styles.interactiveCallout,
+            {
+              left: calloutPosition.left,
+              top: calloutPosition.top,
+              width: calloutPosition.width,
+            },
+          ]}
+          testID="map-pin-callout-card"
+        >
+          <View style={styles.calloutHeader}>
+            <View
+              style={[
+                styles.calloutStatusPill,
+                activeSelectedPin.status === 'Completed'
+                  ? styles.statusCompleted
+                  : activeSelectedPin.status === 'Delayed'
+                  ? styles.statusDelayed
+                  : styles.statusOngoing,
+              ]}
+            >
+              <Text style={styles.calloutStatusText}>
+                {activeSelectedPin.status || 'Ongoing'}
+              </Text>
+            </View>
+            <Text style={styles.calloutLguText} numberOfLines={1}>
+              📍 {activeSelectedPin.lgu}
+            </Text>
+          </View>
+
+          <Text style={styles.calloutTitle} numberOfLines={2}>
+            {activeSelectedPin.name}
+          </Text>
+
+          {activeSelectedPin.contractor && (
+            <Text style={styles.calloutContractor} numberOfLines={1}>
+              🏗️ {activeSelectedPin.contractor}
+            </Text>
+          )}
+
+          <View style={styles.calloutFooter}>
+            {typeof activeSelectedPin.budget === 'number' && (
+              <Text style={styles.calloutBudget}>
+                {formatCurrencyPHP(activeSelectedPin.budget).split('.')[0]}
+              </Text>
+            )}
+            <TouchableOpacity
+              style={styles.calloutActionBtn}
+              onPress={() => {
+                haptics.triggerSelection();
+                onSelectPin?.(activeSelectedPin);
+              }}
+              activeOpacity={0.8}
+              testID="callout-view-details-btn"
+            >
+              <Text style={styles.calloutActionText}>View Details →</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Floating Zoom & Pan Controls (Up to 12.0x Google Maps Style) */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity
           testID="zoom-in-btn"
@@ -429,15 +703,112 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 14,
     right: 14,
-    backgroundColor: 'rgba(31, 61, 60, 0.85)',
+    backgroundColor: 'rgba(31, 61, 60, 0.88)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     zIndex: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   zoomIndicatorText: {
     color: '#ffffff',
     fontSize: 11,
+    fontWeight: '800',
+  },
+  interactiveCallout: {
+    position: 'absolute',
+    backgroundColor: '#1f3d3c',
+    borderRadius: 14,
+    padding: 12,
+    zIndex: 40,
+    borderWidth: 1,
+    borderColor: '#34d399',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+    }),
+  },
+  calloutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    gap: 8,
+  },
+  calloutStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  calloutStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  statusOngoing: {
+    backgroundColor: '#ccfbf1',
+    color: '#0f766e',
+  },
+  statusCompleted: {
+    backgroundColor: '#d1fae5',
+    color: '#065f46',
+  },
+  statusDelayed: {
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+  },
+  calloutLguText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#99f6e4',
+    flex: 1,
+    textAlign: 'right',
+  },
+  calloutTitle: {
+    fontSize: 12,
     fontWeight: '700',
+    color: '#ffffff',
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  calloutContractor: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#cbd5e1',
+    marginBottom: 8,
+  },
+  calloutFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  calloutBudget: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#34d399',
+  },
+  calloutActionBtn: {
+    backgroundColor: 'rgba(52, 211, 153, 0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#34d399',
+  },
+  calloutActionText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#34d399',
   },
 });

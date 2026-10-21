@@ -136,5 +136,64 @@ describe('CebuVectorMap Component', () => {
     expect(zoomOutBtn).toBeTruthy();
     expect(resetBtn).toBeTruthy();
   });
-});
 
+  test('tapping zoom in multiple times reaches deep zoom levels above 4.0x', () => {
+    const { getByTestId } = render(
+      <CebuVectorMap
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const zoomInBtn = getByTestId('zoom-in-btn');
+    for (let i = 0; i < 6; i++) {
+      fireEvent.press(zoomInBtn);
+    }
+
+    const badge = getByTestId('zoom-level-badge');
+    expect(badge).toBeTruthy();
+    expect(parseFloat(badge.props.children)).toBeGreaterThan(4.0);
+  });
+
+  test('selecting a pin renders the interactive callout card with details action', () => {
+    const firstPin = pins[0];
+    const { getByTestId, getByText } = render(
+      <CebuVectorMap
+        pins={pins}
+        selectedPinId={firstPin.id}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const callout = getByTestId('map-pin-callout-card');
+    expect(callout).toBeTruthy();
+    expect(getByText('View Details →')).toBeTruthy();
+
+    const actionBtn = getByTestId('callout-view-details-btn');
+    fireEvent.press(actionBtn);
+    expect(mockOnSelectPin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: firstPin.id }),
+    );
+  });
+
+  test('does not render raw project ID tags on map canvas and displays place labels when zoomed', () => {
+    const { queryByText, getByTestId } = render(
+      <CebuVectorMap
+        pins={pins}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const zoomInBtn = getByTestId('zoom-in-btn');
+    fireEvent.press(zoomInBtn);
+
+    // Raw project IDs should NOT be printed on the canvas
+    expect(queryByText('24HD0012')).toBeNull();
+    expect(queryByText('24HH0043')).toBeNull();
+
+    // Place labels for municipalities should be visible
+    expect(queryByText('Bogo City')).toBeTruthy();
+  });
+});

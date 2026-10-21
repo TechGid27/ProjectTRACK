@@ -4,6 +4,7 @@ Field Report Endpoints
 The citizen report-verification pipeline. Implements four pillars end-to-end:
 
   POST /api/reports              submit a field report (multipart)
+  GET  /api/reports/summaries    map-wide per-project verification counts
   GET  /api/reports/{project_id} list a project's reports with verification badges
 
 Submission pipeline (order matters):
@@ -32,6 +33,8 @@ from backend.models.report import (
     ReportVerification,
     ReportRecord,
     ReportListResponse,
+    ProjectReportSummary,
+    ReportSummariesResponse,
     REPORT_CATEGORIES,
 )
 from backend.services.report_store import report_store, ReportStoreError
@@ -229,6 +232,45 @@ async def submit_report(
         reporter_reputation=reporter_reputation,
         created_at=saved.get("created_at") if isinstance(saved, dict) and saved.get("created_at") else now,
     )
+
+
+@router.get(
+    "/summaries",
+    response_model=ReportSummariesResponse,
+    summary="Map-wide per-project verification counts (public, redacted)",
+)
+async def report_summaries() -> ReportSummariesResponse:
+    """Aggregate badge tones per project for the interactive map legend.
+
+    Public like the per-project list: returns only project_id + status counts
+    (no descriptions, photos, reporter ids, or coordinates).
+    """
+    try:
+        rows = await report_store.summarize_reports()
+    except ReportStoreError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+
+    # Tone buckets mirror the web client's deriveBadge():
+    #   verified                    -> on_site   (On-Site Verified, violet)
+    #   pending | flagged | rejected -> flagged  (Photo Flagged, rose)
+    #   anything else               -> unverified (Unverified, white)
+    buckets: dict[str, ProjectReportSummary] = {}
+    for row in rows:
+        project_id = row.get("project_id")
+        if not project_id:
+            continue
+        summary = buckets.setdefault(project_id, ProjectReportSummary(project_id=project_id))
+        status_value = row.get("status") or "pending"
+        if status_value == "verified":
+            summary.on_site += 1
+        elif status_value in ("pending", "flagged", "rejected"):
+            summary.flagged += 1
+        else:
+            summary.unverified += 1
+        summary.total += 1
+
+    summaries = [buckets[key] for key in sorted(buckets)]
+    return ReportSummariesResponse(count=len(summaries), summaries=summaries)
 
 
 @router.get(

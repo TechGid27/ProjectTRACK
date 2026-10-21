@@ -20,8 +20,8 @@ describe('MapHeader Component', () => {
       />,
     );
 
-    expect(getByText('Reyal Or Pake')).toBeTruthy();
-    expect(getByText('53 LGUs · 12 Sites')).toBeTruthy();
+    expect(getByText('ProjectTRACK')).toBeTruthy();
+    expect(getByText('Sign In')).toBeTruthy();
     expect(getByPlaceholderText('Search municipality or project...')).toBeTruthy();
   });
 

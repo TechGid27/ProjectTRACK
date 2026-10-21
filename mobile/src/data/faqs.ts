@@ -3,7 +3,7 @@ import { FaqItem } from '../core/types';
 export const FAQS: FaqItem[] = [
   {
     q: 'What data does ProjectTRACK show?',
-    a: 'ProjectTRACK loads DPWH public-works projects for Cebu Province from a Neo4j database — including project ID, description, location, contractor, budget, and status (ongoing or completed with completion percentage).',
+    a: 'ProjectTRACK aggregates official data and loads DPWH public-works projects for Cebu Province from a Neo4j database — including project ID, description, location, contractor, budget, and status (ongoing or completed with completion percentage).',
   },
   {
     q: 'How do I find projects in my municipality?',

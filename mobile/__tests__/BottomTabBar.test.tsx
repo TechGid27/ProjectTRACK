@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import BottomTabBar, { TabName } from '../src/ui/components/BottomTabBar';
+import BottomTabBar from '../src/ui/components/BottomTabBar';
 
 describe('BottomTabBar Component', () => {
   const mockOnSelectTab = jest.fn();

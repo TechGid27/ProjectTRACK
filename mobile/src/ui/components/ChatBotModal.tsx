@@ -14,6 +14,7 @@ import {
 
 import { api } from '../../services/api';
 import { haptics } from '../../services/haptics';
+import { sanitizeChatMessage } from '../../core/sanitizer';
 
 interface ChatMessage {
   id: string;
@@ -24,6 +25,8 @@ interface ChatMessage {
 interface ChatBotModalProps {
   visible: boolean;
   onClose: () => void;
+  onSelectProject?: (projectId: string) => void;
+  onFocusLgu?: (lguName: string) => void;
 }
 
 const SUGGESTIONS = [
@@ -31,6 +34,8 @@ const SUGGESTIONS = [
   'Tell me about project 24HH0043',
   'Top contractors in Cebu?',
 ];
+
+const PROJECT_ID_REGEX = /\b(\d{2}[A-Za-z]{1,2}\d{4,5})\b/g;
 
 function generateBotResponse(userQuery: string): string {
   const q = userQuery.toLowerCase();
@@ -43,10 +48,15 @@ function generateBotResponse(userQuery: string): string {
   if (q.includes('top contractor') || q.includes('contractors')) {
     return 'Top DPWH Contractors in Cebu by awarded budget:\n1. WTG CONSTRUCTION & DEVELOPMENT CORP. (₱1.85B, 14 projects)\n2. QM BUILDERS (₱1.52B, 19 projects)\n3. FIRST GRANDEUR BUILDERS (₱875.4M, 11 projects)\n4. PLD CONSTRUCTION (₱654.2M, 9 projects)';
   }
-  return `According to DPWH Cebu knowledge graph records, we have 53 Local Government Units and ongoing civil works tracked. You can tap any municipality on the map or select a contractor to review awarded allocations.`;
+  return 'According to DPWH Cebu knowledge graph records, we have 53 Local Government Units and ongoing civil works tracked. You can tap any municipality on the map or select a contractor to review awarded allocations.';
 }
 
-export default function ChatBotModal({ visible, onClose }: ChatBotModalProps) {
+export default function ChatBotModal({
+  visible,
+  onClose,
+  onSelectProject,
+  onFocusLgu,
+}: ChatBotModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'init-1',
@@ -66,8 +76,16 @@ export default function ChatBotModal({ visible, onClose }: ChatBotModalProps) {
     }
   }, [visible, messages]);
 
+  const handleChipPress = (pid: string) => {
+    haptics.triggerLightImpact();
+    if (onSelectProject) {
+      onSelectProject(pid);
+      onClose();
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
-    const text = (textToSend ?? inputText).trim();
+    const text = sanitizeChatMessage((textToSend ?? inputText).trim(), 1000);
     if (!text || isTyping) return;
 
     haptics.triggerLightImpact();
@@ -94,6 +112,14 @@ export default function ChatBotModal({ visible, onClose }: ChatBotModalProps) {
         text: res.answer,
       };
       setMessages((prev) => [...prev, botMsg]);
+
+      // Spatial camera navigation integration
+      if (res.spatial?.target_lgu && onFocusLgu) {
+        onFocusLgu(res.spatial.target_lgu);
+      }
+      if (res.spatial?.focused_project_id && onSelectProject) {
+        onSelectProject(res.spatial.focused_project_id);
+      }
     } catch {
       const fallback = generateBotResponse(text);
       setMessages((prev) => [
@@ -103,6 +129,56 @@ export default function ChatBotModal({ visible, onClose }: ChatBotModalProps) {
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const renderBubbleContent = (text: string, isUser: boolean) => {
+    if (isUser) {
+      return (
+        <Text style={[styles.bubbleText, styles.userText]}>
+          {text}
+        </Text>
+      );
+    }
+
+    // Extract project IDs for interactive chips
+    const parts: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+    PROJECT_ID_REGEX.lastIndex = 0;
+
+    while ((match = PROJECT_ID_REGEX.exec(text)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (start > lastIdx) {
+        parts.push(
+          <Text key={`txt-${lastIdx}`} style={[styles.bubbleText, styles.assistantText]}>
+            {text.slice(lastIdx, start)}
+          </Text>
+        );
+      }
+      const pid = match[1].toUpperCase();
+      parts.push(
+        <TouchableOpacity
+          key={`chip-${pid}-${start}`}
+          style={styles.inlineChip}
+          onPress={() => handleChipPress(pid)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.inlineChipText}>📍 {pid}</Text>
+        </TouchableOpacity>
+      );
+      lastIdx = end;
+    }
+
+    if (lastIdx < text.length) {
+      parts.push(
+        <Text key={`txt-${lastIdx}`} style={[styles.bubbleText, styles.assistantText]}>
+          {text.slice(lastIdx)}
+        </Text>
+      );
+    }
+
+    return <View style={styles.assistantTextWrap}>{parts}</View>;
   };
 
   return (
@@ -182,14 +258,7 @@ export default function ChatBotModal({ visible, onClose }: ChatBotModalProps) {
                           isUser ? styles.userBubble : styles.assistantBubble,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.bubbleText,
-                            isUser ? styles.userText : styles.assistantText,
-                          ]}
-                        >
-                          {msg.text}
-                        </Text>
+                        {renderBubbleContent(msg.text, isUser)}
                       </View>
                     </View>
                   );
@@ -260,18 +329,18 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowRadius: 12,
+    elevation: 20,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
-    backgroundColor: '#ffffff',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -281,19 +350,19 @@ const styles = StyleSheet.create({
   aiBadge: {
     width: 32,
     height: 32,
-    borderRadius: 10,
+    borderRadius: 16,
     backgroundColor: '#1f3d3c',
     justifyContent: 'center',
     alignItems: 'center',
   },
   aiBadgeText: {
-    color: '#ffffff',
+    color: '#2dd4bf',
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   headerTitle: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#0f172a',
   },
   headerSubtitle: {
@@ -301,50 +370,46 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#f1f5f9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 13,
-    color: '#64748b',
+    fontSize: 14,
     fontWeight: '700',
+    color: '#475569',
   },
   suggestionsContainer: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#f8fafc',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#f8fafc',
   },
   suggestionChip: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f1f5f9',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 20,
     marginRight: 8,
   },
   suggestionText: {
-    fontSize: 11,
-    color: '#1f3d3c',
-    fontWeight: '600',
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '500',
   },
   messagesList: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
   },
   messagesContent: {
-    padding: 16,
-    gap: 12,
+    paddingVertical: 16,
   },
   messageRow: {
+    marginBottom: 12,
     flexDirection: 'row',
-    marginBottom: 8,
   },
   userRow: {
     justifyContent: 'flex-end',
@@ -367,8 +432,8 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   bubbleText: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 20,
   },
   userText: {
     color: '#ffffff',
@@ -376,18 +441,39 @@ const styles = StyleSheet.create({
   assistantText: {
     color: '#1e293b',
   },
-  typingIndicator: {
+  assistantTextWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  inlineChip: {
+    backgroundColor: '#ccfbf1',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginHorizontal: 2,
+    marginVertical: 1,
+    borderWidth: 1,
+    borderColor: '#5eead4',
+  },
+  inlineChipText: {
     fontSize: 12,
-    fontStyle: 'italic',
+    fontWeight: '700',
+    color: '#0f766e',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  typingIndicator: {
+    fontSize: 13,
     color: '#64748b',
+    fontStyle: 'italic',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: '#e2e8f0',
     backgroundColor: '#ffffff',
     gap: 8,
   },
@@ -397,27 +483,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     fontSize: 13,
     color: '#0f172a',
-    maxHeight: 100,
+    maxHeight: 80,
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#1f3d3c',
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendBtnDisabled: {
-    backgroundColor: '#cbd5e1',
+    backgroundColor: '#94a3b8',
+    opacity: 0.6,
   },
   sendBtnText: {
     color: '#ffffff',
     fontSize: 18,
-    fontWeight: '900',
-    lineHeight: 20,
+    fontWeight: '800',
   },
 });

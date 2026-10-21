@@ -205,7 +205,7 @@ describe('LocationIntelSheet Component', () => {
   });
 
   test('tapping confirm and dispute crowdsource buttons updates counters', () => {
-    const { getByTestId, getByText } = render(
+    const { getByTestId, getAllByText, getByText } = render(
       <LocationIntelSheet
         lguName="Bogo City"
         projects={sampleProjects}
@@ -219,13 +219,13 @@ describe('LocationIntelSheet Component', () => {
     const disputeBtn = getByTestId('dispute-vote-btn-24HD0012');
 
     // Default confirm vote is 14
-    expect(getByText('👍 14')).toBeTruthy();
+    expect(getAllByText('👍 14').length).toBeGreaterThan(0);
 
     fireEvent.press(confirmBtn);
     expect(getByText('👍 15')).toBeTruthy();
 
     // Default dispute vote is 1
-    expect(getByText('👎 1')).toBeTruthy();
+    expect(getAllByText('👎 1').length).toBeGreaterThan(0);
 
     fireEvent.press(disputeBtn);
     expect(getByText('👎 2')).toBeTruthy();

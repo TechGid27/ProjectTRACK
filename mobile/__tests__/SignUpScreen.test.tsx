@@ -17,7 +17,7 @@ describe('SignUpScreen Component', () => {
   });
 
   test('renders registration fields, social buttons, and back action', () => {
-    const { getByText, getByTestId } = render(
+    const { getAllByText, getByTestId } = render(
       <SignUpScreen
         onSuccess={mockOnSuccess}
         onNavigateToSignIn={mockOnNavigateToSignIn}
@@ -25,7 +25,7 @@ describe('SignUpScreen Component', () => {
       />,
     );
 
-    expect(getByText('Create account')).toBeTruthy();
+    expect(getAllByText('Create account')[0]).toBeTruthy();
     expect(getByTestId('google-signup-btn')).toBeTruthy();
     expect(getByTestId('facebook-signup-btn')).toBeTruthy();
     expect(getByTestId('signup-email-input')).toBeTruthy();

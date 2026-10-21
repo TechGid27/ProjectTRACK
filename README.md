@@ -31,21 +31,24 @@ Every fiscal year, billions of Philippine Pesos are allocated for Department of 
 ## System Features
 
 ### Web Platform (`Website`)
-* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers. Overlapping projects are grouped by zoom-aware proximity clustering, and the map stays synchronized with the chat - flying to a selected LGU or zooming to and highlighting a single project for superlative/locating questions.
+* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers. Overlapping projects are grouped by zoom-aware proximity clustering, and the map stays synchronized with the chat - flying to a selected LGU or zooming to and highlighting a single project for superlative/locating questions (e.g. the most expensive, the latest, or the **most reported** project — province-wide or within a named LGU).
 * **GraphRAG-Powered AI Assistant**: Contextual natural language query engine grounded in the Neo4j knowledge graph, with domain guardrails and a configurable LLM provider (Groq by default). Supports conversational memory for follow-ups ("tell me more about it", "what about in Cordova?") via a sandboxed, whitelist-validated reference resolver that stays strictly database-locked and injection-safe. User input and conversation history are sanitized and screened for prompt-injection before reaching the model.
-* **Image Forensics Verification**: Built-in Error Level Analysis (ELA) and cryptographic metadata inspection to detect digital manipulation, timestamp tampering, or image recycling.
+* **Image Forensics Verification**: Citizen-submitted photo evidence is screened server-side with Error Level Analysis (ELA) and perceptual hashing (pHash) to detect digital manipulation or image recycling; flagged reports surface a "Photo Flagged" badge in the UI.
+* **Citizen Anomaly Reports with Verification Badging**: The report modal captures browser GPS at submission time; the backend runs a Haversine geofence check against official project coordinates and the UI renders a "On-Site Verified" / "Unverified" / "Photo Flagged" badge with distance and timestamp for every community report.
 * **Budget and Expenditure Transparency**: Real-time auditing of allocated funds, expenditure disbursements, variance indicators, and source funding across municipalities.
-* **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store.
+* **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store, with an optional passive scheduler that automatically re-scrapes and re-syncs on a recurring interval (default every ~3 months) so a deployed instance stays current without manual intervention.
 
-### Planned Mobile Field Auditor (`mobile` — React Native with Expo)
-* **Geofenced On-Site Photo Capture**: Planned use of React Native and Expo (`expo-location`, `expo-camera`) to verify GPS proximity to project coordinates before photo capture.
-* **Offline-First Background Sync**: Planned offline caching and background synchronization for field observations in low-connectivity areas.
+### Mobile Field Auditor (`mobile` — React Native with Expo)
+* **Geofenced On-Site Photo Capture**: Uses React Native and Expo (`expo-location`, `expo-camera`) to confirm the device is within ≤150m of the project's DPWH coordinates before the live camera shutter unlocks (gallery uploads disabled for ground-truth integrity).
+* **Server-Verified Submission & Badging**: Captured audits are submitted to `/api/reports`, re-validated server-side (geofence + image forensics), and the returned verdict — status, distance, forensics result, reputation — is shown on-device.
+* **Offline-First Background Sync**: Audits captured offline are queued in a local outbox and synced to the backend when connectivity returns.
 
 ### Core Backend and Services (`backend`)
 * **Personnel and Entity Graph Mapping**: Models relationships between contractors, authorized managing officers, district engineers, and procurement awards into a traversable graph.
 * **Spatial Data Integrity**: Exact, canonicalized municipality matching eliminates cross-LGU leakage, and a polygon reverse-geocoding pipeline reassigns each project to the LGU that actually contains its authentic DPWH coordinates (projects outside Cebu are flagged and excluded).
 * **Supabase Authentication**: Backend-managed Supabase (GoTrue) auth under `/api/auth` (OAuth, email/password, session, sign-out) with HTTP-only session cookies, auto token refresh, and a reusable route-guard dependency - ready for the web and mobile clients to hook into.
 * **High-Throughput RESTful and SSE API**: Production-grade FastAPI endpoints supporting sub-20ms instant Cypher queries, Server-Sent Events (SSE) streaming, and standardized GeoJSON feeds.
+* **Field Report Verification API**: `/api/reports` endpoints enforce the four verification pillars server-side — a ≤150m geofence check against authentic DPWH coordinates, ELA + perceptual-hash image forensics, authenticated submission with a 3-reports/day limit and reputation scoring, and a verification verdict (status, distance, forensics, reputation) surfaced to both clients. Reports persist to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
 
 ---
 

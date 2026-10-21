@@ -221,3 +221,15 @@ export function clusterPins(
 
   return clusters;
 }
+
+/**
+ * Preserves authentic coordinates for pins.
+ * Deprecated artificial circular dispersion to ensure natural geographic accuracy.
+ */
+export function disperseCoLocatedPins<T extends { id: string; x: number; y: number }>(
+  pins: T[],
+  _scale: number = 1.0,
+  _proximityThreshold: number = 14,
+): T[] {
+  return pins;
+}

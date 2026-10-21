@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -9,10 +9,13 @@ import {
   SafeAreaView,
   Platform,
 } from 'react-native';
-import { ProjectDetail } from '../../core/types';
+import { ProjectDetail, ReportVerification } from '../../core/types';
 import { checkGeofenceProximity } from '../../core/geoUtils';
 import { outbox, QueuedAudit } from '../../services/outbox';
 import { haptics } from '../../services/haptics';
+import { getDeviceFix, requestCameraPermission } from '../../services/location';
+import { api } from '../../services/api';
+import VerificationBadges from './VerificationBadges';
 
 interface FieldAuditorModalProps {
   visible: boolean;
@@ -27,9 +30,12 @@ export default function FieldAuditorModal({
   onClose,
   onAuditSubmitted,
 }: FieldAuditorModalProps) {
-  // Simulated auditor location (defaulting to nearby for testing)
+  // Simulated auditor location (used as fallback when no hardware fix yet).
   const [userOffsetMeters, setUserOffsetMeters] = useState(45); // 45m inside geofence
   const [capturedReceipt, setCapturedReceipt] = useState<QueuedAudit | null>(null);
+  const [deviceFix, setDeviceFix] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [verdict, setVerdict] = useState<ReportVerification | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Reference coordinates for Bogo River flood control or default Cebu coords
   const targetCoords = useMemo(() => {
@@ -39,43 +45,85 @@ export default function FieldAuditorModal({
     };
   }, []);
 
-  // Compute geofence status
+  // Pillar 1: request camera permission and read a real device GPS fix on open.
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    requestCameraPermission().catch(() => undefined);
+    getDeviceFix()
+      .then((fix) => {
+        if (!cancelled && fix) {
+          setDeviceFix({ latitude: fix.latitude, longitude: fix.longitude });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  // Compute geofence status from the real device fix when present; otherwise
+  // fall back to the simulated offset (emulator/testing).
   const geofence = useMemo(() => {
-    // 0.000009 deg lat is approx 1 meter
-    const simulatedUserLat = targetCoords.lat + (userOffsetMeters * 0.000009);
-    const simulatedUserLng = targetCoords.lng;
+    const userLat = deviceFix
+      ? deviceFix.latitude
+      : targetCoords.lat + userOffsetMeters * 0.000009;
+    const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
     return checkGeofenceProximity(
       targetCoords.lat,
       targetCoords.lng,
-      simulatedUserLat,
-      simulatedUserLng,
+      userLat,
+      userLng,
       150,
     );
-  }, [targetCoords, userOffsetMeters]);
+  }, [targetCoords, userOffsetMeters, deviceFix]);
 
   if (!project) return null;
 
-  const handleCapture = () => {
+  const handleCapture = async () => {
     if (!geofence.isInside) {
       haptics.triggerWarning();
       return;
     }
 
     haptics.triggerSuccess();
+    const userLat = deviceFix
+      ? deviceFix.latitude
+      : targetCoords.lat + userOffsetMeters * 0.000009;
+    const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
+
+    // Always enqueue to the offline-first outbox first (field durability).
     const queued = outbox.enqueueAudit({
       projectId: project.id,
-      latitude: targetCoords.lat,
-      longitude: targetCoords.lng,
+      latitude: userLat,
+      longitude: userLng,
       distanceMeters: geofence.distanceMeters,
       notes: `Verified on-site within ${geofence.distanceMeters}m geofence.`,
     });
-
     setCapturedReceipt(queued);
     onAuditSubmitted?.(queued);
+
+    // Attempt a live submission; on success mark synced and surface the verdict.
+    setSubmitting(true);
+    try {
+      const result = await api.submitReport({
+        projectId: project.id,
+        description: `On-site field audit within ${geofence.distanceMeters}m of the project centroid.`,
+        latitude: userLat,
+        longitude: userLng,
+      });
+      outbox.markSynced(queued.id);
+      setVerdict(result);
+    } catch {
+      // Stay queued; syncPendingAudits() will retry when back online.
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDone = () => {
     setCapturedReceipt(null);
+    setVerdict(null);
     onClose();
   };
 
@@ -238,6 +286,16 @@ export default function FieldAuditorModal({
                     Keep this receipt code. You can use it to track DPWH and COA
                     investigation progress with zero personal identification.
                   </Text>
+                  {verdict ? (
+                    <View testID="report-verdict" style={styles.verdictBox}>
+                      <Text style={styles.verdictTitle}>Server verification</Text>
+                      <VerificationBadges report={verdict} />
+                    </View>
+                  ) : (
+                    submitting && (
+                      <Text style={styles.verdictPending}>Verifying with server…</Text>
+                    )
+                  )}
                 </View>
               )}
 
@@ -553,6 +611,21 @@ const styles = StyleSheet.create({
     color: '#475569',
     textAlign: 'center',
     lineHeight: 14,
+  },
+  verdictBox: {
+    marginTop: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  verdictTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  verdictPending: {
+    marginTop: 10,
+    fontSize: 10,
+    color: '#64748b',
   },
   doneBtn: {
     backgroundColor: '#1f3d3c',

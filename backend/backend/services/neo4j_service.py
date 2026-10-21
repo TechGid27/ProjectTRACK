@@ -178,10 +178,11 @@ class Neo4jService:
                p.budget_numeric AS budget_num,
                p.amount_paid AS amount_paid,
                p.source_of_funds AS source_of_funds,
+               coalesce(p.report_count, 0) AS report_count,
                p.program_name AS program_name,
                p.component_categories AS component_categories,
                p.region AS region,
-               p.report_count AS report_count,
+
                p.has_satellite_image AS has_satellite_image,
                p.gps_source AS gps_source,
                p.status AS status,
@@ -270,6 +271,7 @@ class Neo4jService:
                p.municipality AS municipality,
                p.barangay AS barangay,
                coalesce(p.formatted_address, loc.formatted_address) AS formatted_address,
+               coalesce(p.report_count, 0) AS report_count,
                1.0 AS score,
                [
                    {rel: 'LOCATED_IN', target: coalesce(loc.name, p.municipality), desc: coalesce(loc.name, p.municipality)},
@@ -406,6 +408,7 @@ class Neo4jService:
                p.budget_numeric AS budget_num,
                p.amount_paid AS amount_paid,
                p.source_of_funds AS source_of_funds,
+               coalesce(p.report_count, 0) AS report_count,
                c.name AS contractor
         ORDER BY p.budget_numeric DESC
         LIMIT $limit
@@ -418,6 +421,78 @@ class Neo4jService:
                 return s.run(cypher, muni_token=muni_token, limit=limit).data()
         except Exception as e:
             logger.error(f"Error fetching map projects: {e}")
+            return []
+
+    def get_top_reported_projects(
+        self,
+        municipality: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Rank geocoded projects by the number of citizen field reports.
+
+        Province-wide when ``municipality`` is None, otherwise scoped to the
+        single canonical LGU (reusing the cross-LGU-safe municipality token).
+
+        Ranking source is the graph-maintained ``p.report_count`` (bumped by
+        :meth:`add_report_link`). An optional ``status`` restricts the count to
+        reports with that verdict (e.g. ``"flagged"``) by counting the linked
+        ``(:Report)`` nodes instead of the denormalized total. Only projects
+        with coordinates are returned so the caller can fly the map to them.
+        """
+        driver = self.get_driver()
+        if not driver:
+            return []
+
+        muni_token = canonical_municipality(municipality) if municipality else None
+        if municipality and not muni_token:
+            return []
+
+        if status:
+            # Status-aware: count linked :Report nodes with the given verdict.
+            count_expr = "size([(p)<-[:REPORTS_ON]-(r:Report) WHERE toLower(r.status) = toLower($status) | r])"
+        else:
+            # Fast path: use the denormalized counter maintained on the node.
+            count_expr = "coalesce(p.report_count, 0)"
+
+        cypher = """
+        MATCH (p:Project)
+        WHERE p.latitude IS NOT NULL
+          AND (
+            $muni_token IS NULL
+            OR """ + _CYPHER_MUNI_CANON + """ = $muni_token
+          )
+        OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
+        WITH p, c, """ + count_expr + """ AS report_count
+        WHERE report_count > 0
+        RETURN p.project_id AS id,
+               p.project_id AS entity,
+               p.latitude AS latitude,
+               p.longitude AS longitude,
+               p.municipality AS municipality,
+               p.barangay AS barangay,
+               p.formatted_address AS formatted_address,
+               p.description AS description,
+               p.category AS category,
+               p.status AS status,
+               p.budget_raw AS budget,
+               p.budget_numeric AS budget_num,
+               c.name AS contractor,
+               report_count
+        ORDER BY report_count DESC, p.budget_numeric DESC
+        LIMIT $limit
+        """
+        try:
+            with driver.session() as s:
+                rows = s.run(
+                    cypher, muni_token=muni_token, status=status, limit=limit
+                ).data()
+                for r in rows:
+                    r["description"] = clean_description(r.get("description"))
+                return rows
+        except Exception as e:
+            logger.error(f"Error fetching top reported projects: {e}")
             return []
 
     def get_location_breakdown(self) -> List[Dict[str, Any]]:
@@ -616,6 +691,36 @@ class Neo4jService:
             "total_contractors": 0,
             "average_project_cost": 0.0,
         }
+
+    def add_report_link(self, project_id: str, report_id: str, status: str) -> Optional[int]:
+        """
+        Create a lightweight :Report node linked to its :Project and bump the
+        project's report_count (Pillar 5 graph/chat visibility). Returns the new
+        report_count, or None if the graph is unavailable (non-fatal: the report
+        is already persisted in Supabase, which is the system of record).
+        """
+        driver = self.get_driver()
+        if not driver:
+            logger.warning("Neo4j unavailable; skipping :Report graph link for %s", report_id)
+            return None
+
+        cypher = """
+        MATCH (p:Project)
+        WHERE toLower(p.project_id) = toLower($pid)
+        MERGE (r:Report {id: $rid})
+          ON CREATE SET r.status = $status, r.created_at = datetime()
+          ON MATCH  SET r.status = $status
+        MERGE (r)-[:REPORTS_ON]->(p)
+        SET p.report_count = coalesce(p.report_count, 0) + 1
+        RETURN p.report_count AS report_count
+        """
+        try:
+            with driver.session() as s:
+                row = s.run(cypher, pid=project_id.strip(), rid=report_id, status=status).single()
+                return row["report_count"] if row else None
+        except Exception as e:
+            logger.error(f"Error linking report {report_id} to project {project_id}: {e}")
+            return None
 
 
 # Global singleton instance

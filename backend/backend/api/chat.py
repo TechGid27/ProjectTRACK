@@ -31,6 +31,7 @@ from backend.services.guardrail_service import (
 )
 from backend.services.neo4j_service import neo4j_service, format_currency, canonical_municipality
 from backend.services.llm_service import llm_service
+from backend.services.report_store import report_store, ReportStoreError
 from pipeline.geocoding import CEBU_MUNICIPALITIES_GEO, geocode_location
 
 router = APIRouter(prefix="/chat", tags=["Chat & GraphRAG"])
@@ -82,10 +83,16 @@ def _parse_validated_reference(raw: str):
 # which should focus the map on that project's exact coordinates (zoom 15)
 # instead of the whole municipality.
 _SUPERLATIVE_MAX_BUDGET = ("most expensive", "biggest", "largest", "highest",
-                           "priciest", "costliest", "biggest budget", "top")
+                           "priciest", "costliest", "biggest budget")
 _SUPERLATIVE_MIN_BUDGET = ("least expensive", "cheapest", "smallest", "lowest")
 _SUPERLATIVE_LATEST = ("latest", "newest", "most recent", "recent")
 _SUPERLATIVE_OLDEST = ("oldest", "earliest")
+_SUPERLATIVE_MOST_REPORTED = ("most reported", "most complained", "most complaints",
+                              "most audited", "highest number of reports",
+                              "most reports", "most report", "top reported",
+                              "worst reported", "most flagged by citizens")
+_SUPERLATIVE_MOST_FLAGGED = ("most flagged", "most suspicious", "most suspicious reports",
+                             "flagged the most", "most disputed")
 _LOCATE_SINGULAR_CUES = ("where is it", "where's it", "where is that", "where it is",
                          "locate it", "locate that", "show it on", "show that on",
                          "pin it", "zoom to it", "zoom to that", "zoom into it",
@@ -97,9 +104,28 @@ def _detect_single_project_intent(question: str):
     Classify whether a follow-up targets a SINGLE project and how to pick it.
 
     Returns one of: "max_budget", "min_budget", "latest", "oldest", "locate",
-    or None (not a single-project request).
+    "most_reported", "most_flagged", or None (not a single-project request).
     """
     q = question.lower()
+
+    # Overview guard: explicit plural/list phrasing ("what are the projects",
+    # "top projects", "list/show all projects in X") is a multi-project overview,
+    # NOT a single-project focus — even if it contains a ranking word like "top".
+    # Only bail out when there is no singular narrowing cue ("the most expensive
+    # one/project"), so "most expensive project in X" still focuses one project.
+    _has_plural_projects = bool(re.search(r"\bprojects\b", q))
+    _has_overview_phrase = bool(
+        re.search(r"\b(what are|list|show me all|show all|all the|how many)\b", q)
+    )
+    if _has_overview_phrase and _has_plural_projects:
+        return None
+
+    # Reports superlatives first: "most flagged" is a stricter status-aware
+    # variant, so it is checked before the general "most reported" ranking.
+    if any(c in q for c in _SUPERLATIVE_MOST_FLAGGED):
+        return "most_flagged"
+    if any(c in q for c in _SUPERLATIVE_MOST_REPORTED):
+        return "most_reported"
     if any(c in q for c in _SUPERLATIVE_MAX_BUDGET):
         return "max_budget"
     if any(c in q for c in _SUPERLATIVE_MIN_BUDGET):
@@ -108,12 +134,17 @@ def _detect_single_project_intent(question: str):
         return "latest"
     if any(c in q for c in _SUPERLATIVE_OLDEST):
         return "oldest"
+    # "top" is single-project ONLY when singular ("top project", "the top one",
+    # "top-ranked project"); "top projects" (plural) is an overview handled above.
+    if re.search(r"\btop\b", q) and not _has_plural_projects:
+        return "max_budget"
     if any(c in q for c in _LOCATE_SINGULAR_CUES):
         return "locate"
     return None
 
 
-def _select_project_for_intent(intent: str, projects: list, last_pid: Optional[str]):
+def _select_project_for_intent(intent: str, projects: list, last_pid: Optional[str],
+                               report_counts: Optional[Dict[str, int]] = None):
     """
     Pick the single project a singular-intent follow-up refers to.
 
@@ -132,6 +163,16 @@ def _select_project_for_intent(intent: str, projects: list, last_pid: Optional[s
         m = re.search(r"Year:\s*(\d{4})", str(p.get("budget") or ""))
         return int(m.group(1)) if m else 0
 
+    def pid_of(p):
+        return (p.get("entity") or p.get("id") or "").replace("DPWH Project ", "").upper()
+
+    def report_count_of(p):
+        # Prefer a status-aware override count (e.g. flagged-only) keyed by
+        # project id; otherwise fall back to the graph-maintained total.
+        if report_counts:
+            return report_counts.get(pid_of(p), 0)
+        return p.get("report_count") or 0
+
     if intent == "max_budget":
         return max(usable, key=budget_of)
     if intent == "min_budget":
@@ -140,6 +181,10 @@ def _select_project_for_intent(intent: str, projects: list, last_pid: Optional[s
         return max(usable, key=year_of)
     if intent == "oldest":
         return min([p for p in usable if year_of(p)] or usable, key=year_of)
+    if intent in ("most_reported", "most_flagged"):
+        ranked = max(usable, key=report_count_of)
+        # Only focus a project that actually has at least one (matching) report.
+        return ranked if report_count_of(ranked) > 0 else None
     if intent == "locate":
         if last_pid:
             for p in usable:
@@ -149,6 +194,95 @@ def _select_project_for_intent(intent: str, projects: list, last_pid: Optional[s
         # Fall back to the most prominent (highest budget) project discussed.
         return max(usable, key=budget_of)
     return None
+
+
+def _reports_status_for_intent(intent: str) -> Optional[str]:
+    """Map a reports intent to the Supabase verdict used for status-aware ranking."""
+    return "flagged" if intent == "most_flagged" else None
+
+
+def _build_report_focus(chosen: Dict[str, Any], fallback_location: str,
+                        report_count: int) -> Tuple[str, SpatialContext]:
+    """
+    Build the single-project graph context + spatial focus for a report-ranked
+    project. Mirrors the superlative focus (zoom 16, highlighted pin) and adds a
+    "Field Reports: N" line so the synthesizer/LLM can mention citizen reports.
+    """
+    cpid = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "")
+    clat = float(chosen["latitude"])
+    clng = float(chosen["longitude"])
+    focus_desc = clean_description(chosen.get("description"))
+    focus_budget = chosen.get("budget") or format_currency(chosen.get("budget_num"))
+    location = clean_location(chosen.get("municipality") or fallback_location)
+    noun = "citizen field report" if report_count == 1 else "citizen field reports"
+    graph_context = (
+        f"This is the MOST REPORTED DPWH project for the requested scope, "
+        f"with {report_count} {noun} on record.\n"
+        f"Focused Project: DPWH Project {cpid}\n"
+        f"Location: {location}\n"
+        f"Scope Description: {focus_desc}\n"
+        f"Budget: {focus_budget}\n"
+        f"Status: {chosen.get('status', 'N/A')}\n"
+        f"Field Reports: {report_count}"
+    )
+    spatial_context = SpatialContext(
+        target_location=chosen.get("municipality") or fallback_location,
+        center=[clat, clng],
+        zoom=16,
+        total_count=1,
+        projects=[
+            SpatialProjectPoint(
+                id=cpid,
+                description=focus_desc,
+                budget=chosen.get("budget"),
+                budget_numeric=chosen.get("budget_num"),
+                status=chosen.get("status"),
+                contractor=chosen.get("contractor"),
+                category=chosen.get("category"),
+                latitude=clat,
+                longitude=clng,
+                municipality=chosen.get("municipality"),
+                barangay=chosen.get("barangay"),
+                formatted_address=chosen.get("formatted_address") or chosen.get("municipality"),
+                report_count=report_count,
+            )
+        ],
+    )
+    return graph_context, spatial_context
+
+
+def _no_reports_context(intent: str, location_label: Optional[str]) -> str:
+    """
+    Build an honest, grounded context stating that no (matching) citizen field
+    reports exist for the requested scope — used when a reports superlative is
+    asked but no project has any reports yet. Keeps the assistant from silently
+    falling back to an unrelated project.
+    """
+    where = (
+        f" in {location_label}"
+        if location_label and location_label.lower() not in ("cebu province", "cebu")
+        else " in Cebu"
+    )
+    kind = "flagged field reports" if intent == "most_flagged" else "citizen field reports"
+    return (
+        f"No DPWH Cebu infrastructure projects{where} have any {kind} on record yet. "
+        f"There is therefore no most-reported project to show for this scope. "
+        f"Field reports are submitted by citizens through the mobile field auditor; "
+        f"once reports exist, the most-reported project can be located on the map."
+    )
+
+
+
+
+
+async def _flagged_counts() -> Dict[str, int]:
+    """Fetch per-project flagged-report counts from Supabase, degrading to {}."""
+    try:
+        return await report_store.report_counts_by_project(status="flagged")
+    except ReportStoreError:
+        return {}
+    except Exception:  # pragma: no cover - defensive
+        return {}
 
 
 async def resolve_project_context(
@@ -166,7 +300,8 @@ async def resolve_project_context(
         "budget", "cost", "price", "status", "timeline", "who", "when", "where",
         "details", "detail", "expensive", "cheap", "cheapest", "biggest",
         "largest", "smallest", "latest", "newest", "oldest", "top", "first",
-        "last", "same", "above",
+        "last", "same", "above", "reported", "reports", "report", "flagged",
+        "complaints", "complained", "audited",
     }
     has_cue = bool(question_words & followup_cues)
 
@@ -292,6 +427,29 @@ async def resolve_project_context(
     if not detected_muni and remembered_location:
         detected_muni = remembered_location
 
+    # Province-wide "most reported / most flagged" focus: when a reports
+    # superlative is asked WITHOUT a resolved location, rank all Cebu projects
+    # by citizen report volume and fly the map to the single top one. Scoped
+    # ("most reported in Toledo") falls through to the location path below.
+    reports_intent = _detect_single_project_intent(question)
+    if reports_intent in ("most_reported", "most_flagged") and not detected_muni:
+        status_filter = _reports_status_for_intent(reports_intent)
+        top = neo4j_service.get_top_reported_projects(
+            municipality=None, status=status_filter, limit=1
+        )
+        if top:
+            chosen = top[0]
+            rcount = int(chosen.get("report_count") or 0)
+            graph_context, spatial_context = _build_report_focus(
+                chosen, "Cebu Province", rcount
+            )
+            cpid = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "")
+            focus_project = neo4j_service.get_project_by_id(cpid.upper())
+            return focus_project, [chosen], graph_context, spatial_context
+        # No project has any (matching) reports yet — answer honestly instead of
+        # falling through to an unrelated project.
+        return None, [], _no_reports_context(reports_intent, "Cebu Province"), None
+
     search_query = detected_muni or (" ".join(terms) if terms else question)
     loc_projects, total_cnt, total_budget = neo4j_service.search_projects_by_location(search_query)
 
@@ -322,6 +480,16 @@ async def resolve_project_context(
             or re.match(r'^\s*and\b', q_lower_full)
             or len(terms) <= 1  # essentially just a location + filler
         )
+        # But never inherit a single-project superlative onto an explicit
+        # overview request ("what are the projects in Cordova?"), even though
+        # stop-word stripping can reduce it to a single term. Such phrasing is a
+        # fresh multi-project ask, not an elliptical "...and in Cordova?".
+        _is_explicit_overview = bool(
+            re.search(r"\bprojects\b", q_lower_full)
+            and re.search(r"\b(what are|list|show me all|show all|all the|how many|are the|the projects)\b", q_lower_full)
+        )
+        if _is_explicit_overview:
+            _is_continuation = False
         if not single_intent and _is_continuation and detected_muni:
             for h in reversed((history or [])[-6:]):
                 role = h.role if hasattr(h, "role") else h.get("role", "")
@@ -340,8 +508,39 @@ async def resolve_project_context(
             )
             prev_pids_focus = re.findall(r'\b\d{2}[A-Za-z]{1,2}\d{4,5}\b', history_text_focus, re.IGNORECASE)
             last_pid = prev_pids_focus[-1] if prev_pids_focus else None
-            chosen = _select_project_for_intent(single_intent, loc_projects, last_pid)
+
+            # Status-aware ranking (e.g. "most flagged in Toledo") pulls live
+            # flagged counts from Supabase; plain "most reported" uses each
+            # row's graph-maintained report_count. Other intents ignore counts.
+            report_counts = None
+            if single_intent == "most_flagged":
+                report_counts = await _flagged_counts()
+
+            chosen = _select_project_for_intent(
+                single_intent, loc_projects, last_pid, report_counts=report_counts
+            )
+            if not chosen and single_intent in ("most_reported", "most_flagged"):
+                # The LGU resolved but no project there has any (matching)
+                # reports — answer honestly rather than describing an unrelated
+                # project from the overview.
+                return (
+                    None,
+                    [],
+                    _no_reports_context(single_intent, detected_muni or search_query.title()),
+                    None,
+                )
             if chosen:
+                if single_intent in ("most_reported", "most_flagged"):
+                    cpid_key = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "").upper()
+                    rcount = (report_counts.get(cpid_key, 0) if report_counts
+                              else int(chosen.get("report_count") or 0))
+                    graph_context, spatial_context = _build_report_focus(
+                        chosen, detected_muni or search_query.title(), rcount
+                    )
+                    cpid = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "")
+                    focus_project = neo4j_service.get_project_by_id(cpid.upper())
+                    return focus_project, [chosen], graph_context, spatial_context
+
                 cpid = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "")
                 clat = float(chosen["latitude"])
                 clng = float(chosen["longitude"])
@@ -416,7 +615,8 @@ async def resolve_project_context(
                         longitude=float(pt["longitude"]),
                         municipality=pt.get("municipality"),
                         barangay=pt.get("barangay"),
-                        formatted_address=pt.get("formatted_address") or pt.get("municipality")
+                        formatted_address=pt.get("formatted_address") or pt.get("municipality"),
+                        report_count=pt.get("report_count"),
                     )
                 )
 

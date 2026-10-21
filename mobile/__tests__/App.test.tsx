@@ -1,3 +1,12 @@
+jest.mock('react-native-safe-area-context', () => {
+  const inset = { top: 0, right: 0, bottom: 0, left: 0 };
+  return {
+    SafeAreaProvider: ({ children }: any) => children,
+    SafeAreaConsumer: ({ children }: any) => children(inset),
+    useSafeAreaInsets: () => inset,
+    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 390, height: 844 }),
+  };
+});
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import App from '../App';

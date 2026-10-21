@@ -62,4 +62,20 @@ describe('ContractorRankingScreen Component', () => {
 
     expect(mockOnBackToMap).toHaveBeenCalledTimes(1);
   });
+
+  test('tapping a contractor card opens projects drilldown modal', () => {
+    const mockOnNavigateToProjectOnMap = jest.fn();
+    const { getByTestId, getAllByText } = render(
+      <ContractorRankingScreen
+        onBackToMap={mockOnBackToMap}
+        onNavigateToProjectOnMap={mockOnNavigateToProjectOnMap}
+      />,
+    );
+
+    const card = getByTestId('contractor-card-1');
+    fireEvent.press(card);
+
+    expect(getAllByText('WTG CONSTRUCTION & DEVELOPMENT CORP.').length).toBeGreaterThan(0);
+    expect(getByTestId('close-contractor-modal-btn')).toBeTruthy();
+  });
 });

@@ -1,9 +1,40 @@
-import { ProjectDetail, Contractor, Pin } from '../core/types';
+import { Platform } from 'react-native';
+import {
+  ProjectDetail,
+  Contractor,
+  Pin,
+  ReportVerification,
+  ReportRecord,
+  ProcurementAward,
+  AppropriationSummary,
+  SpatialContext,
+} from '../core/types';
 import { mockProjects, getProjectsByLocation, getProjectById } from '../data/mockApi';
 import { topContractors } from '../data/contractors';
 import { pins as localPins } from '../data/pins';
+import { outbox } from './outbox';
+import {
+  sanitizeSearchQuery,
+  sanitizeChatMessage,
+  sanitizeReportDescription,
+  sanitizeEmail,
+} from '../core/sanitizer';
 
-const DEFAULT_API_BASE = 'http://localhost:8000/api';
+const getInitialBaseUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000/api';
+  }
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    return `http://${host}:8000/api`;
+  }
+  return 'http://localhost:8000/api';
+};
+
+const DEFAULT_API_BASE = getInitialBaseUrl();
 
 export interface BackendSummary {
   total_projects: number;
@@ -16,6 +47,7 @@ export interface ChatResponse {
   answer: string;
   sources?: string[];
   mode?: string;
+  spatial?: SpatialContext;
 }
 
 class ApiService {
@@ -71,8 +103,8 @@ class ApiService {
         return data.map((item: any) => ({
           contractor: item.contractor,
           code: item.code || undefined,
-          total_budget: item.total_budget || 0,
-          project_count: item.project_count || 1,
+          total_budget: typeof item.total_budget === 'number' ? item.total_budget : 0,
+          project_count: typeof item.project_count === 'number' ? item.project_count : 1,
         }));
       }
       return topContractors.slice(0, limit);
@@ -81,37 +113,122 @@ class ApiService {
     }
   }
 
-  async fetchProjectsByLocation(location: string, limit = 15): Promise<ProjectDetail[]> {
+  async fetchTopProjects(limit = 10): Promise<ProjectDetail[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/analytics/top-projects?limit=${limit}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((p: any) => ({
+          id: p.id,
+          title: p.description || `Project ${p.id}`,
+          contractor: p.contractor || 'Contractor on Record',
+          budget: typeof p.budget_num === 'number' ? p.budget_num : 0,
+          status: 'Ongoing',
+          lgu: p.location || 'Cebu Province',
+        }));
+      }
+      return mockProjects.slice(0, limit);
+    } catch {
+      return mockProjects.slice(0, limit);
+    }
+  }
+
+  async searchProjects(q: string, limit = 20): Promise<ProjectDetail[]> {
+    const cleanQ = sanitizeSearchQuery(q, 100);
+    if (!cleanQ || cleanQ.length < 2) return [];
+
     try {
       const res = await fetch(
-        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(location)}&limit=${limit}`,
+        `${this.baseUrl}/projects/search?q=${encodeURIComponent(cleanQ)}&limit=${limit}`,
+        { headers: { Accept: 'application/json' } },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((p: any) => ({
+          id: p.entity || p.id,
+          title: p.description || p.entity || 'DPWH Civil Works Site',
+          contractor: p.contractor || 'Contractor on Record',
+          budget: typeof p.budget_num === 'number' ? p.budget_num : 0,
+          status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
+          lgu: p.municipality || 'Cebu Province',
+          barangay: p.barangay,
+          amount_paid: p.amount_paid,
+          source_of_funds: p.source_of_funds,
+        }));
+      }
+      const lower = cleanQ.toLowerCase();
+      return mockProjects.filter(
+        (p) =>
+          p.title.toLowerCase().includes(lower) ||
+          p.lgu.toLowerCase().includes(lower) ||
+          p.contractor.toLowerCase().includes(lower),
+      );
+    } catch {
+      const lower = cleanQ.toLowerCase();
+      return mockProjects.filter(
+        (p) =>
+          p.title.toLowerCase().includes(lower) ||
+          p.lgu.toLowerCase().includes(lower) ||
+          p.contractor.toLowerCase().includes(lower),
+      );
+    }
+  }
+
+  async fetchProjectsByLocation(location: string, limit = 15): Promise<ProjectDetail[]> {
+    const cleanLocation = sanitizeSearchQuery(location, 100);
+    if (!cleanLocation) return [];
+
+    try {
+      const res = await fetch(
+        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(cleanLocation)}&limit=${limit}`,
         {
           headers: { Accept: 'application/json' },
         },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (data.sample_projects && Array.isArray(data.sample_projects) && data.sample_projects.length > 0) {
-        return data.sample_projects.map((p: any) => ({
-          id: p.id,
+      const rawList = data.projects || data.sample_projects;
+      if (Array.isArray(rawList) && rawList.length > 0) {
+        return rawList.map((p: any) => ({
+          id: p.id || p.entity,
           title: p.title || p.description || 'Public Works Site',
           contractor: p.contractor || 'Contractor on Record',
-          budget: p.budget || 20000000,
+          budget:
+            typeof p.budget_num === 'number'
+              ? p.budget_num
+              : typeof p.budget === 'number'
+                ? p.budget
+                : 20000000,
           status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
-          lgu: p.location || location,
+          lgu: p.location || p.municipality || cleanLocation,
           barangay: p.barangay,
-          scope: p.scope,
+          scope: p.scope || p.description,
+          amount_paid: p.amount_paid,
+          source_of_funds: p.source_of_funds,
+          funding_source: p.funding_source,
+          program_name: p.program_name,
+          region: p.region,
+          procurements: p.procurements || [],
+        report_count: typeof p.report_count === 'number' ? p.report_count : 0,
+        is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
         }));
       }
-      return getProjectsByLocation(location);
+      return getProjectsByLocation(cleanLocation);
     } catch {
-      return getProjectsByLocation(location);
+      return getProjectsByLocation(cleanLocation);
     }
   }
 
   async fetchProjectById(id: string): Promise<ProjectDetail | undefined> {
+    const cleanId = sanitizeSearchQuery(id, 50);
+    if (!cleanId) return undefined;
+
     try {
-      const res = await fetch(`${this.baseUrl}/projects/${encodeURIComponent(id)}`, {
+      const res = await fetch(`${this.baseUrl}/projects/${encodeURIComponent(cleanId)}`, {
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -120,34 +237,53 @@ class ApiService {
         id: p.id,
         title: p.title || p.description,
         contractor: p.contractor || 'Contractor on Record',
-        budget: p.budget || 0,
+        budget: typeof p.budget_num === 'number' ? p.budget_num : (typeof p.budget === 'number' ? p.budget : 0),
         status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
-        lgu: p.location || 'Cebu Province',
+        lgu: p.location || p.municipality || 'Cebu Province',
         barangay: p.barangay,
-        scope: p.scope,
+        scope: p.scope || p.description,
+        amount_paid: p.amount_paid,
+        source_of_funds: p.source_of_funds,
+        funding_source: p.funding_source,
+        program_name: p.program_name,
+        region: p.region,
+        procurements: p.procurements || [],
+        report_count: typeof p.report_count === 'number' ? p.report_count : 0,
+        is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
       };
     } catch {
-      return getProjectById(id);
+      return getProjectById(cleanId);
     }
   }
 
   async fetchMapPins(municipality?: string): Promise<Pin[]> {
+    const cleanMunicipality = municipality ? sanitizeSearchQuery(municipality, 100) : undefined;
     try {
-      const url = municipality
-        ? `${this.baseUrl}/projects/map?municipality=${encodeURIComponent(municipality)}&limit=200`
+      const url = cleanMunicipality
+        ? `${this.baseUrl}/projects/map?municipality=${encodeURIComponent(cleanMunicipality)}&limit=200`
         : `${this.baseUrl}/projects/map?limit=200`;
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        return data.map((p: any) => ({
-          id: p.id,
-          name: p.title || `Project ${p.id}`,
-          lat: p.latitude,
-          lng: p.longitude,
-          tone: p.status === 'Delayed' ? 'warning' : 'default',
-          lgu: p.location || municipality || 'Cebu Province',
-        }));
+        return data.map((p: any) => {
+          const reportCount = typeof p.report_count === 'number' ? p.report_count : 0;
+          const isHotspot = reportCount > 0;
+          return {
+            id: p.id,
+            name: p.title || p.description || `Project ${p.id}`,
+            lat: p.latitude,
+            lng: p.longitude,
+            tone: (isHotspot ? 'hotspot' : p.status === 'Delayed' ? 'warning' : 'default') as Pin['tone'],
+            lgu: p.location || p.municipality || cleanMunicipality || 'Cebu Province',
+            description: p.description || p.category,
+            report_count: reportCount,
+            is_hotspot: isHotspot,
+            budget: typeof p.budget_num === 'number' ? p.budget_num : undefined,
+            status: p.status,
+            contractor: p.contractor,
+          };
+        });
       }
       return localPins;
     } catch {
@@ -155,7 +291,23 @@ class ApiService {
     }
   }
 
-  async sendChatMessage(message: string, history: Array<{ role: string; content: string }> = []): Promise<ChatResponse> {
+  async sendChatMessage(
+    message: string,
+    history: Array<{ role: string; content: string }> = [],
+  ): Promise<ChatResponse> {
+    const cleanMsg = sanitizeChatMessage(message, 1000);
+    if (!cleanMsg) {
+      return {
+        answer: 'Please provide a valid question.',
+        mode: 'offline_civic_agent',
+      };
+    }
+
+    const cleanHistory = (history || []).slice(-6).map((h) => ({
+      role: h.role === 'user' ? 'user' : 'assistant',
+      content: sanitizeChatMessage(h.content, 1000),
+    }));
+
     try {
       const res = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
@@ -163,7 +315,7 @@ class ApiService {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({ message: cleanMsg, history: cleanHistory }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -171,26 +323,230 @@ class ApiService {
         answer: data.answer || 'No response returned from GraphRAG.',
         sources: data.sources || [],
         mode: data.mode || 'ai',
+        spatial: data.spatial,
       };
     } catch {
       // Deterministic civic fallback for offline testing
-      const q = message.toLowerCase();
+      const q = cleanMsg.toLowerCase();
       if (q.includes('bogo')) {
         return {
-          answer: 'In Bogo City, QM BUILDERS holds the largest flood mitigation contract: ₱49,000,000 for the Construction of Flood Mitigation Structure along Bogo River (Project 24HD0012).',
+          answer:
+            'In Bogo City, QM BUILDERS holds the largest flood mitigation contract: ₱49,000,000 for the Construction of Flood Mitigation Structure along Bogo River (Project 24HD0012).',
           sources: ['24HD0012'],
+          mode: 'offline_civic_agent',
         };
       }
       if (q.includes('24hh0043') || q.includes('lahug')) {
         return {
-          answer: 'Project 24HH0043: "Lahug River Flood Control Dredging & Slope Reinforcement" located in Lahug, Cebu City. Awarded to QM BUILDERS with an approved budget of ₱85,200,000.',
+          answer:
+            'Project 24HH0043: "Lahug River Flood Control Dredging & Slope Reinforcement" located in Lahug, Cebu City. Awarded to QM BUILDERS with an approved budget of ₱85,200,000.',
           sources: ['24HH0043'],
+          mode: 'offline_civic_agent',
         };
       }
       return {
-        answer: 'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
+        answer:
+          'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
+        mode: 'offline_civic_agent',
       };
     }
+  }
+
+  async fetchAppropriations(limit = 50): Promise<AppropriationSummary[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/analytics/appropriations?limit=${limit}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return [
+        {
+          office_name: 'Cebu 1st District Engineering Office',
+          total_budget: 1850000000,
+          project_count: 42,
+          source_of_funds: 'GAA 2024',
+        },
+      ];
+    }
+  }
+
+  async fetchProcurementAwards(contractor?: string, limit = 50): Promise<ProcurementAward[]> {
+    const cleanContractor = contractor ? sanitizeSearchQuery(contractor, 100) : undefined;
+    try {
+      const url = cleanContractor
+        ? `${this.baseUrl}/analytics/procurement?contractor=${encodeURIComponent(cleanContractor)}&limit=${limit}`
+        : `${this.baseUrl}/analytics/procurement?limit=${limit}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  async signIn(email: string, password: string): Promise<{ user: any; error?: string }> {
+    const cleanEmail = sanitizeEmail(email);
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/signin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { user: null, error: data?.detail || 'Sign-in failed.' };
+      }
+      return { user: data.user || data };
+    } catch {
+      // Offline fallback for testing
+      return { user: { email: cleanEmail, id: 'offline-user' } };
+    }
+  }
+
+  async signUp(
+    email: string,
+    password: string,
+    fullName?: string,
+  ): Promise<{ user: any; message?: string; error?: string }> {
+    const cleanEmail = sanitizeEmail(email);
+    const cleanName = fullName ? sanitizeSearchQuery(fullName, 100) : undefined;
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email: cleanEmail, password, full_name: cleanName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { user: null, error: data?.detail || 'Sign-up failed.' };
+      }
+      return { user: data.user || data, message: data.message };
+    } catch {
+      return { user: { email: cleanEmail, id: 'offline-user' }, message: 'Account created (offline mode).' };
+    }
+  }
+
+  async signOut(): Promise<void> {
+    try {
+      await fetch(`${this.baseUrl}/auth/signout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // offline noop
+    }
+  }
+
+  async getSession(): Promise<any | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/session`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data?.user ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Submit a geofenced field report (Pillars 1–3). Sends multipart form data
+   * with the session cookie (credentials: 'include'); the backend re-validates
+   * the ≤150m geofence and runs image forensics, returning a verification
+   * verdict. Throws an Error with a `.status` on 401 / 429 / other failures.
+   */
+  async submitReport(input: {
+    projectId: string;
+    description: string;
+    category?: string;
+    latitude?: number;
+    longitude?: number;
+    photo?: { uri: string; name?: string; type?: string } | null;
+  }): Promise<ReportVerification> {
+    const cleanId = sanitizeSearchQuery(input.projectId, 50);
+    const cleanDesc = sanitizeReportDescription(input.description, 2000);
+    const cleanCat = input.category ? sanitizeSearchQuery(input.category, 50) : undefined;
+
+    const form = new FormData();
+    form.append('project_id', cleanId);
+    form.append('description', cleanDesc);
+    if (cleanCat) form.append('category', cleanCat);
+    if (typeof input.latitude === 'number') form.append('latitude', String(input.latitude));
+    if (typeof input.longitude === 'number') form.append('longitude', String(input.longitude));
+    if (input.photo) {
+      form.append('picture', {
+        uri: input.photo.uri,
+        name: input.photo.name ?? 'field-photo.jpg',
+        type: input.photo.type ?? 'image/jpeg',
+      } as unknown as Blob);
+    }
+
+    const res = await fetch(`${this.baseUrl}/reports`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    if (!res.ok) {
+      let detail = `Report submission failed (HTTP ${res.status})`;
+      try {
+        const body = await res.json();
+        if (body?.detail) detail = body.detail;
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      const error = new Error(detail) as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
+    return (await res.json()) as ReportVerification;
+  }
+
+  /** Fetch a project's reports with verification badges (Pillar 5). */
+  async fetchProjectReports(projectId: string): Promise<ReportRecord[]> {
+    const cleanId = sanitizeSearchQuery(projectId, 50);
+    const res = await fetch(`${this.baseUrl}/reports/${encodeURIComponent(cleanId)}`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    return (body?.reports ?? []) as ReportRecord[];
+  }
+
+  /**
+   * Offline-first sync (Pillar 1 field durability): POST each pending outbox
+   * audit to the backend. Marks items synced on success; leaves them pending on
+   * failure so a later sync retries. Returns the number successfully synced.
+   */
+  async syncPendingAudits(): Promise<number> {
+    const pending = outbox.getPendingAudits();
+    let synced = 0;
+    for (const item of pending) {
+      try {
+        await this.submitReport({
+          projectId: item.projectId,
+          description: item.notes ?? 'On-site field audit (offline capture).',
+          latitude: item.latitude,
+          longitude: item.longitude,
+        });
+        outbox.markSynced(item.id);
+        synced += 1;
+      } catch {
+        // Keep the item pending for the next sync attempt.
+      }
+    }
+    return synced;
   }
 }
 

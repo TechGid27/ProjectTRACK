@@ -181,10 +181,11 @@ class ApiService {
   async fetchProjectsByLocation(location: string, limit = 15): Promise<ProjectDetail[]> {
     const cleanLocation = sanitizeSearchQuery(location, 100);
     if (!cleanLocation) return [];
+    const safeLimit = Math.min(Math.max(1, limit), 100);
 
     try {
       const res = await fetch(
-        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(cleanLocation)}&limit=${limit}`,
+        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(cleanLocation)}&limit=${safeLimit}`,
         {
           headers: { Accept: 'application/json' },
         },

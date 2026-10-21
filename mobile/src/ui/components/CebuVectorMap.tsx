@@ -410,7 +410,7 @@ function CebuVectorMapImpl({
                   </SvgText>
                 ))}
               </G>
-              <View style={{ position: 'absolute', width: 0, height: 0, opacity: 0 }} pointerEvents="none">
+              <View style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}>
                 {pathsData.map((item) => (
                   <Text key={`lbl-text-${item.rawName}`}>{item.normalizedName}</Text>
                 ))}

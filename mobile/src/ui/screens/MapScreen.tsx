@@ -108,7 +108,7 @@ export default function MapScreen({
     let isMounted = true;
 
     api
-      .fetchProjectsByLocation(loc, 500)
+      .fetchProjectsByLocation(loc, 100)
       .then((projects) => {
         if (isMounted && projects && projects.length > 0) {
           setActiveProjects(projects);

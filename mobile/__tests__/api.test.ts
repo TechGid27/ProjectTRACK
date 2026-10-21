@@ -158,6 +158,25 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(projects[0].lgu).toBe('Bogo City');
   });
 
+  test('fetchProjectsByLocation clamps limit to prevent HTTP 422 errors', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        location: 'Cebu City',
+        total_count: 0,
+        total_budget: 0,
+        projects: [],
+      }),
+    });
+    global.fetch = mockFetch;
+
+    await api.fetchProjectsByLocation('Cebu City', 500);
+    expect(mockFetch).toHaveBeenCalled();
+    const calledUrl = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain('limit=100');
+    expect(calledUrl).not.toContain('limit=500');
+  });
+
   test('fetchMapPins marks hotspot strictly when real reports exist', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

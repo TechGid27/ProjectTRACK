@@ -176,5 +176,24 @@ describe('CebuVectorMap Component', () => {
       expect.objectContaining({ id: firstPin.id }),
     );
   });
-});
 
+  test('does not render raw project ID tags on map canvas and displays place labels when zoomed', () => {
+    const { queryByText, getByTestId } = render(
+      <CebuVectorMap
+        pins={pins}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const zoomInBtn = getByTestId('zoom-in-btn');
+    fireEvent.press(zoomInBtn);
+
+    // Raw project IDs should NOT be printed on the canvas
+    expect(queryByText('24HD0012')).toBeNull();
+    expect(queryByText('24HH0043')).toBeNull();
+
+    // Place labels for municipalities should be visible
+    expect(queryByText('Bogo City')).toBeTruthy();
+  });
+});

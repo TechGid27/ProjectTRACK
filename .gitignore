@@ -3,6 +3,8 @@
 .env.*
 *.env
 !.env.example
+gemini.md
+.gitignore
 
 # Knowledge graph generated databases & caches
 dpwh_knowledge_graph/

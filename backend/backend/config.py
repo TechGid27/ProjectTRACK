@@ -5,10 +5,11 @@ Manages environment variables, database connections, and service endpoints
 using Pydantic Settings.
 """
 
-from typing import List, Optional
+import json
+from typing import Annotated, List, Optional
 from pathlib import Path
-from pydantic import Field, AliasChoices, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, AliasChoices, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 # Locate project root directory relative to this config file
@@ -25,7 +26,10 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    CORS_ORIGINS: List[str] = ["*"]
+    # NoDecode: raw env string is passed to parse_cors_origins, which accepts
+    # a JSON list OR a comma-separated list (pydantic-settings would otherwise
+    # try json.loads and fail on the comma-separated form).
+    CORS_ORIGINS: Annotated[List[str], NoDecode] = ["*"]
     API_PREFIX: str = "/api"
 
     # Neo4j Graph Database
@@ -78,6 +82,58 @@ class Settings(BaseSettings):
     )
     LLM_MAX_TOKENS: int = 2048
     LLM_TIMEOUT: float = 60.0
+
+    @staticmethod
+    def _normalize_origin(value: str) -> str:
+        """Trim whitespace and any trailing slash so origins match browser Origin headers."""
+        return value.strip().rstrip("/")
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """
+        Accept a JSON list, a single origin, or a comma-separated string
+        (Render/Heroku-style env vars can't hold JSON easily):
+            CORS_ORIGINS="https://a.com,https://b.com"
+        Empty entries are dropped; each origin is normalized (no trailing slash).
+        """
+        if v is None or v == "":
+            return ["*"]
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith("["):
+                try:
+                    v = json.loads(s)
+                except json.JSONDecodeError:
+                    raise ValueError("CORS_ORIGINS must be a JSON list or comma-separated origins")
+            else:
+                v = [part for part in (p.strip() for p in s.split(",")) if part]
+        if not isinstance(v, list):
+            raise ValueError("CORS_ORIGINS must be a list of origins")
+        return [cls._normalize_origin(str(o)) for o in v if str(o).strip()]
+
+    @field_validator("FRONTEND_URL", mode="before")
+    @classmethod
+    def normalize_frontend_url(cls, v):
+        if isinstance(v, str):
+            return v.strip().rstrip("/")
+        return v
+
+    @field_validator("AUTH_COOKIE_SAMESITE", mode="before")
+    @classmethod
+    def validate_samesite(cls, v):
+        if isinstance(v, str):
+            v = v.strip().lower()
+        if v not in ("lax", "strict", "none"):
+            raise ValueError("AUTH_COOKIE_SAMESITE must be one of: lax, strict, none")
+        return v
+
+    @model_validator(mode="after")
+    def enforce_secure_cross_site_cookies(self):
+        # Browsers reject SameSite=None cookies unless they are also Secure.
+        if self.AUTH_COOKIE_SAMESITE == "none" and not self.AUTH_COOKIE_SECURE:
+            self.AUTH_COOKIE_SECURE = True
+        return self
 
     @field_validator("LLM_API_KEY", mode="before")
     @classmethod

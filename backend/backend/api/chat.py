@@ -83,7 +83,7 @@ def _parse_validated_reference(raw: str):
 # which should focus the map on that project's exact coordinates (zoom 15)
 # instead of the whole municipality.
 _SUPERLATIVE_MAX_BUDGET = ("most expensive", "biggest", "largest", "highest",
-                           "priciest", "costliest", "biggest budget", "top")
+                           "priciest", "costliest", "biggest budget")
 _SUPERLATIVE_MIN_BUDGET = ("least expensive", "cheapest", "smallest", "lowest")
 _SUPERLATIVE_LATEST = ("latest", "newest", "most recent", "recent")
 _SUPERLATIVE_OLDEST = ("oldest", "earliest")
@@ -107,6 +107,19 @@ def _detect_single_project_intent(question: str):
     "most_reported", "most_flagged", or None (not a single-project request).
     """
     q = question.lower()
+
+    # Overview guard: explicit plural/list phrasing ("what are the projects",
+    # "top projects", "list/show all projects in X") is a multi-project overview,
+    # NOT a single-project focus — even if it contains a ranking word like "top".
+    # Only bail out when there is no singular narrowing cue ("the most expensive
+    # one/project"), so "most expensive project in X" still focuses one project.
+    _has_plural_projects = bool(re.search(r"\bprojects\b", q))
+    _has_overview_phrase = bool(
+        re.search(r"\b(what are|list|show me all|show all|all the|how many)\b", q)
+    )
+    if _has_overview_phrase and _has_plural_projects:
+        return None
+
     # Reports superlatives first: "most flagged" is a stricter status-aware
     # variant, so it is checked before the general "most reported" ranking.
     if any(c in q for c in _SUPERLATIVE_MOST_FLAGGED):
@@ -121,6 +134,10 @@ def _detect_single_project_intent(question: str):
         return "latest"
     if any(c in q for c in _SUPERLATIVE_OLDEST):
         return "oldest"
+    # "top" is single-project ONLY when singular ("top project", "the top one",
+    # "top-ranked project"); "top projects" (plural) is an overview handled above.
+    if re.search(r"\btop\b", q) and not _has_plural_projects:
+        return "max_budget"
     if any(c in q for c in _LOCATE_SINGULAR_CUES):
         return "locate"
     return None
@@ -463,6 +480,16 @@ async def resolve_project_context(
             or re.match(r'^\s*and\b', q_lower_full)
             or len(terms) <= 1  # essentially just a location + filler
         )
+        # But never inherit a single-project superlative onto an explicit
+        # overview request ("what are the projects in Cordova?"), even though
+        # stop-word stripping can reduce it to a single term. Such phrasing is a
+        # fresh multi-project ask, not an elliptical "...and in Cordova?".
+        _is_explicit_overview = bool(
+            re.search(r"\bprojects\b", q_lower_full)
+            and re.search(r"\b(what are|list|show me all|show all|all the|how many|are the|the projects)\b", q_lower_full)
+        )
+        if _is_explicit_overview:
+            _is_continuation = False
         if not single_intent and _is_continuation and detected_muni:
             for h in reversed((history or [])[-6:]):
                 role = h.role if hasattr(h, "role") else h.get("role", "")

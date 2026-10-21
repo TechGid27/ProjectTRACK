@@ -36,6 +36,20 @@ class TestIntentDetection(unittest.TestCase):
         self.assertEqual(f("cheapest project"), "min_budget")
         self.assertIsNone(f("projects in Cordova"))
 
+    def test_plural_overview_is_not_single_project(self):
+        f = chat_mod._detect_single_project_intent
+        # Plural/list phrasing is an overview, even with a ranking word.
+        self.assertIsNone(f("Show top infrastructure projects in Mandaue City"))
+        self.assertIsNone(f("What are the projects in Cordova?"))
+        self.assertIsNone(f("list all projects in Toledo"))
+        self.assertIsNone(f("how many projects are in Bogo"))
+
+    def test_singular_top_is_single_project(self):
+        f = chat_mod._detect_single_project_intent
+        # Singular "top project" / "top one" still focuses a single project.
+        self.assertEqual(f("show the top project in Mandaue"), "max_budget")
+        self.assertEqual(f("what is the top one?"), "max_budget")
+
 
 class TestSelectProjectForIntent(unittest.TestCase):
     def _rows(self):
@@ -98,6 +112,33 @@ class TestScopedResolution(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(spatial.projects[0].id, "24HH0002")  # 9 reports wins
         self.assertIn("Field Reports: 9", graph_context)
         self.assertEqual(spatial.zoom, 16)
+
+
+class TestOverviewFollowup(unittest.IsolatedAsyncioTestCase):
+    async def test_overview_does_not_inherit_prior_superlative(self):
+        # Prior turn was a single-project superlative; a fresh explicit overview
+        # request for a new LGU must return the overview, not inherit the focus.
+        loc_rows = [
+            {"entity": "24CO0001", "latitude": 10.25, "longitude": 123.95, "report_count": 0,
+             "budget_num": 9e6, "description": "road A", "status": "Ongoing", "municipality": "Cordova"},
+            {"entity": "24CO0002", "latitude": 10.26, "longitude": 123.96, "report_count": 0,
+             "budget_num": 2e6, "description": "road B", "status": "Completed", "municipality": "Cordova"},
+        ]
+        hist = [
+            {"role": "user", "content": "show the top project in Mandaue"},
+            {"role": "assistant", "content": "The top Mandaue project is ..."},
+        ]
+        with patch.object(chat_mod.neo4j_service, "search_projects_by_location",
+                          return_value=(loc_rows, 80, 11e6)), \
+             patch.object(chat_mod.neo4j_service, "get_map_projects", return_value=loc_rows):
+            targeted, matched, _, spatial = await chat_mod.resolve_project_context(
+                "What are the projects in Cordova?", history=hist
+            )
+        self.assertIsNone(targeted)                 # not a single-project focus
+        self.assertGreater(spatial.total_count, 1)  # overview (full count)
+        self.assertEqual(spatial.zoom, 13)          # municipality zoom, not 16
+        self.assertEqual(spatial.target_location, "Cordova")
+
 
 
 class TestZeroReports(unittest.IsolatedAsyncioTestCase):

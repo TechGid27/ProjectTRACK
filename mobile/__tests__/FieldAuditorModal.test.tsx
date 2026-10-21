@@ -58,7 +58,7 @@ describe('FieldAuditorModal Component', () => {
       />,
     );
 
-    // Modal with visible=false or null project
+    expect(queryByTestId('field-auditor-modal')).toBeNull();
     const { queryByTestId: queryNullProj } = render(
       <FieldAuditorModal
         visible={true}
@@ -88,7 +88,7 @@ describe('FieldAuditorModal Component', () => {
   });
 
   test('disables shutter button when simulating off-site location (320m)', () => {
-    const { getByText, getByTestId } = render(
+    const { getByText } = render(
       <FieldAuditorModal
         visible={true}
         project={mockProject}

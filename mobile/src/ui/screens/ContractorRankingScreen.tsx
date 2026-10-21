@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,38 +7,93 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
-import { Contractor } from '../../core/types';
+import { Contractor, ProjectDetail } from '../../core/types';
+import { mockProjects } from '../../data/mockApi';
 import { formatCurrencyPHP } from '../../core/geoUtils';
 import { topContractors } from '../../data/contractors';
+import { api } from '../../services/api';
 
 const PAGE_SIZE = 6;
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 interface ContractorRankingScreenProps {
   onBackToMap: () => void;
+  onNavigateToProjectOnMap?: (lgu: string, projectId: string) => void;
 }
 
 export default function ContractorRankingScreen({
   onBackToMap,
+  onNavigateToProjectOnMap,
 }: ContractorRankingScreenProps) {
+  const [selectedContractor, setSelectedContractor] = useState<Contractor | null>(null);
+  const [contractorProjects, setContractorProjects] = useState<ProjectDetail[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
+  const handleContractorPress = (contractor: Contractor) => {
+    setSelectedContractor(contractor);
+    setLoadingProjects(true);
+    api.searchProjects(contractor.contractor, 30)
+      .then((res) => {
+        if (res && res.length > 0) {
+          setContractorProjects(res);
+        } else {
+          const cleanName = contractor.contractor.toLowerCase();
+          const fallback = mockProjects.filter((p) => p.contractor.toLowerCase().includes(cleanName));
+          setContractorProjects(fallback);
+        }
+      })
+      .catch(() => {
+        const cleanName = contractor.contractor.toLowerCase();
+        const fallback = mockProjects.filter((p) => p.contractor.toLowerCase().includes(cleanName));
+        setContractorProjects(fallback);
+      })
+      .finally(() => {
+        setLoadingProjects(false);
+      });
+  };
+  const [contractors, setContractors] = useState<Contractor[]>(topContractors);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    api
+      .fetchTopContractors(50)
+      .then((items) => {
+        if (isMounted && items && items.length > 0) {
+          setContractors(items);
+        }
+      })
+      .catch(() => {
+        // Fall back gracefully to offline dataset
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Filter contractors based on query
   const filteredList = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return topContractors;
-    return topContractors.filter(
+    if (!q) return contractors;
+    return contractors.filter(
       (c) =>
         c.contractor.toLowerCase().includes(q) ||
         (c.code && c.code.toLowerCase().includes(q)),
     );
-  }, [searchQuery]);
+  }, [contractors, searchQuery]);
 
   const maxBudget = useMemo(() => {
-    return topContractors[0]?.total_budget || 1;
-  }, []);
+    return contractors[0]?.total_budget || 1;
+  }, [contractors]);
 
   const pageCount = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -74,6 +129,14 @@ export default function ContractorRankingScreen({
             Infrastructure firms ranked by total awarded budget across tracked DPWH
             Cebu civil works. Codes are DPWH registration numbers.
           </Text>
+          {loading && (
+            <ActivityIndicator
+              size="small"
+              color="#0d9488"
+              style={{ marginTop: 6 }}
+              testID="contractor-ranking-loader"
+            />
+          )}
 
           {/* Search Box */}
           <View style={styles.searchRow}>
@@ -125,7 +188,9 @@ export default function ContractorRankingScreen({
               );
 
               return (
-                <View
+                <TouchableOpacity
+                  onPress={() => handleContractorPress(contractor)}
+                  activeOpacity={0.8}
                   key={`${contractor.code || 'c'}-${contractor.contractor}`}
                   style={styles.card}
                   testID={`contractor-card-${rank}`}
@@ -182,7 +247,7 @@ export default function ContractorRankingScreen({
                       style={[styles.progressFill, { width: `${pct}%` }]}
                     />
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -238,6 +303,76 @@ export default function ContractorRankingScreen({
             </View>
           )}
         </ScrollView>
+
+        {/* Contractor Projects Drilldown Modal */}
+        <Modal
+          visible={selectedContractor !== null}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setSelectedContractor(null)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle} numberOfLines={1}>
+                    {selectedContractor?.contractor}
+                  </Text>
+                  <Text style={styles.modalSubtitle}>
+                    {selectedContractor?.project_count} projects · {selectedContractor && formatCurrencyPHP(selectedContractor.total_budget)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setSelectedContractor(null)}
+                  style={styles.modalCloseBtn}
+                  testID="close-contractor-modal-btn"
+                >
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {loadingProjects ? (
+                <View style={styles.modalLoading}>
+                  <ActivityIndicator size="large" color="#0d9488" />
+                  <Text style={styles.loadingText}>Loading contractor projects…</Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.modalScroll}>
+                  {contractorProjects.length === 0 ? (
+                    <Text style={styles.emptyProjectsText}>No project records found.</Text>
+                  ) : (
+                    contractorProjects.map((proj) => (
+                      <View key={proj.id} style={styles.projItem}>
+                        <View style={styles.projTopRow}>
+                          <Text style={styles.projIdBadge}>{proj.id}</Text>
+                          <Text style={styles.projLguBadge}>{proj.lgu}</Text>
+                        </View>
+                        <Text style={styles.projTitle} numberOfLines={2}>
+                          {proj.title}
+                        </Text>
+                        <View style={styles.projFooter}>
+                          <Text style={styles.projBudget}>
+                            {formatCurrencyPHP(proj.budget)}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.viewOnMapBtn}
+                            onPress={() => {
+                              setSelectedContractor(null);
+                              onNavigateToProjectOnMap?.(proj.lgu, proj.id);
+                            }}
+                            testID={`view-on-map-${proj.id}`}
+                          >
+                            <Text style={styles.viewOnMapText}>📍 View on Map →</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -469,5 +604,124 @@ const styles = StyleSheet.create({
   },
   pageBtnTextDisabled: {
     color: '#94a3b8',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#0d9488',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '700',
+  },
+  modalLoading: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: '#64748b',
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  emptyProjectsText: {
+    textAlign: 'center',
+    paddingVertical: 24,
+    color: '#94a3b8',
+    fontSize: 13,
+  },
+  projItem: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  projTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  projIdBadge: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0d9488',
+    backgroundColor: '#ccfbf1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  projLguBadge: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  projTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  projFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  projBudget: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  viewOnMapBtn: {
+    backgroundColor: '#1f3d3c',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  viewOnMapText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });

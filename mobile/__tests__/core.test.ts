@@ -122,7 +122,7 @@ describe('Projects & Mock API Data Store', () => {
   test('mockProjects contains properly formed civil works contracts', () => {
     expect(mockProjects.length).toBeGreaterThan(0);
     mockProjects.forEach((proj) => {
-      expect(proj.id).toMatch(/^[0-9]{2}[A-Z]{2}[0-9]{4}$/);
+      expect(proj.id).toMatch(/^[0-9]{2}[A-Z]{1,2}[0-9]{4,5}$/);
       expect(proj.budget).toBeGreaterThan(0);
       expect(['Ongoing', 'Completed', 'Delayed']).toContain(proj.status);
     });

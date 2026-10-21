@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { ProjectDetail, AnomalyCategory, AnomalyReport } from '../../core/types';
+import { sanitizeReportDescription } from '../../core/sanitizer';
 
 interface ReportAnomalyModalProps {
   visible: boolean;
@@ -51,7 +52,7 @@ export default function ReportAnomalyModal({
     if (isSubmitting) return;
 
     // SEC-03: Strip HTML tags, sanitize whitespace, and check boundary limits
-    const sanitizedDesc = description.replace(/<[^>]*>?/gm, '').trim();
+    const sanitizedDesc = sanitizeReportDescription(description, 2000);
 
     if (sanitizedDesc.length < 15) {
       setErrorMessage(

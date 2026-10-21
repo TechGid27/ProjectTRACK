@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import MapFilterBar, { MapFilterOption } from '../src/ui/components/MapFilterBar';
+import MapFilterBar from '../src/ui/components/MapFilterBar';
 
 describe('MapFilterBar Component', () => {
   const mockOnSelectFilter = jest.fn();

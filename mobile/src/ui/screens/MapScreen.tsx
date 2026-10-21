@@ -286,18 +286,8 @@ export default function MapScreen({
     });
   };
 
-  const handleReportAnomaly = (targetLgu: string) => {
-    if (!selectedProject) {
-      const fallback = activeProjects[0] || {
-        id: `CIVIL-${normalizeLguName(targetLgu).toUpperCase()}`,
-        title: `Public Infrastructure Site in ${targetLgu}`,
-        contractor: 'Unknown / Under Investigation',
-        budget: 0,
-        status: 'Ongoing',
-        lgu: targetLgu,
-      };
-      setSelectedProject(fallback);
-    }
+  const handleReportAnomaly = (_targetLgu?: string) => {
+    setSelectedProject(null);
     setIsReportModalOpen(true);
   };
 
@@ -403,7 +393,7 @@ export default function MapScreen({
         >
           <Text style={styles.floatingShowSheetIcon}>📊</Text>
           <Text style={styles.floatingShowSheetText}>
-            {selectedLgu ? `Details: ${selectedLgu}` : `Show Details (${currentLguProjects.length} Projects)`}
+            {selectedLgu ? `Details: ${selectedLgu}` : 'Show Details'}
           </Text>
         </TouchableOpacity>
       )}
@@ -451,14 +441,16 @@ export default function MapScreen({
         }}
         onFocusLgu={(lgu) => {
           handleSelectMunicipality(lgu);
+          setIsChatBotOpen(false);
           const norm = normalizeLguName(lgu).toLowerCase();
           const feat = cebuDataRaw?.features?.find(
             (f: any) => normalizeLguName(f.properties?.name || '').toLowerCase() === norm,
           );
-          if (feat && (feat as any).properties?.center) {
-            const center = (feat as any).properties.center;
-            mapRef.current?.animateToCoordinates(center.lat, center.lng, 12.5);
-            setIsChatBotOpen(false); // auto-minimize AI chat on spatial query
+          if (feat) {
+            const label = (feat as any).properties?.label;
+            if (Array.isArray(label) && label.length === 2) {
+              mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
+            }
           }
         }}
         currentLgu={selectedLgu}
@@ -475,6 +467,7 @@ export default function MapScreen({
       <ReportAnomalyModal
         visible={isReportModalOpen}
         project={selectedProject}
+        availableProjects={currentLguProjects}
         onClose={() => setIsReportModalOpen(false)}
         onSubmit={handleSubmitReport}
       />

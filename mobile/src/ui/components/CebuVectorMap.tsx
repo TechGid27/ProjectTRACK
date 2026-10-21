@@ -402,7 +402,7 @@ function CebuVectorMapImpl({
                     y={item.centroid.y}
                     fill="#132c2a"
                     opacity={0.65}
-                    fontSize={Math.max(8.5, 12 / strokeScale)}
+                    fontSize={Math.max(7.0, 9.5 / Math.pow(scale, 0.25)) / scale}
                     fontWeight="800"
                     textAnchor="middle"
                   >

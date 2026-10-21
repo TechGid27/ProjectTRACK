@@ -15,6 +15,8 @@ import {
 import { api } from '../../services/api';
 import { haptics } from '../../services/haptics';
 import { sanitizeChatMessage } from '../../core/sanitizer';
+import { normalizeLguName } from '../../core/geoUtils';
+import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 interface ChatMessage {
   id: string;
@@ -36,6 +38,22 @@ const SUGGESTIONS = [
   'Tell me about project 24HH0043',
   'Top contractors in Cebu?',
 ];
+
+const CEBU_LGUS: string[] = (cebuDataRaw?.features || [])
+  .map((f: any) => normalizeLguName(f.properties?.name || ''))
+  .filter(Boolean);
+
+function findMentionedLgu(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const lgu of CEBU_LGUS) {
+    const lguLower = lgu.toLowerCase();
+    const regex = new RegExp(`\\b${lguLower}\\b`, 'i');
+    if (regex.test(lower)) {
+      return lgu;
+    }
+  }
+  return null;
+}
 
 const PROJECT_ID_REGEX = /\b(\d{2}[A-Za-z]{1,2}\d{4,5})\b/g;
 
@@ -116,8 +134,10 @@ export default function ChatBotModal({
       setMessages((prev) => [...prev, botMsg]);
 
       // Spatial camera navigation integration
-      if (res.spatial?.target_lgu && onFocusLgu) {
-        onFocusLgu(res.spatial.target_lgu);
+      const detectedLgu = res.spatial?.target_lgu || findMentionedLgu(text);
+      if (detectedLgu && onFocusLgu) {
+        onFocusLgu(detectedLgu);
+        onClose();
       }
       if (res.spatial?.focused_project_id && onSelectProject) {
         onSelectProject(res.spatial.focused_project_id);
@@ -128,6 +148,11 @@ export default function ChatBotModal({
         ...prev,
         { id: `b_${Date.now()}`, role: 'assistant', text: fallback },
       ]);
+      const detectedLgu = findMentionedLgu(text);
+      if (detectedLgu && onFocusLgu) {
+        onFocusLgu(detectedLgu);
+        onClose();
+      }
     } finally {
       setIsTyping(false);
     }

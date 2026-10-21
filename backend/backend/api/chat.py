@@ -197,7 +197,10 @@ def _build_report_focus(chosen: Dict[str, Any], fallback_location: str,
     focus_desc = clean_description(chosen.get("description"))
     focus_budget = chosen.get("budget") or format_currency(chosen.get("budget_num"))
     location = clean_location(chosen.get("municipality") or fallback_location)
+    noun = "citizen field report" if report_count == 1 else "citizen field reports"
     graph_context = (
+        f"This is the MOST REPORTED DPWH project for the requested scope, "
+        f"with {report_count} {noun} on record.\n"
         f"Focused Project: DPWH Project {cpid}\n"
         f"Location: {location}\n"
         f"Scope Description: {focus_desc}\n"
@@ -229,6 +232,30 @@ def _build_report_focus(chosen: Dict[str, Any], fallback_location: str,
         ],
     )
     return graph_context, spatial_context
+
+
+def _no_reports_context(intent: str, location_label: Optional[str]) -> str:
+    """
+    Build an honest, grounded context stating that no (matching) citizen field
+    reports exist for the requested scope — used when a reports superlative is
+    asked but no project has any reports yet. Keeps the assistant from silently
+    falling back to an unrelated project.
+    """
+    where = (
+        f" in {location_label}"
+        if location_label and location_label.lower() not in ("cebu province", "cebu")
+        else " in Cebu"
+    )
+    kind = "flagged field reports" if intent == "most_flagged" else "citizen field reports"
+    return (
+        f"No DPWH Cebu infrastructure projects{where} have any {kind} on record yet. "
+        f"There is therefore no most-reported project to show for this scope. "
+        f"Field reports are submitted by citizens through the mobile field auditor; "
+        f"once reports exist, the most-reported project can be located on the map."
+    )
+
+
+
 
 
 async def _flagged_counts() -> Dict[str, int]:
@@ -402,6 +429,9 @@ async def resolve_project_context(
             cpid = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "")
             focus_project = neo4j_service.get_project_by_id(cpid.upper())
             return focus_project, [chosen], graph_context, spatial_context
+        # No project has any (matching) reports yet — answer honestly instead of
+        # falling through to an unrelated project.
+        return None, [], _no_reports_context(reports_intent, "Cebu Province"), None
 
     search_query = detected_muni or (" ".join(terms) if terms else question)
     loc_projects, total_cnt, total_budget = neo4j_service.search_projects_by_location(search_query)
@@ -462,6 +492,16 @@ async def resolve_project_context(
             chosen = _select_project_for_intent(
                 single_intent, loc_projects, last_pid, report_counts=report_counts
             )
+            if not chosen and single_intent in ("most_reported", "most_flagged"):
+                # The LGU resolved but no project there has any (matching)
+                # reports — answer honestly rather than describing an unrelated
+                # project from the overview.
+                return (
+                    None,
+                    [],
+                    _no_reports_context(single_intent, detected_muni or search_query.title()),
+                    None,
+                )
             if chosen:
                 if single_intent in ("most_reported", "most_flagged"):
                     cpid_key = (chosen.get("entity") or chosen.get("id") or "").replace("DPWH Project ", "").upper()

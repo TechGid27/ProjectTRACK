@@ -100,5 +100,39 @@ class TestScopedResolution(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(spatial.zoom, 16)
 
 
+class TestZeroReports(unittest.IsolatedAsyncioTestCase):
+    async def test_province_wide_no_reports_is_honest(self):
+        # No project has reports -> graph query returns empty.
+        with patch.object(chat_mod.neo4j_service, "get_top_reported_projects", return_value=[]):
+            targeted, matched, graph_context, spatial = await chat_mod.resolve_project_context(
+                "what is the most reported project?", history=[]
+            )
+        self.assertIsNone(targeted)
+        self.assertEqual(matched, [])
+        self.assertIsNone(spatial)  # map is NOT moved to an unrelated project
+        self.assertIn("no", graph_context.lower())
+        self.assertIn("field report", graph_context.lower())
+
+    async def test_scoped_no_reports_is_honest(self):
+        # An LGU with projects but none having reports (report_count 0).
+        loc_rows = [
+            {"entity": "24LL0001", "latitude": 10.3, "longitude": 123.9, "report_count": 0,
+             "budget_num": 5e6, "description": "road safety devices", "status": "Completed",
+             "municipality": "Lapu-Lapu City"},
+        ]
+        with patch.object(chat_mod.neo4j_service, "get_top_reported_projects", return_value=[]), \
+             patch.object(chat_mod.neo4j_service, "search_projects_by_location",
+                          return_value=(loc_rows, 1, 5e6)), \
+             patch.object(chat_mod.neo4j_service, "get_map_projects", return_value=loc_rows), \
+             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value=None):
+            targeted, matched, graph_context, spatial = await chat_mod.resolve_project_context(
+                "most reported project in Lapu-Lapu City", history=[]
+            )
+        self.assertIsNone(targeted)
+        self.assertIsNone(spatial)
+        self.assertIn("no", graph_context.lower())
+        self.assertIn("field report", graph_context.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

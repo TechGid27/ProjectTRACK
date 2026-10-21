@@ -15,7 +15,6 @@ import {
   geoToSvgCoordinates,
   normalizeLguName,
   clusterPins,
-  disperseCoLocatedPins,
   formatCurrencyPHP,
 } from '../../core/geoUtils';
 import { haptics } from '../../services/haptics';
@@ -154,7 +153,7 @@ export default function CebuVectorMap({
     });
   }, [bounds, width, height]);
 
-  // 3. Precalculate pin coordinates with micro-dispersion for co-located sites
+  // 3. Precalculate authentic pin coordinates directly from GPS lat/lng
   const basePins = useMemo(() => {
     return pins.map((pin) => {
       const coords = geoToSvgCoordinates(
@@ -173,20 +172,16 @@ export default function CebuVectorMap({
     });
   }, [pins, bounds, width, height]);
 
-  const dispersedPins = useMemo(() => {
-    return disperseCoLocatedPins(basePins, scale, 14);
-  }, [basePins, scale]);
-
-  // 3.1 Density pin clustering for low zoom
+  // 3.1 Density pin clustering for low zoom (preserves true coordinates when unclustered)
   const displayPinClusters = useMemo(() => {
-    return clusterPins(dispersedPins, scale, 24);
-  }, [dispersedPins, scale]);
+    return clusterPins(basePins, scale, 24);
+  }, [basePins, scale]);
 
   // Active selected pin for floating callout card
   const activeSelectedPin = useMemo(() => {
     if (!selectedPinId) return null;
-    return dispersedPins.find((p) => p.id === selectedPinId) || null;
-  }, [selectedPinId, dispersedPins]);
+    return basePins.find((p) => p.id === selectedPinId) || null;
+  }, [selectedPinId, basePins]);
 
   // Calculate screen position for interactive callout
   const calloutPosition = useMemo(() => {
@@ -394,7 +389,8 @@ export default function CebuVectorMap({
           <G>
             {displayPinClusters.map((item) => {
               if (item.isCluster) {
-                const clusterR = Math.max(11, 14 / Math.pow(scale, 0.3));
+                const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
+                const clusterR = screenClusterR / scale;
                 return (
                   <G
                     key={item.id}
@@ -415,13 +411,13 @@ export default function CebuVectorMap({
                       r={clusterR}
                       fill="#1f3d3c"
                       stroke="#ffffff"
-                      strokeWidth={2 / strokeScale}
+                      strokeWidth={1.5 / scale}
                     />
                     <SvgText
                       x={item.x}
-                      y={item.y + 4 / strokeScale}
+                      y={item.y + 3.5 / scale}
                       fill="#ffffff"
-                      fontSize={Math.max(9, 11 / Math.pow(scale, 0.3))}
+                      fontSize={Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale}
                       fontWeight="bold"
                       textAnchor="middle"
                     >
@@ -459,10 +455,16 @@ export default function CebuVectorMap({
                 ? 'rgba(2, 132, 199, 0.45)'
                 : 'rgba(16, 185, 129, 0.45)';
 
-              const coreR = (isSelected ? 6.5 : 4.5) / pinScaleFactor;
-              const glowR = (isSelected ? 13 : 9) / pinScaleFactor;
-              const radarR = (isSelected ? 18 : 13) / pinScaleFactor;
-              const hitR = Math.max(16, 24 / strokeScale);
+              // Screen size decreases as user zooms in so dots become smaller and pinpoint
+              const screenCoreR = Math.max(2.0, (isSelected ? 6.5 : 4.8) / Math.pow(scale, 0.38));
+              const screenGlowR = Math.max(3.8, (isSelected ? 12.0 : 8.5) / Math.pow(scale, 0.38));
+              const screenRadarR = Math.max(5.5, (isSelected ? 16.0 : 12.0) / Math.pow(scale, 0.38));
+
+              const coreR = screenCoreR / scale;
+              const glowR = screenGlowR / scale;
+              const radarR = screenRadarR / scale;
+              const hitR = Math.max(18 / scale, coreR * 2.5);
+              const strokeW = (isSelected ? 1.5 : 1.0) / scale;
 
               return (
                 <G
@@ -496,8 +498,8 @@ export default function CebuVectorMap({
                         r={radarR}
                         fill="none"
                         stroke="#ef4444"
-                        strokeWidth={1.5 / strokeScale}
-                        strokeDasharray={`${2 / strokeScale},${2 / strokeScale}`}
+                        strokeWidth={strokeW}
+                        strokeDasharray={`${2 / scale},${2 / scale}`}
                         opacity={0.85}
                       />
                       <Circle
@@ -524,7 +526,7 @@ export default function CebuVectorMap({
                     r={coreR}
                     fill={coreColor}
                     stroke="#ffffff"
-                    strokeWidth={1.5 / strokeScale}
+                    strokeWidth={strokeW}
                   />
 
                   {/* Selected Ripple Pulse */}
@@ -532,10 +534,10 @@ export default function CebuVectorMap({
                     <Circle
                       cx={pin.x}
                       cy={pin.y}
-                      r={radarR + 3 / strokeScale}
+                      r={radarR + 2.5 / scale}
                       fill="none"
                       stroke="#ffffff"
-                      strokeWidth={1.5 / strokeScale}
+                      strokeWidth={strokeW}
                       opacity={0.9}
                     />
                   )}

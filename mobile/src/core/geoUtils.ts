@@ -223,64 +223,13 @@ export function clusterPins(
 }
 
 /**
- * Applies deterministic micro-dispersion to pins that share near-identical
- * coordinates on screen. At zoom scales >= 1.4, co-located pins fan out in
- * a circular orbit so each project remains visible and individually clickable.
+ * Preserves authentic coordinates for pins.
+ * Deprecated artificial circular dispersion to ensure natural geographic accuracy.
  */
 export function disperseCoLocatedPins<T extends { id: string; x: number; y: number }>(
   pins: T[],
-  scale: number,
-  proximityThreshold: number = 14,
+  _scale: number = 1.0,
+  _proximityThreshold: number = 14,
 ): T[] {
-  if (pins.length <= 1 || scale < 1.4) {
-    return pins;
-  }
-
-  const groups: T[][] = [];
-  const assigned = new Set<string>();
-
-  for (let i = 0; i < pins.length; i++) {
-    const p1 = pins[i];
-    if (assigned.has(p1.id)) continue;
-
-    const group = [p1];
-    assigned.add(p1.id);
-
-    for (let j = i + 1; j < pins.length; j++) {
-      const p2 = pins[j];
-      if (assigned.has(p2.id)) continue;
-
-      const dx = p1.x - p2.x;
-      const dy = p1.y - p2.y;
-      if (Math.hypot(dx, dy) <= proximityThreshold) {
-        group.push(p2);
-        assigned.add(p2.id);
-      }
-    }
-
-    groups.push(group);
-  }
-
-  const result: T[] = [];
-  const spreadRadius = Math.max(10, 16 / Math.sqrt(scale));
-
-  for (const group of groups) {
-    if (group.length === 1) {
-      result.push(group[0]);
-    } else {
-      const centerX = group.reduce((sum, p) => sum + p.x, 0) / group.length;
-      const centerY = group.reduce((sum, p) => sum + p.y, 0) / group.length;
-
-      group.forEach((pin, idx) => {
-        const angle = (idx * 2 * Math.PI) / group.length;
-        result.push({
-          ...pin,
-          x: centerX + spreadRadius * Math.cos(angle),
-          y: centerY + spreadRadius * Math.sin(angle),
-        });
-      });
-    }
-  }
-
-  return result;
+  return pins;
 }

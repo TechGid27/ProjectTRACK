@@ -8,6 +8,9 @@ export interface Pin {
   is_hotspot?: boolean;
   lgu: string;
   description?: string;
+  budget?: number;
+  status?: string;
+  contractor?: string;
 }
 
 export type ProjectStatus = 'Ongoing' | 'Completed' | 'Delayed';

@@ -279,6 +279,9 @@ class ApiService {
             description: p.description || p.category,
             report_count: reportCount,
             is_hotspot: isHotspot,
+            budget: typeof p.budget_num === 'number' ? p.budget_num : undefined,
+            status: p.status,
+            contractor: p.contractor,
           };
         });
       }

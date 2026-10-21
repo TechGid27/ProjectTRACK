@@ -66,6 +66,20 @@ Accept: application/json
 > (LGU-scoped), plus the status-aware "most **flagged**" variant. The matching
 > project is focused at `zoom: 16` and each spatial point carries an optional
 > `report_count` (number of citizen field reports) for map badging.
+>
+> **Overview vs. single-project.** Plural/list phrasing — "what are the
+> projects in Cordova?", "top **projects** in Mandaue", "list all projects in
+> Toledo" — is treated as a multi-project **overview** (whole-LGU dot set at
+> `zoom: 13`), not a single-project focus. Only singular phrasing ("the most
+> expensive project", "the top **project**", "the top one") focuses a single
+> project. An explicit overview request also never inherits a prior turn's
+> superlative, so following "the top project in Mandaue" with "what are the
+> projects in Cordova?" returns Cordova's full overview.
+>
+> **No reports yet.** When a report-volume superlative is asked but no project
+> in the requested scope has any matching reports, the assistant answers
+> honestly ("No … projects … have any citizen field reports on record yet")
+> and does **not** move the map to an unrelated project.
 
 ---
 

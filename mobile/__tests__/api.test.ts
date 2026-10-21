@@ -85,4 +85,76 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(fallbackResponse.answer).toBeDefined();
     expect(fallbackResponse.mode).toBe('offline_civic_agent');
   });
+
+  test('fetchTopProjects returns high impact projects', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: '24HH0043',
+          description: 'Lahug River Dredging',
+          contractor: 'QM BUILDERS',
+          budget_num: 85200000,
+          location: 'Cebu City',
+        },
+      ],
+    } as any);
+
+    const projs = await api.fetchTopProjects(5);
+    expect(projs.length).toBe(1);
+    expect(projs[0].id).toBe('24HH0043');
+    expect(projs[0].budget).toBe(85200000);
+  });
+
+  test('searchProjects sanitizes malicious input before querying backend', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          entity: '24HD0012',
+          description: 'Bogo River Flood Control',
+          budget_num: 49000000,
+          municipality: 'Bogo City',
+        },
+      ],
+    } as any);
+    global.fetch = mockFetch;
+
+    const results = await api.searchProjects('<script>alert(1)</script>bogo; DROP TABLE projects; --');
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe('24HD0012');
+
+    // Confirm URL was sanitized and stripped of injection characters
+    const calledUrl = mockFetch.mock.calls[0][0];
+    expect(calledUrl).not.toContain('<script>');
+    expect(calledUrl).not.toContain(';');
+    expect(calledUrl).not.toContain('--');
+  });
+
+  test('fetchProjectsByLocation handles backend projects payload', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        location: 'Bogo City',
+        total_count: 1,
+        total_budget: 49000000,
+        projects: [
+          {
+            entity: '24HD0012',
+            description: 'Flood Control along Bogo River',
+            contractor: 'QM BUILDERS',
+            budget_num: 49000000,
+            status: 'Ongoing',
+            municipality: 'Bogo City',
+          },
+        ],
+      }),
+    } as any);
+
+    const projects = await api.fetchProjectsByLocation('Bogo City');
+    expect(projects.length).toBe(1);
+    expect(projects[0].id).toBe('24HD0012');
+    expect(projects[0].budget).toBe(49000000);
+    expect(projects[0].lgu).toBe('Bogo City');
+  });
 });

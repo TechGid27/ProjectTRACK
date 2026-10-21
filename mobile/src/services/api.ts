@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   ProjectDetail,
   Contractor,
@@ -12,8 +13,24 @@ import { mockProjects, getProjectsByLocation, getProjectById } from '../data/moc
 import { topContractors } from '../data/contractors';
 import { pins as localPins } from '../data/pins';
 import { outbox } from './outbox';
+import {
+  sanitizeSearchQuery,
+  sanitizeChatMessage,
+  sanitizeReportDescription,
+  sanitizeEmail,
+} from '../core/sanitizer';
 
-const DEFAULT_API_BASE = 'http://localhost:8000/api';
+const getInitialBaseUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000/api';
+  }
+  return 'http://localhost:8000/api';
+};
+
+const DEFAULT_API_BASE = getInitialBaseUrl();
 
 export interface BackendSummary {
   total_projects: number;
@@ -82,8 +99,8 @@ class ApiService {
         return data.map((item: any) => ({
           contractor: item.contractor,
           code: item.code || undefined,
-          total_budget: item.total_budget || 0,
-          project_count: item.project_count || 1,
+          total_budget: typeof item.total_budget === 'number' ? item.total_budget : 0,
+          project_count: typeof item.project_count === 'number' ? item.project_count : 1,
         }));
       }
       return topContractors.slice(0, limit);
@@ -92,43 +109,120 @@ class ApiService {
     }
   }
 
-  async fetchProjectsByLocation(location: string, limit = 15): Promise<ProjectDetail[]> {
+  async fetchTopProjects(limit = 10): Promise<ProjectDetail[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/analytics/top-projects?limit=${limit}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((p: any) => ({
+          id: p.id,
+          title: p.description || `Project ${p.id}`,
+          contractor: p.contractor || 'Contractor on Record',
+          budget: typeof p.budget_num === 'number' ? p.budget_num : 0,
+          status: 'Ongoing',
+          lgu: p.location || 'Cebu Province',
+        }));
+      }
+      return mockProjects.slice(0, limit);
+    } catch {
+      return mockProjects.slice(0, limit);
+    }
+  }
+
+  async searchProjects(q: string, limit = 20): Promise<ProjectDetail[]> {
+    const cleanQ = sanitizeSearchQuery(q, 100);
+    if (!cleanQ || cleanQ.length < 2) return [];
+
     try {
       const res = await fetch(
-        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(location)}&limit=${limit}`,
+        `${this.baseUrl}/projects/search?q=${encodeURIComponent(cleanQ)}&limit=${limit}`,
+        { headers: { Accept: 'application/json' } },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((p: any) => ({
+          id: p.entity || p.id,
+          title: p.description || p.entity || 'DPWH Civil Works Site',
+          contractor: p.contractor || 'Contractor on Record',
+          budget: typeof p.budget_num === 'number' ? p.budget_num : 0,
+          status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
+          lgu: p.municipality || 'Cebu Province',
+          barangay: p.barangay,
+          amount_paid: p.amount_paid,
+          source_of_funds: p.source_of_funds,
+        }));
+      }
+      const lower = cleanQ.toLowerCase();
+      return mockProjects.filter(
+        (p) =>
+          p.title.toLowerCase().includes(lower) ||
+          p.lgu.toLowerCase().includes(lower) ||
+          p.contractor.toLowerCase().includes(lower),
+      );
+    } catch {
+      const lower = cleanQ.toLowerCase();
+      return mockProjects.filter(
+        (p) =>
+          p.title.toLowerCase().includes(lower) ||
+          p.lgu.toLowerCase().includes(lower) ||
+          p.contractor.toLowerCase().includes(lower),
+      );
+    }
+  }
+
+  async fetchProjectsByLocation(location: string, limit = 15): Promise<ProjectDetail[]> {
+    const cleanLocation = sanitizeSearchQuery(location, 100);
+    if (!cleanLocation) return [];
+
+    try {
+      const res = await fetch(
+        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(cleanLocation)}&limit=${limit}`,
         {
           headers: { Accept: 'application/json' },
         },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (data.sample_projects && Array.isArray(data.sample_projects) && data.sample_projects.length > 0) {
-        return data.sample_projects.map((p: any) => ({
-          id: p.id,
+      const rawList = data.projects || data.sample_projects;
+      if (Array.isArray(rawList) && rawList.length > 0) {
+        return rawList.map((p: any) => ({
+          id: p.id || p.entity,
           title: p.title || p.description || 'Public Works Site',
           contractor: p.contractor || 'Contractor on Record',
-          budget: p.budget || 20000000,
+          budget:
+            typeof p.budget_num === 'number'
+              ? p.budget_num
+              : typeof p.budget === 'number'
+                ? p.budget
+                : 20000000,
           status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
-          lgu: p.location || location,
+          lgu: p.location || p.municipality || cleanLocation,
           barangay: p.barangay,
-          scope: p.scope,
+          scope: p.scope || p.description,
           amount_paid: p.amount_paid,
           source_of_funds: p.source_of_funds,
           funding_source: p.funding_source,
           program_name: p.program_name,
           region: p.region,
-          procurements: p.procurements,
+          procurements: p.procurements || [],
         }));
       }
-      return getProjectsByLocation(location);
+      return getProjectsByLocation(cleanLocation);
     } catch {
-      return getProjectsByLocation(location);
+      return getProjectsByLocation(cleanLocation);
     }
   }
 
   async fetchProjectById(id: string): Promise<ProjectDetail | undefined> {
+    const cleanId = sanitizeSearchQuery(id, 50);
+    if (!cleanId) return undefined;
+
     try {
-      const res = await fetch(`${this.baseUrl}/projects/${encodeURIComponent(id)}`, {
+      const res = await fetch(`${this.baseUrl}/projects/${encodeURIComponent(cleanId)}`, {
         headers: { Accept: 'application/json' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -137,27 +231,28 @@ class ApiService {
         id: p.id,
         title: p.title || p.description,
         contractor: p.contractor || 'Contractor on Record',
-        budget: p.budget || 0,
+        budget: typeof p.budget_num === 'number' ? p.budget_num : (typeof p.budget === 'number' ? p.budget : 0),
         status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
-        lgu: p.location || 'Cebu Province',
+        lgu: p.location || p.municipality || 'Cebu Province',
         barangay: p.barangay,
-        scope: p.scope,
+        scope: p.scope || p.description,
         amount_paid: p.amount_paid,
         source_of_funds: p.source_of_funds,
         funding_source: p.funding_source,
         program_name: p.program_name,
         region: p.region,
-        procurements: p.procurements,
+        procurements: p.procurements || [],
       };
     } catch {
-      return getProjectById(id);
+      return getProjectById(cleanId);
     }
   }
 
   async fetchMapPins(municipality?: string): Promise<Pin[]> {
+    const cleanMunicipality = municipality ? sanitizeSearchQuery(municipality, 100) : undefined;
     try {
-      const url = municipality
-        ? `${this.baseUrl}/projects/map?municipality=${encodeURIComponent(municipality)}&limit=200`
+      const url = cleanMunicipality
+        ? `${this.baseUrl}/projects/map?municipality=${encodeURIComponent(cleanMunicipality)}&limit=200`
         : `${this.baseUrl}/projects/map?limit=200`;
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -165,11 +260,12 @@ class ApiService {
       if (Array.isArray(data) && data.length > 0) {
         return data.map((p: any) => ({
           id: p.id,
-          name: p.title || `Project ${p.id}`,
+          name: p.title || p.description || `Project ${p.id}`,
           lat: p.latitude,
           lng: p.longitude,
           tone: p.status === 'Delayed' ? 'warning' : 'default',
-          lgu: p.location || municipality || 'Cebu Province',
+          lgu: p.location || p.municipality || cleanMunicipality || 'Cebu Province',
+          description: p.description || p.category,
         }));
       }
       return localPins;
@@ -178,7 +274,23 @@ class ApiService {
     }
   }
 
-  async sendChatMessage(message: string, history: Array<{ role: string; content: string }> = []): Promise<ChatResponse> {
+  async sendChatMessage(
+    message: string,
+    history: Array<{ role: string; content: string }> = [],
+  ): Promise<ChatResponse> {
+    const cleanMsg = sanitizeChatMessage(message, 1000);
+    if (!cleanMsg) {
+      return {
+        answer: 'Please provide a valid question.',
+        mode: 'offline_civic_agent',
+      };
+    }
+
+    const cleanHistory = (history || []).slice(-6).map((h) => ({
+      role: h.role === 'user' ? 'user' : 'assistant',
+      content: sanitizeChatMessage(h.content, 1000),
+    }));
+
     try {
       const res = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
@@ -186,7 +298,7 @@ class ApiService {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ message, history }),
+        body: JSON.stringify({ message: cleanMsg, history: cleanHistory }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -198,23 +310,26 @@ class ApiService {
       };
     } catch {
       // Deterministic civic fallback for offline testing
-      const q = message.toLowerCase();
+      const q = cleanMsg.toLowerCase();
       if (q.includes('bogo')) {
         return {
-          answer: 'In Bogo City, QM BUILDERS holds the largest flood mitigation contract: ₱49,000,000 for the Construction of Flood Mitigation Structure along Bogo River (Project 24HD0012).',
+          answer:
+            'In Bogo City, QM BUILDERS holds the largest flood mitigation contract: ₱49,000,000 for the Construction of Flood Mitigation Structure along Bogo River (Project 24HD0012).',
           sources: ['24HD0012'],
           mode: 'offline_civic_agent',
         };
       }
       if (q.includes('24hh0043') || q.includes('lahug')) {
         return {
-          answer: 'Project 24HH0043: "Lahug River Flood Control Dredging & Slope Reinforcement" located in Lahug, Cebu City. Awarded to QM BUILDERS with an approved budget of ₱85,200,000.',
+          answer:
+            'Project 24HH0043: "Lahug River Flood Control Dredging & Slope Reinforcement" located in Lahug, Cebu City. Awarded to QM BUILDERS with an approved budget of ₱85,200,000.',
           sources: ['24HH0043'],
           mode: 'offline_civic_agent',
         };
       }
       return {
-        answer: 'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
+        answer:
+          'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
         mode: 'offline_civic_agent',
       };
     }
@@ -240,9 +355,10 @@ class ApiService {
   }
 
   async fetchProcurementAwards(contractor?: string, limit = 50): Promise<ProcurementAward[]> {
+    const cleanContractor = contractor ? sanitizeSearchQuery(contractor, 100) : undefined;
     try {
-      const url = contractor
-        ? `${this.baseUrl}/analytics/procurement?contractor=${encodeURIComponent(contractor)}&limit=${limit}`
+      const url = cleanContractor
+        ? `${this.baseUrl}/analytics/procurement?contractor=${encodeURIComponent(cleanContractor)}&limit=${limit}`
         : `${this.baseUrl}/analytics/procurement?limit=${limit}`;
       const res = await fetch(url, { headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -253,6 +369,7 @@ class ApiService {
   }
 
   async signIn(email: string, password: string): Promise<{ user: any; error?: string }> {
+    const cleanEmail = sanitizeEmail(email);
     try {
       const res = await fetch(`${this.baseUrl}/auth/signin`, {
         method: 'POST',
@@ -261,7 +378,7 @@ class ApiService {
           Accept: 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanEmail, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -270,11 +387,17 @@ class ApiService {
       return { user: data.user || data };
     } catch {
       // Offline fallback for testing
-      return { user: { email, id: 'offline-user' } };
+      return { user: { email: cleanEmail, id: 'offline-user' } };
     }
   }
 
-  async signUp(email: string, password: string, fullName?: string): Promise<{ user: any; message?: string; error?: string }> {
+  async signUp(
+    email: string,
+    password: string,
+    fullName?: string,
+  ): Promise<{ user: any; message?: string; error?: string }> {
+    const cleanEmail = sanitizeEmail(email);
+    const cleanName = fullName ? sanitizeSearchQuery(fullName, 100) : undefined;
     try {
       const res = await fetch(`${this.baseUrl}/auth/signup`, {
         method: 'POST',
@@ -283,7 +406,7 @@ class ApiService {
           Accept: 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ email, password, full_name: fullName }),
+        body: JSON.stringify({ email: cleanEmail, password, full_name: cleanName }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -291,7 +414,7 @@ class ApiService {
       }
       return { user: data.user || data, message: data.message };
     } catch {
-      return { user: { email, id: 'offline-user' }, message: 'Account created (offline mode).' };
+      return { user: { email: cleanEmail, id: 'offline-user' }, message: 'Account created (offline mode).' };
     }
   }
 
@@ -334,14 +457,17 @@ class ApiService {
     longitude?: number;
     photo?: { uri: string; name?: string; type?: string } | null;
   }): Promise<ReportVerification> {
+    const cleanId = sanitizeSearchQuery(input.projectId, 50);
+    const cleanDesc = sanitizeReportDescription(input.description, 2000);
+    const cleanCat = input.category ? sanitizeSearchQuery(input.category, 50) : undefined;
+
     const form = new FormData();
-    form.append('project_id', input.projectId);
-    form.append('description', input.description);
-    if (input.category) form.append('category', input.category);
+    form.append('project_id', cleanId);
+    form.append('description', cleanDesc);
+    if (cleanCat) form.append('category', cleanCat);
     if (typeof input.latitude === 'number') form.append('latitude', String(input.latitude));
     if (typeof input.longitude === 'number') form.append('longitude', String(input.longitude));
     if (input.photo) {
-      // React Native multipart file shape.
       form.append('picture', {
         uri: input.photo.uri,
         name: input.photo.name ?? 'field-photo.jpg',
@@ -371,7 +497,8 @@ class ApiService {
 
   /** Fetch a project's reports with verification badges (Pillar 5). */
   async fetchProjectReports(projectId: string): Promise<ReportRecord[]> {
-    const res = await fetch(`${this.baseUrl}/reports/${encodeURIComponent(projectId)}`, {
+    const cleanId = sanitizeSearchQuery(projectId, 50);
+    const res = await fetch(`${this.baseUrl}/reports/${encodeURIComponent(cleanId)}`, {
       headers: { Accept: 'application/json' },
       credentials: 'include',
     });

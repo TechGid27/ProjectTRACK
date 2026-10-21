@@ -54,6 +54,10 @@ export default function MapScreen({
   const [activeFilter, setActiveFilter] = useState<MapFilterOption>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [sheetState, setSheetState] = useState<SheetDisplayState>('expanded');
+  const [mapPins, setMapPins] = useState<Pin[]>(initialPins || pins || []);
+  const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>(
+    initialLgu ? getProjectsByLocation(initialLgu) : mockProjects,
+  );
 
   useEffect(() => {
     if (initialLgu) {
@@ -62,9 +66,50 @@ export default function MapScreen({
     }
   }, [initialLgu]);
 
+  // Fetch live map pins on mount
+  useEffect(() => {
+    let isMounted = true;
+    api
+      .fetchMapPins()
+      .then((livePins) => {
+        if (isMounted && livePins && livePins.length > 0) {
+          setMapPins(livePins);
+        }
+      })
+      .catch(() => {
+        // Retain initial pins
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Fetch live projects by location whenever selectedLgu or searchQuery changes
+  useEffect(() => {
+    const loc = selectedLgu || searchQuery.trim();
+    if (!loc) {
+      setActiveProjects(mockProjects);
+      return;
+    }
+    let isMounted = true;
+    api
+      .fetchProjectsByLocation(loc, 30)
+      .then((projects) => {
+        if (isMounted && projects && projects.length > 0) {
+          setActiveProjects(projects);
+        }
+      })
+      .catch(() => {
+        // Retain current projects
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLgu, searchQuery]);
+
   // 1. Filter pins based on search query, selected LGU, and activeFilter
   const filteredPins = useMemo(() => {
-    let result = initialPins || pins || [];
+    let result = mapPins;
     if (selectedLgu) {
       const norm = normalizeLguName(selectedLgu).toLowerCase();
       result = result.filter(
@@ -96,18 +141,7 @@ export default function MapScreen({
       result = result.filter((p) => highBudgetIds.has(p.id));
     }
     return result;
-  }, [selectedLgu, searchQuery, activeFilter]);
-
-  // 2. Filter projects for Location Intel sheet
-  const activeProjects = useMemo(() => {
-    if (selectedLgu) {
-      return getProjectsByLocation(selectedLgu);
-    }
-    if (searchQuery.trim()) {
-      return getProjectsByLocation(searchQuery);
-    }
-    return mockProjects;
-  }, [selectedLgu, searchQuery]);
+  }, [mapPins, selectedLgu, searchQuery, activeFilter]);
 
   const handleSelectMunicipality = (name: string) => {
     const normalized = normalizeLguName(name);
@@ -125,7 +159,7 @@ export default function MapScreen({
       setSheetState('expanded');
     }
 
-    const project = getProjectById(pin.id) || {
+    const optimisticProject: ProjectDetail = getProjectById(pin.id) || {
       id: pin.id,
       title: pin.name,
       contractor: 'Contractor on Record',
@@ -134,8 +168,14 @@ export default function MapScreen({
       lgu: pin.lgu,
       scope: pin.description,
     };
-    setSelectedProject(project);
+    setSelectedProject(optimisticProject);
     setIsDetailModalOpen(true);
+
+    api.fetchProjectById(pin.id).then((live) => {
+      if (live) {
+        setSelectedProject(live);
+      }
+    });
   };
 
   const handleSelectProjectCard = (project: ProjectDetail) => {
@@ -144,18 +184,17 @@ export default function MapScreen({
   };
 
   const handleSelectProjectById = (projectId: string) => {
-    const found = getProjectById(projectId);
-    if (found) {
-      setSelectedProject(found);
+    const optimistic = getProjectById(projectId);
+    if (optimistic) {
+      setSelectedProject(optimistic);
       setIsDetailModalOpen(true);
-    } else {
-      api.fetchProjectById(projectId).then((p) => {
-        if (p) {
-          setSelectedProject(p);
-          setIsDetailModalOpen(true);
-        }
-      });
     }
+    api.fetchProjectById(projectId).then((p) => {
+      if (p) {
+        setSelectedProject(p);
+        setIsDetailModalOpen(true);
+      }
+    });
   };
 
   const handleReportAnomaly = (targetLgu: string) => {
@@ -211,7 +250,7 @@ export default function MapScreen({
       {/* Top Floating App Header with Navigation */}
       <MapHeader
         totalLgus={53}
-        totalPins={(initialPins || pins || []).length}
+        totalPins={mapPins.length}
         currentUser={currentUser}
         onSearch={setSearchQuery}
         onSignInPress={onNavigateToSignIn}

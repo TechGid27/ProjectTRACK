@@ -22,6 +22,8 @@ The mobile client is the planned companion app for on-the-ground infrastructure 
 | **Offline-First Architecture** | An in-memory outbox queues audits captured offline; `api.syncPendingAudits()` POSTs them to the backend when connectivity returns, marking each synced on success. |
 | **Conversational Field Assistant** | On-device access to the GraphRAG chat via SSE streaming for contextual project queries. |
 | **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. |
+| **Client-Side Input Sanitizer** | Strict client-side hardening in `sanitizer.ts` strips Cypher/SQL injection vectors, script tags, control codes, and null bytes before user inputs reach the network. |
+| **Dynamic Backend Integration** | Live REST & GraphRAG queries for map pins (`/api/projects/map`), municipality civil works (`/api/projects/by-location`), contractor leaderboards (`/api/analytics/top-contractors`), and top projects (`/api/analytics/top-projects`) with graceful offline fallbacks. |
 
 > **Status:** Core UI screens (Home, Map, Contractor Ranking, Sign In / Sign Up),
 > the API service layer, geofenced hardware capture, live report submission with
@@ -122,8 +124,12 @@ The mobile client communicates with the ProjectTrack FastAPI backend:
 | :--- | :--- |
 | `GET /api/projects` | Fetch project listings for map display |
 | `GET /api/projects/{id}` | Retrieve individual project details (including disbursements, funding source, PhilGEPS awards) |
+| `GET /api/projects/map` | Retrieve lightweight geocoded pins for map visualization |
+| `GET /api/projects/by-location` | Aggregate project listings, count, and budget for a Cebu municipality |
+| `GET /api/projects/search` | Sub-50ms full-text search across projects, contractors, and locations |
 | `GET /api/analytics/summary` | Knowledge graph statistics across Cebu Province |
 | `GET /api/analytics/top-contractors` | Contractor rankings by cumulative infrastructure budget |
+| `GET /api/analytics/top-projects` | Highest budget infrastructure projects across Cebu |
 | `GET /api/analytics/appropriations` | GAA budget appropriations aggregated by district office |
 | `GET /api/analytics/procurement` | PhilGEPS bidding awards attached to Cebu contractors |
 | `POST /api/auth/signin` | Supabase password authentication with HTTP-only session cookie |

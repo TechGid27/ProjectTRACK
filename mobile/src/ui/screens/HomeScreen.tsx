@@ -75,9 +75,12 @@ export default function HomeScreen({
   const [isAllLgusModalOpen, setIsAllLgusModalOpen] = useState(false);
   const [lguModalSearch, setLguModalSearch] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
+  const [liveSearchResults, setLiveSearchResults] = useState<ProjectDetail[] | null>(null);
 
   const [backendStats, setBackendStats] = useState({
     total_projects: mockProjects.length,
+    total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),
     total_lgus: 53,
     total_cities: 9,
     total_municipalities: 44,
@@ -85,6 +88,11 @@ export default function HomeScreen({
 
   useEffect(() => {
     let isMounted = true;
+    api.fetchTopProjects(8).then((res) => {
+      if (isMounted && res && res.length > 0) {
+        setLiveTopProjects(res);
+      }
+    });
     api.fetchSummary().then((sum) => {
       if (isMounted) {
         setBackendStats({
@@ -92,6 +100,7 @@ export default function HomeScreen({
           total_lgus: sum.total_lgus,
           total_cities: 9,
           total_municipalities: 44,
+          total_budget: sum.total_budget,
         });
       }
     });
@@ -99,6 +108,24 @@ export default function HomeScreen({
       isMounted = false;
     };
   }, []);
+
+
+  // Live full-text search across projects and LGUs
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setLiveSearchResults(null);
+      return;
+    }
+    let isMounted = true;
+    api.searchProjects(searchQuery, 15).then((results) => {
+      if (isMounted) {
+        setLiveSearchResults(results);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [searchQuery]);
 
   // Filtered projects based on search
   const filteredProjects = useMemo(() => {
@@ -115,10 +142,12 @@ export default function HomeScreen({
 
   // High impact projects for carousel
   const highImpactProjects = useMemo(() => {
+    if (liveSearchResults !== null) return liveSearchResults;
+    if (liveTopProjects && liveTopProjects.length > 0) return liveTopProjects;
     return [...filteredProjects]
       .sort((a, b) => b.budget - a.budget)
       .slice(0, 8);
-  }, [filteredProjects]);
+  }, [liveSearchResults, liveTopProjects, filteredProjects]);
 
   // Delayed projects count
   const delayedCount = useMemo(() => {
@@ -126,8 +155,9 @@ export default function HomeScreen({
   }, []);
 
   // Total monitored budget
+  // Total monitored budget calculated dynamically
   const totalMonitoredBudget = useMemo(() => {
-    return mockProjects.reduce((sum, p) => sum + p.budget, 0);
+    return backendStats.total_budget || mockProjects.reduce((sum, p) => sum + p.budget, 0);
   }, []);
 
   // Filtered LGUs in modal

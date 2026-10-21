@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Contractor } from '../../core/types';
 import { formatCurrencyPHP } from '../../core/geoUtils';
 import { topContractors } from '../../data/contractors';
+import { api } from '../../services/api';
 
 const PAGE_SIZE = 6;
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -22,23 +24,46 @@ interface ContractorRankingScreenProps {
 export default function ContractorRankingScreen({
   onBackToMap,
 }: ContractorRankingScreenProps) {
+  const [contractors, setContractors] = useState<Contractor[]>(topContractors);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    api
+      .fetchTopContractors(50)
+      .then((items) => {
+        if (isMounted && items && items.length > 0) {
+          setContractors(items);
+        }
+      })
+      .catch(() => {
+        // Fall back gracefully to offline dataset
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Filter contractors based on query
   const filteredList = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return topContractors;
-    return topContractors.filter(
+    if (!q) return contractors;
+    return contractors.filter(
       (c) =>
         c.contractor.toLowerCase().includes(q) ||
         (c.code && c.code.toLowerCase().includes(q)),
     );
-  }, [searchQuery]);
+  }, [contractors, searchQuery]);
 
   const maxBudget = useMemo(() => {
-    return topContractors[0]?.total_budget || 1;
-  }, []);
+    return contractors[0]?.total_budget || 1;
+  }, [contractors]);
 
   const pageCount = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -74,6 +99,14 @@ export default function ContractorRankingScreen({
             Infrastructure firms ranked by total awarded budget across tracked DPWH
             Cebu civil works. Codes are DPWH registration numbers.
           </Text>
+          {loading && (
+            <ActivityIndicator
+              size="small"
+              color="#0d9488"
+              style={{ marginTop: 6 }}
+              testID="contractor-ranking-loader"
+            />
+          )}
 
           {/* Search Box */}
           <View style={styles.searchRow}>

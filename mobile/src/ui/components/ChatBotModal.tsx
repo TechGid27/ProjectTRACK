@@ -14,6 +14,7 @@ import {
 
 import { api } from '../../services/api';
 import { haptics } from '../../services/haptics';
+import { sanitizeChatMessage } from '../../core/sanitizer';
 
 interface ChatMessage {
   id: string;
@@ -84,7 +85,7 @@ export default function ChatBotModal({
   };
 
   const handleSend = async (textToSend?: string) => {
-    const text = (textToSend ?? inputText).trim();
+    const text = sanitizeChatMessage((textToSend ?? inputText).trim(), 1000);
     if (!text || isTyping) return;
 
     haptics.triggerLightImpact();

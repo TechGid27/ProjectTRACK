@@ -194,29 +194,37 @@ class ApiService {
       const data = await res.json();
       const rawList = data.projects || data.sample_projects;
       if (Array.isArray(rawList) && rawList.length > 0) {
-        return rawList.map((p: any) => ({
-          id: p.id || p.entity,
-          title: p.title || p.description || 'Public Works Site',
-          contractor: p.contractor || 'Contractor on Record',
-          budget:
-            typeof p.budget_num === 'number'
-              ? p.budget_num
-              : typeof p.budget === 'number'
-                ? p.budget
-                : 20000000,
-          status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
-          lgu: p.location || p.municipality || cleanLocation,
-          barangay: p.barangay,
-          scope: p.scope || p.description,
-          amount_paid: p.amount_paid,
-          source_of_funds: p.source_of_funds,
-          funding_source: p.funding_source,
-          program_name: p.program_name,
-          region: p.region,
-          procurements: p.procurements || [],
-        report_count: typeof p.report_count === 'number' ? p.report_count : 0,
-        is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
-        }));
+        const seen = new Set<string>();
+        const uniqueProjects: ProjectDetail[] = [];
+        for (const p of rawList) {
+          const id = p.id || p.entity;
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          uniqueProjects.push({
+            id,
+            title: p.title || p.description || 'Public Works Site',
+            contractor: p.contractor || 'Contractor on Record',
+            budget:
+              typeof p.budget_num === 'number'
+                ? p.budget_num
+                : typeof p.budget === 'number'
+                  ? p.budget
+                  : 20000000,
+            status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
+            lgu: p.location || p.municipality || cleanLocation,
+            barangay: p.barangay,
+            scope: p.scope || p.description,
+            amount_paid: p.amount_paid,
+            source_of_funds: p.source_of_funds,
+            funding_source: p.funding_source,
+            program_name: p.program_name,
+            region: p.region,
+            procurements: p.procurements || [],
+            report_count: typeof p.report_count === 'number' ? p.report_count : 0,
+            is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
+          });
+        }
+        return uniqueProjects;
       }
       return getProjectsByLocation(cleanLocation);
     } catch {

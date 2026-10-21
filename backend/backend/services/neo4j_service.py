@@ -259,6 +259,7 @@ class Neo4jService:
         LIMIT $limit
         OPTIONAL MATCH (p)-[:CONTRACTED_TO]->(c:Contractor)
         OPTIONAL MATCH (p)-[:LOCATED_IN]->(loc:Location)
+        WITH p, head(collect(DISTINCT c)) AS c, head(collect(DISTINCT loc)) AS loc
         RETURN p.project_id AS entity,
                ['Project'] AS labels,
                p.description AS description,
@@ -286,9 +287,17 @@ class Neo4jService:
                 total_b = float(cnt_row["total_budget"] or 0.0)
 
                 samples = s.run(cypher_samples, loc_token=loc_token, limit=limit).data()
+                seen_entities = set()
+                unique_samples = []
                 for sample in samples:
+                    entity_id = sample.get("entity")
+                    if entity_id and entity_id in seen_entities:
+                        continue
+                    if entity_id:
+                        seen_entities.add(entity_id)
                     sample["description"] = clean_description(sample.get("description"))
-                return samples, total_cnt, total_b
+                    unique_samples.append(sample)
+                return unique_samples, total_cnt, total_b
         except Exception as e:
             logger.error(f"Error querying location '{location_name}': {e}")
             return [], 0, 0.0

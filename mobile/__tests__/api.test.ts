@@ -177,6 +177,26 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(calledUrl).not.toContain('limit=500');
   });
 
+  test('fetchProjectsByLocation deduplicates projects with identical IDs', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        location: 'Danao City',
+        total_count: 2,
+        total_budget: 100000000,
+        projects: [
+          { entity: '24HI0033', description: 'Road Project A', budget_num: 50000000 },
+          { entity: '24HI0033', description: 'Road Project A Duplicate', budget_num: 50000000 },
+          { entity: '24HI0059', description: 'Bridge Project B', budget_num: 50000000 },
+        ],
+      }),
+    });
+
+    const projects = await api.fetchProjectsByLocation('Danao City');
+    expect(projects.length).toBe(2);
+    expect(projects.map((p) => p.id)).toEqual(['24HI0033', '24HI0059']);
+  });
+
   test('fetchMapPins marks hotspot strictly when real reports exist', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

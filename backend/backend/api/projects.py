@@ -53,7 +53,7 @@ async def get_map_projects(
 )
 async def search_by_location(
     location: str = Query(..., min_length=2, description="Cebu municipality, city, or barangay (e.g. 'Bogo', 'Mandaue', 'Toledo')"),
-    limit: int = Query(default=15, ge=1, le=100, description="Sample projects limit")
+    limit: int = Query(default=15, ge=1, le=500, description="Sample projects limit")
 ):
     """Aggregate total projects and budget for a specific Cebu location with geocoding."""
     samples, total_cnt, total_b = neo4j_service.search_projects_by_location(location_name=location, limit=limit)

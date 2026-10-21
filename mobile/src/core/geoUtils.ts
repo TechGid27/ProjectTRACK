@@ -233,3 +233,44 @@ export function disperseCoLocatedPins<T extends { id: string; x: number; y: numb
 ): T[] {
   return pins;
 }
+
+
+export const CEBU_GEO_BOUNDS = {
+  n: 11.45,
+  s: 9.35,
+  e: 124.25,
+  w: 123.25,
+};
+
+export interface NormalizedCoordinatesResult {
+  lat: number;
+  lng: number;
+  status: 'ok' | 'clamped' | 'rejected';
+}
+
+export function normalizeCoordinates(
+  lat: number,
+  lng: number,
+): NormalizedCoordinatesResult {
+  if (
+    typeof lat !== 'number' ||
+    typeof lng !== 'number' ||
+    isNaN(lat) ||
+    isNaN(lng) ||
+    !isFinite(lat) ||
+    !isFinite(lng)
+  ) {
+    return { lat: 10.3157, lng: 123.8854, status: 'rejected' };
+  }
+
+  const minLat = 9.0;
+  const maxLat = 12.0;
+  const minLng = 122.5;
+  const maxLng = 125.0;
+
+  if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) {
+    return { lat, lng, status: 'rejected' };
+  }
+
+  return { lat, lng, status: 'ok' };
+}

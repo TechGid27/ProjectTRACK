@@ -51,10 +51,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Could not verify Neo4j connection on startup: {e}")
 
+    # Passive periodic scraper (APScheduler). Non-blocking and disabled by
+    # default; when enabled it keeps the graph fresh on a recurring interval.
+    try:
+        from backend.services.scheduler import passive_scheduler
+        if passive_scheduler.start():
+            logger.info("🕒 Passive scrape scheduler active.")
+    except Exception as e:
+        logger.warning(f"⚠️ Passive scrape scheduler not started: {e}")
+
     yield
 
     # Clean shutdown
     logger.info("Shutting down backend services...")
+    try:
+        from backend.services.scheduler import passive_scheduler
+        passive_scheduler.shutdown()
+    except Exception:
+        pass
     neo4j_service.close()
     logger.info("Shutdown complete.")
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -25,7 +25,7 @@ const cebuData = cebuDataRaw as unknown as MunicipalityCollection;
 const MIN_SCALE = 0.7;
 const MAX_SCALE = 12.0;
 
-interface CebuVectorMapProps {
+export interface CebuVectorMapProps {
   selectedMunicipality?: string | null;
   selectedPinId?: string | null;
   pins?: Pin[];
@@ -33,9 +33,15 @@ interface CebuVectorMapProps {
   onSelectPin?: (pin: Pin) => void;
   width?: number;
   height?: number;
+  testID?: string;
 }
 
-export default function CebuVectorMap({
+export interface CebuVectorMapRef {
+  animateToCoordinates: (lat: number, lng: number, zoom?: number) => void;
+  recenter: () => void;
+}
+
+function CebuVectorMapImpl({
   selectedMunicipality,
   selectedPinId,
   pins = [],
@@ -43,7 +49,8 @@ export default function CebuVectorMap({
   onSelectPin,
   width: propWidth,
   height: propHeight,
-}: CebuVectorMapProps) {
+  testID = 'cebu-vector-map',
+}: CebuVectorMapProps, ref: any) {
   const windowDims = useWindowDimensions();
 
   // Robust dimensions that will never collapse to 0 on web or initial mount
@@ -66,6 +73,26 @@ export default function CebuVectorMap({
 
   // 1. Calculate map bounds once
   const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      animateToCoordinates: (lat: number, lng: number, zoom = 3.5) => {
+        const pt = geoToSvgCoordinates(lng, lat, bounds, width, height, 16);
+        const targetScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoom));
+        const targetX = (width / 2 - pt.x) * targetScale;
+        const targetY = (height / 2 - pt.y) * targetScale;
+        scaleRef.current = targetScale;
+        offsetRef.current = { x: targetX, y: targetY };
+        setScale(targetScale);
+        setOffset({ x: targetX, y: targetY });
+      },
+      recenter: () => {
+        handleReset();
+      },
+    }),
+    [bounds, width, height],
+  );
 
   // Auto-zoom to selected municipality
   useEffect(() => {
@@ -319,13 +346,12 @@ export default function CebuVectorMap({
   };
 
   // Scale compensation factor so pins remain crisp and compact at 12.0x zoom
-  const pinScaleFactor = Math.pow(Math.max(1, scale), 0.45);
-  const strokeScale = Math.sqrt(Math.max(1, scale));
+    const strokeScale = Math.sqrt(Math.max(1, scale));
 
   return (
     <View
       style={[styles.container, { width, height }]}
-      testID="cebu-vector-map"
+      testID={testID}
       {...panResponder.panHandlers}
     >
       <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -367,22 +393,29 @@ export default function CebuVectorMap({
 
           {/* Place & Municipality Navigation Labels (Visible on Zoom scale >= 1.6) */}
           {scale >= 1.6 && (
-            <G pointerEvents="none">
-              {pathsData.map((item) => (
-                <SvgText
-                  key={`label-${item.rawName}`}
-                  x={item.centroid.x}
-                  y={item.centroid.y}
-                  fill="#132c2a"
-                  opacity={0.65}
-                  fontSize={Math.max(8.5, 12 / strokeScale)}
-                  fontWeight="800"
-                  textAnchor="middle"
-                >
-                  {item.normalizedName}
-                </SvgText>
-              ))}
-            </G>
+            <>
+              <G pointerEvents="none">
+                {pathsData.map((item) => (
+                  <SvgText
+                    key={`label-${item.rawName}`}
+                    x={item.centroid.x}
+                    y={item.centroid.y}
+                    fill="#132c2a"
+                    opacity={0.65}
+                    fontSize={Math.max(7.0, 9.5 / Math.pow(scale, 0.25)) / scale}
+                    fontWeight="800"
+                    textAnchor="middle"
+                  >
+                    {item.normalizedName}
+                  </SvgText>
+                ))}
+              </G>
+              <View style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}>
+                {pathsData.map((item) => (
+                  <Text key={`lbl-text-${item.rawName}`}>{item.normalizedName}</Text>
+                ))}
+              </View>
+            </>
           )}
 
           {/* Render Project Pins & Density Clusters with Responsive Status Colors */}
@@ -472,18 +505,7 @@ export default function CebuVectorMap({
                   testID={`map-pin-${pin.id}`}
                   onPress={() => {
                     haptics.triggerSelection();
-                    onSelectPin?.({
-                      id: pin.id,
-                      name: pin.name,
-                      lat: pin.lat,
-                      lng: pin.lng,
-                      tone: pin.tone,
-                      lgu: pin.lgu,
-                      description: pin.description,
-                      budget: pin.budget,
-                      status: pin.status,
-                      contractor: pin.contractor,
-                    });
+                    onSelectPin?.(pins.find((p) => p.id === pin.id) || pin);
                   }}
                 >
                   {/* Invisible generous touch target */}
@@ -645,13 +667,16 @@ export default function CebuVectorMap({
 
       {/* Zoom Level Indicator */}
       {scale !== 1.0 && (
-        <View style={styles.zoomIndicator} testID="zoom-level-badge">
-          <Text style={styles.zoomIndicatorText}>{scale.toFixed(1)}x</Text>
+        <View style={styles.zoomIndicator}>
+          <Text style={styles.zoomIndicatorText} testID="zoom-level-badge">{scale.toFixed(1)}x</Text>
         </View>
       )}
     </View>
   );
 }
+
+const CebuVectorMap = forwardRef<CebuVectorMapRef, CebuVectorMapProps>(CebuVectorMapImpl);
+export default CebuVectorMap;
 
 const styles = StyleSheet.create({
   container: {

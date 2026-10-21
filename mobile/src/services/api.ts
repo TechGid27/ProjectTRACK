@@ -181,10 +181,11 @@ class ApiService {
   async fetchProjectsByLocation(location: string, limit = 15): Promise<ProjectDetail[]> {
     const cleanLocation = sanitizeSearchQuery(location, 100);
     if (!cleanLocation) return [];
+    const safeLimit = Math.min(Math.max(1, limit), 100);
 
     try {
       const res = await fetch(
-        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(cleanLocation)}&limit=${limit}`,
+        `${this.baseUrl}/projects/by-location?location=${encodeURIComponent(cleanLocation)}&limit=${safeLimit}`,
         {
           headers: { Accept: 'application/json' },
         },
@@ -193,29 +194,37 @@ class ApiService {
       const data = await res.json();
       const rawList = data.projects || data.sample_projects;
       if (Array.isArray(rawList) && rawList.length > 0) {
-        return rawList.map((p: any) => ({
-          id: p.id || p.entity,
-          title: p.title || p.description || 'Public Works Site',
-          contractor: p.contractor || 'Contractor on Record',
-          budget:
-            typeof p.budget_num === 'number'
-              ? p.budget_num
-              : typeof p.budget === 'number'
-                ? p.budget
-                : 20000000,
-          status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
-          lgu: p.location || p.municipality || cleanLocation,
-          barangay: p.barangay,
-          scope: p.scope || p.description,
-          amount_paid: p.amount_paid,
-          source_of_funds: p.source_of_funds,
-          funding_source: p.funding_source,
-          program_name: p.program_name,
-          region: p.region,
-          procurements: p.procurements || [],
-        report_count: typeof p.report_count === 'number' ? p.report_count : 0,
-        is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
-        }));
+        const seen = new Set<string>();
+        const uniqueProjects: ProjectDetail[] = [];
+        for (const p of rawList) {
+          const id = p.id || p.entity;
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          uniqueProjects.push({
+            id,
+            title: p.title || p.description || 'Public Works Site',
+            contractor: p.contractor || 'Contractor on Record',
+            budget:
+              typeof p.budget_num === 'number'
+                ? p.budget_num
+                : typeof p.budget === 'number'
+                  ? p.budget
+                  : 20000000,
+            status: p.status === 'Completed' ? 'Completed' : p.status === 'Delayed' ? 'Delayed' : 'Ongoing',
+            lgu: p.location || p.municipality || cleanLocation,
+            barangay: p.barangay,
+            scope: p.scope || p.description,
+            amount_paid: p.amount_paid,
+            source_of_funds: p.source_of_funds,
+            funding_source: p.funding_source,
+            program_name: p.program_name,
+            region: p.region,
+            procurements: p.procurements || [],
+            report_count: typeof p.report_count === 'number' ? p.report_count : 0,
+            is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
+          });
+        }
+        return uniqueProjects;
       }
       return getProjectsByLocation(cleanLocation);
     } catch {
@@ -403,8 +412,7 @@ class ApiService {
       }
       return { user: data.user || data };
     } catch {
-      // Offline fallback for testing
-      return { user: { email: cleanEmail, id: 'offline-user' } };
+      return { user: null, error: 'Network error: Unable to reach authentication server.' };
     }
   }
 
@@ -431,7 +439,7 @@ class ApiService {
       }
       return { user: data.user || data, message: data.message };
     } catch {
-      return { user: { email: cleanEmail, id: 'offline-user' }, message: 'Account created (offline mode).' };
+      return { user: null, error: 'Network error: Unable to reach authentication server.' };
     }
   }
 

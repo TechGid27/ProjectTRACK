@@ -63,6 +63,8 @@ export interface ProjectDetail {
   procurements?: ProcurementAward[];
   report_count?: number;
   is_hotspot?: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface BoundingBox {

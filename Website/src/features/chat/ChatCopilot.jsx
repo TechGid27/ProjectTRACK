@@ -6,6 +6,7 @@ const QUICK_PROMPTS = [
   { label: '📍 Projects in Cordova', query: 'What are the projects in Cordova?' },
   { label: '🏗️ Top projects in Mandaue', query: 'Show top infrastructure projects in Mandaue City' },
   { label: '💰 Flood mitigation in Cebu City', query: 'What are the flood control projects in Cebu City?' },
+  { label: '📣 Most reported in Cebu', query: 'Which project is the most reported in Cebu?' },
   { label: '🔍 Tell me about 24HH0043', query: 'Tell me about project 24HH0043' },
 ]
 
@@ -59,6 +60,7 @@ export default function ChatCopilot() {
   const [messages, setMessages] = useState([])
   const listRef = useRef(null)
   const idRef = useRef(0)
+  const abortRef = useRef(null)
   const [, startTransition] = useTransition()
 
   useEffect(() => {
@@ -67,6 +69,19 @@ export default function ChatCopilot() {
       node.scrollTop = node.scrollHeight
     }
   }, [messages, open])
+
+  // Abort any in-flight stream when the component unmounts.
+  useEffect(() => () => abortRef.current?.abort(), [])
+
+  const errorMessage = (error) => {
+    const byStatus = {
+      404: 'Chat endpoint is unavailable — try again after restarting the backend.',
+      429: 'Rate limit reached — please wait a moment before asking again.',
+      503: 'The knowledge engine is temporarily unavailable.',
+    }
+    if (error && byStatus[error.status]) return byStatus[error.status]
+    return 'Could not connect to the ProjectTRACK knowledge engine. Please check if the server is running.'
+  }
 
   const handleChipClick = (pid) => {
     const matched = projectDots.find(
@@ -105,6 +120,12 @@ export default function ChatCopilot() {
     setInput('')
     setSending(true)
 
+    // Abort any still-running stream so a rapid second send doesn't interleave
+    // tokens from two responses into the same reply bubble.
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     const history = messages
       .filter((m) => m.text)
       .slice(-6)
@@ -128,6 +149,7 @@ export default function ChatCopilot() {
       await streamChatMessage({
         message: val,
         history,
+        signal: controller.signal,
         onEvent(event, payload) {
           if (event === 'context') {
             if (payload && payload.spatial) {
@@ -157,12 +179,15 @@ export default function ChatCopilot() {
               : m,
         ),
       )
-    } catch {
-      patchReply({
-        text: 'Could not connect to the ProjectTRACK knowledge engine. Please check if the server is running.',
-        streaming: false,
-      })
+    } catch (error) {
+      // A deliberate abort (new send / unmount) is not a user-facing error.
+      if (error?.name === 'AbortError') {
+        patchReply({ streaming: false })
+      } else {
+        patchReply({ text: errorMessage(error), streaming: false })
+      }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       setSending(false)
     }
   }
@@ -188,7 +213,12 @@ export default function ChatCopilot() {
           </span>
         </button>
       ) : (
-        <div className="flex h-[min(32.5rem,calc(100dvh-6.5rem))] w-[375px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-white/20 bg-black/85 shadow-2xl backdrop-blur-2xl transition sm:w-[410px]">
+        <div
+          role="dialog"
+          aria-label="ProjectTRACK AI Copilot"
+          aria-modal="false"
+          className="flex h-[min(32.5rem,calc(100dvh-6.5rem))] w-[375px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-white/20 bg-black/85 shadow-2xl backdrop-blur-2xl transition sm:w-[410px]"
+        >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
             <div className="flex items-center gap-2.5">

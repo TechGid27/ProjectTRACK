@@ -142,6 +142,7 @@ export async function streamChatMessage({
   mode = 'ai',
   history = [],
   onEvent,
+  signal,
 }) {
   const res = await fetch(`${BASE_URL}/api/chat/stream`, {
     method: 'POST',
@@ -151,6 +152,7 @@ export async function streamChatMessage({
       Accept: 'text/event-stream',
     },
     body: JSON.stringify({ message, mode, history }),
+    signal,
   })
   if (res.status === 404 || res.status === 501) {
     const data = await postChatMessage({ message, mode, history }).catch(

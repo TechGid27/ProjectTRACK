@@ -30,3 +30,14 @@ class JobStatus(BaseModel):
     message: str = "Job is queued for processing"
     progress: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+
+class ScheduleStatus(BaseModel):
+    """Passive periodic scraper schedule state (GET /pipeline/schedule)."""
+    enabled: bool = Field(description="Whether the passive scraper is active")
+    interval_days: int = Field(description="Days between passive scrape+sync runs")
+    last_run_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp of the last run, if any")
+    next_run_at: Optional[str] = Field(default=None, description="ISO-8601 timestamp of the projected next run")
+    sync_after: bool = Field(description="Whether a Neo4j sync runs after each scrape")
+    running: bool = Field(description="Whether a passive cycle is currently executing")
+    job_name: str = Field(description="Durable schedule-state key")

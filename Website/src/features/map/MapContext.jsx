@@ -95,6 +95,7 @@ export function MapProvider({ children }) {
         latitude: p.latitude,
         longitude: p.longitude,
         formatted_address: p.formatted_address || p.municipality,
+        report_count: p.report_count ?? null,
       }))
       setProjectDots(mapped)
       setDisplayMode('all')

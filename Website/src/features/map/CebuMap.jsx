@@ -2597,6 +2597,7 @@ function CebuMap() {
                     {bStr ? ` · ${bStr}` : ''}
                     {dot.barangay ? ` · Brgy. ${dot.barangay}` : ''}
                     {dot.status ? ` · ${dot.status}` : ''}
+                    {dot.report_count > 0 ? ` · 📣 ${dot.report_count} report${dot.report_count === 1 ? '' : 's'}` : ''}
                   </Tooltip>
                 </Marker>
               )

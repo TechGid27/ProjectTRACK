@@ -58,6 +58,29 @@ Accept: application/json
 }
 ```
 
+> **Superlative map focus.** Superlative/locating questions return a `spatial`
+> object that drives the synchronized map (camera `center`/`zoom` + highlighted
+> `projects`). In addition to budget/recency superlatives, the assistant
+> supports **report-volume** superlatives — "which project is the **most
+> reported** in Cebu?" (province-wide) or "the most reported in Toledo"
+> (LGU-scoped), plus the status-aware "most **flagged**" variant. The matching
+> project is focused at `zoom: 16` and each spatial point carries an optional
+> `report_count` (number of citizen field reports) for map badging.
+>
+> **Overview vs. single-project.** Plural/list phrasing — "what are the
+> projects in Cordova?", "top **projects** in Mandaue", "list all projects in
+> Toledo" — is treated as a multi-project **overview** (whole-LGU dot set at
+> `zoom: 13`), not a single-project focus. Only singular phrasing ("the most
+> expensive project", "the top **project**", "the top one") focuses a single
+> project. An explicit overview request also never inherits a prior turn's
+> superlative, so following "the top project in Mandaue" with "what are the
+> projects in Cordova?" returns Cordova's full overview.
+>
+> **No reports yet.** When a report-volume superlative is asked but no project
+> in the requested scope has any matching reports, the assistant answers
+> honestly ("No … projects … have any citizen field reports on record yet")
+> and does **not** move the map to an unrelated project.
+
 ---
 
 ### 1.2 Instant Cypher Lookup Mode
@@ -482,3 +505,50 @@ Apply `backend/supabase/migrations/0001_reports_verification.sql` and
 `0002_storage_report_photos.sql` (see `backend/supabase/README.md`). Set
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, and optionally
 `SUPABASE_REPORT_BUCKET` (defaults to `report-photos`).
+
+---
+
+## 6. Pipeline Administration Endpoints
+
+Trigger and monitor data-pipeline jobs, and inspect the passive periodic
+scraper that keeps a deployed instance current.
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/pipeline/sync` | Trigger a Supabase→Neo4j sync (background) |
+| `POST` | `/api/pipeline/scrape` | Trigger an Apify DPWH scrape (background) |
+| `GET`  | `/api/pipeline/jobs` | List recent background jobs |
+| `GET`  | `/api/pipeline/jobs/{job_id}` | Inspect a specific job |
+| `GET`  | `/api/pipeline/schedule` | Passive scraper schedule state |
+| `POST` | `/api/pipeline/schedule/run-now` | Force a passive cycle now (bypasses the interval guard) |
+
+### 6.1 Passive Scraper Schedule
+`GET /api/pipeline/schedule`
+
+Reports the passive periodic scraper's configuration and durable last/next run
+timestamps (reflecting the `PASSIVE_SCRAPE_*` settings and the Supabase-backed
+`pipeline_schedule_state` row).
+
+#### Response Payload (`200 OK`)
+```json
+{
+  "enabled": true,
+  "interval_days": 90,
+  "last_run_at": "2026-07-01T00:00:00+00:00",
+  "next_run_at": "2026-09-29T00:00:00+00:00",
+  "sync_after": true,
+  "running": false,
+  "job_name": "passive_scrape"
+}
+```
+
+> **Durability & degradation.** The scraper runs on APScheduler inside the app
+> lifespan (`coalesce`, `misfire_grace_time`, `max_instances=1`). Last-run state
+> persists to Supabase (`pipeline_schedule_state`, migration 0003) so the
+> recurring interval survives restarts/redeploys and overlapping runs are
+> skipped. If the table is absent or Supabase is unconfigured, the scheduler
+> degrades to an in-memory clock and logs a warning — the API still responds.
+
+#### Provisioning
+Apply `backend/supabase/migrations/0003_pipeline_schedule_state.sql` and set the
+`PASSIVE_SCRAPE_*` environment variables (see `backend/backend/README.md`).

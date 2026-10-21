@@ -64,6 +64,16 @@ def synthesize_graph_response(
             f"It has an allocated budget of {budget} awarded to {contractor} (Status: {status})."
         )
 
+        # Citizen field reports: surface the count so the deterministic fallback
+        # mirrors the "most reported" focus the map is showing.
+        report_count = card.get("report_count")
+        if report_count is None:
+            rc_m = re.search(r'Field Reports:\s*(\d+)', graph_context)
+            report_count = int(rc_m.group(1)) if rc_m else None
+        if report_count:
+            noun = "citizen field report" if report_count == 1 else "citizen field reports"
+            summary += f" It has {report_count} {noun} on record."
+
         # Expenditure transparency: contrast allocated budget vs. amount disbursed.
         amount_paid = card.get("amount_paid")
         if amount_paid:

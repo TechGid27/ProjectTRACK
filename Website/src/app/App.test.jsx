@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import App from './App'
 
 vi.mock('../pages/HomePage', () => ({
@@ -72,7 +73,7 @@ describe('App pathname routing', () => {
     expect(window.location.hash).toBe('')
   })
 
-  it('lands on home even when the token exchange fails', async () => {
+  it('lands on home and reports the failure when the token exchange fails', async () => {
     authMock.completeOAuthCallback.mockRejectedValueOnce(
       new Error('Invalid token'),
     )
@@ -86,5 +87,48 @@ describe('App pathname routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-page')).toBeInTheDocument()
     })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Sign-in failed: Invalid token',
+    )
+    expect(window.location.hash).toBe('')
+  })
+
+  it('surfaces Supabase redirect errors instead of signing nobody in', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?error=access_denied&error_code=redirect_url_not_allowed&error_description=Redirect+URL+not+allowed',
+    )
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sign-in failed: Redirect URL not allowed',
+    )
+    expect(screen.getByTestId('home-page')).toBeInTheDocument()
+    expect(authMock.completeOAuthCallback).not.toHaveBeenCalled()
+    expect(window.location.search).toBe('')
+    expect(window.location.hash).toBe('')
+  })
+
+  it('reports an authorization code it cannot exchange', async () => {
+    window.history.replaceState(null, '', '/?code=pkce-auth-code')
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /authorization code/i,
+    )
+    expect(authMock.completeOAuthCallback).not.toHaveBeenCalled()
+    expect(window.location.search).toBe('')
+  })
+
+  it('lets the user dismiss the sign-in error', async () => {
+    window.history.replaceState(null, '', '/?error=server_error&error_description=Boom')
+    render(<App />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Sign-in failed: Boom')
+    await userEvent.click(screen.getByRole('button', { name: /dismiss/i }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTestId('home-page')).toBeInTheDocument()
   })
 })

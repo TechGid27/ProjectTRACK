@@ -65,10 +65,24 @@ export async function signInWithEmail(email, password) {
   return data.user
 }
 
-export async function signUpWithEmail(email, password) {
+export async function signUpWithEmail(
+  email,
+  password,
+  redirect = window.location.origin,
+) {
   return request('/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, redirect }),
+  })
+}
+
+export async function resendConfirmationEmail(
+  email,
+  redirect = window.location.origin,
+) {
+  return request('/auth/resend', {
+    method: 'POST',
+    body: JSON.stringify({ email, redirect }),
   })
 }
 

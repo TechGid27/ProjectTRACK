@@ -6,7 +6,7 @@ using Pydantic Settings.
 """
 
 import json
-from typing import Annotated, List, Optional
+from typing import Annotated, ClassVar, List, Optional
 from pathlib import Path
 from pydantic import Field, AliasChoices, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -49,6 +49,20 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = Field(default=None, description="Supabase anon/public API key (required for auth)")
     SUPABASE_JWT_SECRET: Optional[str] = Field(default=None, description="Optional: JWT secret for local token verification")
     FRONTEND_URL: str = Field(default="http://localhost:5173", description="Allowed web origin and default OAuth redirect target")
+
+    # Origins the web/mobile clients are served from during local development.
+    # Always allowed alongside FRONTEND_URL so credentialed cookie requests and
+    # OAuth/e-mail confirmation redirects work without extra configuration.
+    DEV_ORIGINS: ClassVar[List[str]] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:19006",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
     # Session cookie behavior (the backend stores Supabase tokens in an HTTP-only cookie)
     AUTH_COOKIE_NAME: str = Field(default="pt_session", description="Name of the HTTP-only session cookie")
@@ -111,6 +125,32 @@ class Settings(BaseSettings):
         if not isinstance(v, list):
             raise ValueError("CORS_ORIGINS must be a list of origins")
         return [cls._normalize_origin(str(o)) for o in v if str(o).strip()]
+
+    @property
+    def allowed_origins(self) -> List[str]:
+        """
+        Origins that may call the API with cookies AND receive OAuth /
+        e-mail-confirmation redirects. Single source of truth for both the CORS
+        allow-list (app.py) and the `redirect` validation on /api/auth/oauth.
+
+        "*" cannot be used with credentialed requests or redirects, so it falls
+        back to FRONTEND_URL plus DEV_ORIGINS. FRONTEND_URL is always included
+        so the deployed web app works as soon as FRONTEND_URL is set.
+        """
+        configured = self.CORS_ORIGINS or []
+        if configured in (["*"], []):
+            candidates = [self.FRONTEND_URL, *self.DEV_ORIGINS]
+        else:
+            candidates = [*configured, self.FRONTEND_URL]
+
+        seen: set = set()
+        origins: List[str] = []
+        for origin in candidates:
+            normalized = self._normalize_origin(origin)
+            if normalized and normalized != "*" and normalized not in seen:
+                seen.add(normalized)
+                origins.append(normalized)
+        return origins
 
     @field_validator("FRONTEND_URL", mode="before")
     @classmethod

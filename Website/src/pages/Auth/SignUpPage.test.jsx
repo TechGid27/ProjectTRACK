@@ -11,6 +11,9 @@ const authMock = vi.hoisted(() => ({
     user: { id: 'user-2', email: 'new@example.com' },
     message: 'Account created — confirm your email, then sign in.',
   })),
+  resendConfirmationEmail: vi.fn(async () => ({
+    message: 'Confirmation email sent again to new@example.com.',
+  })),
 }))
 
 vi.mock('../../services/auth', () => authMock)
@@ -114,6 +117,73 @@ describe('SignUpPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(
         /Redirecting to Google/,
+      )
+    })
+  })
+
+  it('offers a resend control once the account waits on confirmation', async () => {
+    authMock.signUpWithEmail.mockResolvedValueOnce({
+      user: null,
+      message:
+        'Account created. A confirmation link was sent to new@example.com — check the inbox and the spam folder before signing in.',
+      email_confirmation_required: true,
+    })
+    const user = userEvent.setup()
+    render(<SignUpPage />)
+    await user.type(screen.getByLabelText(/^email/i), 'new@example.com')
+    await user.type(screen.getByLabelText(/^password$/i), 'correct-horse')
+    await user.type(
+      screen.getByLabelText(/confirm password/i),
+      'correct-horse',
+    )
+    await user.click(
+      screen.getByRole('button', { name: /create account/i }),
+    )
+
+    // The address stays in the field so the user sees where the link went.
+    expect(screen.getByLabelText(/^email/i)).toHaveValue('new@example.com')
+
+    const resend = await screen.findByRole('button', {
+      name: /resend confirmation email/i,
+    })
+    await user.click(resend)
+    expect(authMock.resendConfirmationEmail).toHaveBeenCalledWith(
+      'new@example.com',
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Confirmation email sent again to new@example.com.',
+      )
+    })
+  })
+
+  it('shows the delivery error when the resend fails', async () => {
+    authMock.signUpWithEmail.mockResolvedValueOnce({
+      user: null,
+      message: 'Account created. A confirmation link was sent.',
+      email_confirmation_required: true,
+    })
+    authMock.resendConfirmationEmail.mockRejectedValueOnce(
+      new Error('Email address "a@b.com" cannot be used as it is not authorized'),
+    )
+    const user = userEvent.setup()
+    render(<SignUpPage />)
+    await user.type(screen.getByLabelText(/^email/i), 'a@b.com')
+    await user.type(screen.getByLabelText(/^password$/i), 'correct-horse')
+    await user.type(
+      screen.getByLabelText(/confirm password/i),
+      'correct-horse',
+    )
+    await user.click(
+      screen.getByRole('button', { name: /create account/i }),
+    )
+
+    await user.click(
+      await screen.findByRole('button', { name: /resend confirmation email/i }),
+    )
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Could not resend the confirmation email: Email address "a@b.com" cannot be used as it is not authorized',
       )
     })
   })

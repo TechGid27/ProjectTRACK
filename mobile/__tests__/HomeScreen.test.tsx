@@ -165,8 +165,8 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
     ).toBeNull();
   });
 
-  test('filtering projects via home search bar', () => {
-    const { getByTestId } = render(
+  test('does not render search bar on home page', () => {
+    const { queryByTestId } = render(
       <HomeScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
         onNavigateToContractors={mockOnNavigateToContractors}
@@ -174,11 +174,7 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
       />,
     );
 
-    const searchInput = getByTestId('home-search-input');
-    fireEvent.changeText(searchInput, 'Flood Control');
-
-    expect(getByTestId('clear-home-search')).toBeTruthy();
-    fireEvent.press(getByTestId('clear-home-search'));
+    expect(queryByTestId('home-search-input')).toBeNull();
   });
 
   test('renders user avatar when currentUser is provided and triggers onSignOut', () => {
@@ -196,5 +192,22 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
     fireEvent.press(signOutBtn);
 
     expect(mockOnSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  test('dynamically fetches and renders the 4 vital stats from api', async () => {
+    const { getByText, findByText } = render(
+      <HomeScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
+      />,
+    );
+
+    expect(getByText('Tracked Projects')).toBeTruthy();
+    expect(getByText('Monitored Budget')).toBeTruthy();
+    expect(getByText('Delayed / Flagged')).toBeTruthy();
+    expect(getByText('LGUs Monitored')).toBeTruthy();
+
+    expect(await findByText(/53 of 53/i)).toBeTruthy();
   });
 });

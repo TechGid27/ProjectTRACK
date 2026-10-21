@@ -70,10 +70,15 @@ export default function LocationIntelSheet({
     return projects.filter((p) => p.status === 'Delayed').length;
   }, [projects]);
 
-  // Filter projects list
+  // Filter projects list and eliminate duplicates
   const filteredProjects = useMemo(() => {
-    if (selectedFilter === 'All') return projects;
-    return projects.filter((p) => p.status === selectedFilter);
+    const list = selectedFilter === 'All' ? projects : projects.filter((p) => p.status === selectedFilter);
+    const seen = new Set<string>();
+    return list.filter((p) => {
+      if (!p.id || seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
   }, [projects, selectedFilter]);
 
   const getStatusColor = (status: ProjectStatus) => {
@@ -348,13 +353,13 @@ export default function LocationIntelSheet({
             </Text>
           </View>
         ) : (
-          filteredProjects.map((project) => {
+          filteredProjects.map((project, idx) => {
             const statusStyle = getStatusColor(project.status);
             const votes = votesState[project.id] || { confirm: 14, dispute: 1 };
 
             return (
               <TouchableOpacity
-                key={project.id}
+                key={`${project.id}-${idx}`}
                 style={styles.projectCard}
                 onPress={() => onSelectProject(project)}
                 activeOpacity={0.7}

@@ -17,6 +17,7 @@ import { sanitizeReportDescription } from '../../core/sanitizer';
 interface ReportAnomalyModalProps {
   visible: boolean;
   project: ProjectDetail | null;
+  availableProjects?: ProjectDetail[];
   onClose: () => void;
   onSubmit: (report: AnomalyReport) => void;
 }
@@ -37,16 +38,31 @@ const CATEGORIES: CategoryOption[] = [
 export default function ReportAnomalyModal({
   visible,
   project,
+  availableProjects = [],
   onClose,
   onSubmit,
 }: ReportAnomalyModalProps) {
+  const [selectedProj, setSelectedProj] = useState<ProjectDetail | null>(
+    project || (availableProjects.length === 1 ? availableProjects[0] : null)
+  );
   const [category, setCategory] = useState<AnomalyCategory>('ghost_project');
   const [description, setDescription] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!project) return null;
+  // Synchronize state when project prop changes or single available project
+  React.useEffect(() => {
+    if (project) {
+      setSelectedProj(project);
+    } else if (availableProjects.length === 1) {
+      setSelectedProj(availableProjects[0]);
+    } else if (!availableProjects.some((p) => p.id === selectedProj?.id)) {
+      setSelectedProj(null);
+    }
+  }, [project, availableProjects]);
+
+  if (!project && (!availableProjects || availableProjects.length === 0)) return null;
 
   const handleSubmit = () => {
     if (isSubmitting) return;
@@ -54,6 +70,10 @@ export default function ReportAnomalyModal({
     // SEC-03: Strip HTML tags, sanitize whitespace, and check boundary limits
     const sanitizedDesc = sanitizeReportDescription(description, 2000);
 
+    if (!selectedProj) {
+      setErrorMessage('Please select a specific project to report.');
+      return;
+    }
     if (sanitizedDesc.length < 15) {
       setErrorMessage(
         'Please provide a detailed description (at least 15 characters).',
@@ -79,7 +99,7 @@ export default function ReportAnomalyModal({
 
     const report: AnomalyReport = {
       id: `rep_${uuid}`,
-      projectId: project.id,
+      projectId: selectedProj.id,
       category,
       description: sanitizedDesc,
       timestamp: Date.now(),
@@ -116,7 +136,13 @@ export default function ReportAnomalyModal({
                 <View>
                   <Text style={styles.title}>Report Project Anomaly</Text>
                   <Text style={styles.subtitle}>
-                    Project ID: <Text style={styles.projectIdHighlight}>{project.id}</Text>
+                    {selectedProj ? (
+                      <>
+                        Project ID: <Text style={styles.projectIdHighlight}>{selectedProj.id}</Text>
+                      </>
+                    ) : (
+                      'Select Specific Project to Report'
+                    )}
                   </Text>
                 </View>
 
@@ -133,6 +159,40 @@ export default function ReportAnomalyModal({
                 style={styles.formBody}
                 showsVerticalScrollIndicator={false}
               >
+                {/* Target Project Selection */}
+                {availableProjects.length > 0 && (
+                  <View style={styles.projectSelectSection}>
+                    <Text style={styles.fieldLabel}>SELECT SPECIFIC PROJECT TO REPORT</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.projectPickerScroll}>
+                      {availableProjects.map((p) => {
+                        const isChosen = selectedProj?.id === p.id;
+                        return (
+                          <TouchableOpacity
+                            key={p.id}
+                            style={[styles.projectChip, isChosen && styles.projectChipSelected]}
+                            onPress={() => {
+                              setSelectedProj(p);
+                              setErrorMessage(null);
+                            }}
+                            testID={`project-chip-${p.id}`}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.projectChipId, isChosen && styles.projectChipIdSelected]}>
+                              {p.id}
+                            </Text>
+                            <Text
+                              style={[styles.projectChipTitle, isChosen && styles.projectChipTitleSelected]}
+                              numberOfLines={1}
+                            >
+                              {p.title}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+
                 {/* Issue Category Selection */}
                 <Text style={styles.fieldLabel}>CATEGORY OF ANOMALY</Text>
                 <View style={styles.categoryGrid}>
@@ -426,6 +486,44 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 13,
     fontWeight: '700',
+    color: '#ffffff',
+  },
+  projectSelectSection: {
+    marginBottom: 16,
+  },
+  projectPickerScroll: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  projectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    maxWidth: 220,
+  },
+  projectChipSelected: {
+    backgroundColor: '#1f3d3c',
+    borderColor: '#1f3d3c',
+  },
+  projectChipId: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0d9488',
+    marginBottom: 2,
+  },
+  projectChipIdSelected: {
+    color: '#2dd4bf',
+  },
+  projectChipTitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#334155',
+  },
+  projectChipTitleSelected: {
     color: '#ffffff',
   },
 });

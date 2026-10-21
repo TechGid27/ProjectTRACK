@@ -204,6 +204,23 @@ describe('LocationIntelSheet Component', () => {
     expect(mockOnFieldAuditPress).toHaveBeenCalledWith(sampleProjects[0]);
   });
 
+  test('handles duplicate project items without crashing or duplicating cards', () => {
+    const duplicateProjects = [sampleProjects[0], sampleProjects[0]];
+    const { getAllByText } = render(
+      <LocationIntelSheet
+        lguName="Bogo City"
+        projects={duplicateProjects}
+        sheetState="expanded"
+        onStateChange={mockOnStateChange}
+        onSelectProject={mockOnSelectProject}
+        onReportAnomaly={mockOnReportAnomaly}
+        onFieldAuditPress={mockOnFieldAuditPress}
+        onClose={mockOnClose}
+      />
+    );
+    expect(getAllByText('24HD0012').length).toBe(1);
+  });
+
   test('tapping confirm and dispute crowdsource buttons updates counters', () => {
     const { getByTestId, getAllByText, getByText } = render(
       <LocationIntelSheet

@@ -158,6 +158,45 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(projects[0].lgu).toBe('Bogo City');
   });
 
+  test('fetchProjectsByLocation clamps limit to prevent HTTP 422 errors', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        location: 'Cebu City',
+        total_count: 0,
+        total_budget: 0,
+        projects: [],
+      }),
+    });
+    global.fetch = mockFetch;
+
+    await api.fetchProjectsByLocation('Cebu City', 500);
+    expect(mockFetch).toHaveBeenCalled();
+    const calledUrl = mockFetch.mock.calls[0][0];
+    expect(calledUrl).toContain('limit=100');
+    expect(calledUrl).not.toContain('limit=500');
+  });
+
+  test('fetchProjectsByLocation deduplicates projects with identical IDs', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        location: 'Danao City',
+        total_count: 2,
+        total_budget: 100000000,
+        projects: [
+          { entity: '24HI0033', description: 'Road Project A', budget_num: 50000000 },
+          { entity: '24HI0033', description: 'Road Project A Duplicate', budget_num: 50000000 },
+          { entity: '24HI0059', description: 'Bridge Project B', budget_num: 50000000 },
+        ],
+      }),
+    });
+
+    const projects = await api.fetchProjectsByLocation('Danao City');
+    expect(projects.length).toBe(2);
+    expect(projects.map((p) => p.id)).toEqual(['24HI0033', '24HI0059']);
+  });
+
   test('fetchMapPins marks hotspot strictly when real reports exist', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -189,5 +228,40 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     const hotspotPin = pins.find((p) => p.id === 'PROJ-HOTSPOT');
     expect(hotspotPin?.is_hotspot).toBe(true);
     expect(hotspotPin?.tone).toBe('hotspot');
+  });
+
+  test('signIn returns user on success and strictly returns error on network failure', async () => {
+    // 1. Success case
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ user: { email: 'auditor@cebu.gov.ph', id: 'usr-1' } }),
+    } as any);
+
+    const success = await api.signIn('auditor@cebu.gov.ph', 'secret123');
+    expect(success.user?.email).toBe('auditor@cebu.gov.ph');
+    expect(success.error).toBeUndefined();
+
+    // 2. Strict Security Check: Network failure must NEVER return a synthetic offline-user
+    global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
+    const failure = await api.signIn('auditor@cebu.gov.ph', 'secret123');
+    expect(failure.user).toBeNull();
+    expect(failure.error).toContain('Network error');
+  });
+
+  test('signUp returns message on success and strictly returns error on network failure', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ user: { email: 'new@cebu.gov.ph' }, message: 'Account created' }),
+    } as any);
+
+    const success = await api.signUp('new@cebu.gov.ph', 'secret123', 'New User');
+    expect(success.user?.email).toBe('new@cebu.gov.ph');
+    expect(success.message).toBe('Account created');
+
+    // Strict Security Check: Network failure must NEVER return a synthetic offline-user
+    global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
+    const failure = await api.signUp('new@cebu.gov.ph', 'secret123');
+    expect(failure.user).toBeNull();
+    expect(failure.error).toContain('Network error');
   });
 });

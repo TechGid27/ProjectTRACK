@@ -107,4 +107,30 @@ describe('ReportAnomalyModal Component', () => {
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
+
+  test('allows selecting a specific project from availableProjects when no initial project is selected', () => {
+    const { getByText, getAllByText } = render(
+      <ReportAnomalyModal
+        visible={true}
+        project={null}
+        availableProjects={[
+          mockProject,
+          {
+            id: '24HD0099',
+            title: 'Bridge Replacement Project',
+            contractor: 'WTG CONSTRUCTION',
+            budget: 35000000,
+            status: 'Ongoing',
+            lgu: 'Bogo City',
+          },
+        ]}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+      />
+    );
+
+    expect(getAllByText(/Select Specific Project/i).length).toBeGreaterThan(0);
+    expect(getByText('24HD0012')).toBeTruthy();
+    expect(getByText('24HD0099')).toBeTruthy();
+  });
 });

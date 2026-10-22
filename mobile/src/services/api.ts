@@ -560,11 +560,25 @@ class ApiService {
     if (typeof input.latitude === 'number') form.append('latitude', String(input.latitude));
     if (typeof input.longitude === 'number') form.append('longitude', String(input.longitude));
     if (input.photo) {
-      form.append('picture', {
-        uri: input.photo.uri,
-        name: input.photo.name ?? 'field-photo.jpg',
-        type: input.photo.type ?? 'image/jpeg',
-      } as unknown as Blob);
+      if (Platform.OS === 'web' && typeof input.photo.uri === 'string' && input.photo.uri.startsWith('data:')) {
+        try {
+          const blobRes = await fetch(input.photo.uri);
+          const blob = await blobRes.blob();
+          form.append('picture', blob, input.photo.name ?? 'field-photo.jpg');
+        } catch {
+          form.append('picture', {
+            uri: input.photo.uri,
+            name: input.photo.name ?? 'field-photo.jpg',
+            type: input.photo.type ?? 'image/jpeg',
+          } as unknown as Blob);
+        }
+      } else {
+        form.append('picture', {
+          uri: input.photo.uri,
+          name: input.photo.name ?? 'field-photo.jpg',
+          type: input.photo.type ?? 'image/jpeg',
+        } as unknown as Blob);
+      }
     }
 
     const res = await fetch(`${this.baseUrl}/reports`, {

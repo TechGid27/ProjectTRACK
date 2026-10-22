@@ -6,7 +6,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#1f3d3c"
     },
@@ -15,16 +17,26 @@
       "bundleIdentifier": "com.projecttrack.mobile"
     },
     "android": {
+      "package": "com.projecttrack.mobile",
+      "versionCode": 1,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1f3d3c"
       },
-      "package": "com.projecttrack.mobile"
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "INTERNET"
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
       "expo-asset",
+      "@maplibre/maplibre-react-native",
       [
         "expo-location",
         {

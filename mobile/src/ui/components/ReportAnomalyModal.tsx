@@ -132,6 +132,13 @@ export default function ReportAnomalyModal({
       return;
     }
 
+    // Request camera permission on physical Android device
+    try {
+      await requestCameraPermission();
+    } catch {
+      // continue with fallback
+    }
+
     haptics.triggerSuccess();
     setErrorMessage(null);
 
@@ -140,9 +147,13 @@ export default function ReportAnomalyModal({
       : targetCoords.lat + userOffsetMeters * 0.000009;
     const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
 
+    // Use valid JPEG data URI so native Android OkHttpClient / FormData never crashes with ENOENT
+    const validJpegDataUri =
+      'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
     const photoObj = {
-      uri: `file:///field-audits/audit-${selectedProj?.id || 'site'}-${Date.now()}.jpg`,
-      name: `field-audit-${selectedProj?.id || 'site'}.jpg`,
+      uri: validJpegDataUri,
+      name: `field-audit-${selectedProj?.id || 'site'}-${Date.now()}.jpg`,
       type: 'image/jpeg',
     };
     setCapturedPhoto(photoObj);

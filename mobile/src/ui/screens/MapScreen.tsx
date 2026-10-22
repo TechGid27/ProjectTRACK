@@ -7,6 +7,7 @@ import {
   useWindowDimensions,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapHeader from '../components/MapHeader';
 import UnifiedCebuMap, { UnifiedCebuMapRef } from '../components/UnifiedCebuMap';
 import CebuMapHierarchyBar from '../components/CebuMapHierarchyBar';
@@ -61,6 +62,7 @@ export default function MapScreen({
   initialSheetState = 'hidden',
 }: MapScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<UnifiedCebuMapRef>(null);
 
   const [selectedLgu, setSelectedLgu] = useState<string | null>(initialLgu);
@@ -441,7 +443,7 @@ export default function MapScreen({
   const mapWidth = Math.max(320, windowWidth || 360);
 
   return (
-    <View style={styles.container} testID="map-screen">
+    <View style={[styles.container, { paddingTop: insets.top }]} testID="map-screen">
       {/* 1. Top App Header with Navigation */}
       <MapHeader
         totalLgus={53}

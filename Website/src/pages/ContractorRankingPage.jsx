@@ -4,8 +4,6 @@ import { fetchTopContractors } from '../services/api'
 
 const PAGE_SIZE = 20
 
-const MEDAL = ['🥇', '🥈', '🥉']
-
 function rankStyle(rank) {
   if (rank === 1) return 'bg-amber-400/15 text-amber-600 border-amber-400/40'
   if (rank === 2) return 'bg-gray-300/30 text-gray-600 border-gray-400/40'
@@ -83,7 +81,7 @@ function ContractorRankingPage() {
                       <span
                         className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl border text-sm font-bold ${rankStyle(rank)}`}
                       >
-                        {rank <= 3 ? MEDAL[rank - 1] : rank}
+                        {rank}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -129,7 +127,7 @@ function ContractorRankingPage() {
                   onClick={() => setPage((p) => p - 1)}
                   className="rounded-xl border border-gray-a5 px-4 py-2 text-sm font-semibold text-gray-a11 transition hover:bg-gray-a2 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
                 >
-                  ← Prev
+                  Previous
                 </button>
                 <span className="text-sm text-gray-a10">
                   Page {safePage + 1} of {pageCount}
@@ -140,7 +138,7 @@ function ContractorRankingPage() {
                   onClick={() => setPage((p) => p + 1)}
                   className="rounded-xl border border-gray-a5 px-4 py-2 text-sm font-semibold text-gray-a11 transition hover:bg-gray-a2 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
                 >
-                  Next →
+                  Next
                 </button>
               </div>
             )}

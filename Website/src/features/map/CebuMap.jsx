@@ -451,11 +451,21 @@ function LocationIntelPanel({
   const nearbySites = useMemo(() => {
     if (!selected) return []
     const origin = [selected.lat, selected.lng]
-    return mapPins
-      .map((pin) => ({ ...pin, km: haversineKm(origin, pin.position) }))
-      .filter((pin) => pin.name !== selected.name)
-      .sort((a, b) => a.km - b.km)
-      .slice(0, 4)
+    // Single pass keeping only the 4 nearest pins — avoids allocating a new
+    // array for all ~5000 pins and sorting the whole thing on every selection.
+    const top = []
+    for (const pin of mapPins) {
+      if (pin.name === selected.name) continue
+      const km = haversineKm(origin, pin.position)
+      if (top.length < 4) {
+        top.push({ pin, km })
+        if (top.length === 4) top.sort((a, b) => a.km - b.km)
+      } else if (km < top[3].km) {
+        top[3] = { pin, km }
+        top.sort((a, b) => a.km - b.km)
+      }
+    }
+    return top.map(({ pin, km }) => ({ ...pin, km }))
   }, [selected, mapPins])
 
   const nearbyLgu = useMemo(() => {
@@ -534,13 +544,13 @@ function LocationIntelPanel({
   return (
     <div
       ref={panelRef}
-      className="location-intel-panel  absolute left-3 top-3 z-[1000] flex max-h-[min(24rem,calc(100dvh-10rem))] w-[min(17rem,calc(100vw-5.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/85 shadow-2xl backdrop-blur-md sm:max-h-[calc(100%-1.5rem)] sm:w-[290px]"
+      className="location-intel-panel absolute left-2 top-2 z-[1000] flex max-h-[min(18rem,calc(100dvh-16rem))] w-[min(15.5rem,calc(100vw-4.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/85 shadow-2xl backdrop-blur-md sm:left-3 sm:top-3 sm:max-h-[calc(100%-1.5rem)] sm:w-[290px]"
     >
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <h3 className="text-sm font-bold text-white">Location Intel</h3>
+        <h3 className="flex-1 truncate text-sm font-bold text-white">Location Intel</h3>
         <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-          Live Active
+          <span className="hidden sm:inline">Live Active</span>
         </span>
         <button
           type="button"
@@ -565,7 +575,7 @@ function LocationIntelPanel({
               onClick={onReset}
               className="text-[10px] font-semibold text-emerald-400/90 transition hover:text-emerald-300 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70"
             >
-              ← Overview
+              Overview
             </button>
           )}
         </div>
@@ -773,7 +783,7 @@ function LocationIntelPanel({
                     onClick={() => setProjPage((p) => p - 1)}
                     className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
                   >
-                    ← Prev
+                    Previous
                   </button>
                   <span className="text-[10px] text-white/40">
                     {safeProjPage + 1} / {panelPageCount}
@@ -784,7 +794,7 @@ function LocationIntelPanel({
                     onClick={() => setProjPage((p) => p + 1)}
                     className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
                   >
-                    Next →
+                    Next
                   </button>
                 </div>
               )}
@@ -811,6 +821,10 @@ function LocationIntelPanel({
 }
 
 const REPORTS_KEY = 'projecttrack-project-reports'
+
+// Mirrors the backend contract: submit_report() requires
+// description = Form(..., min_length=10, max_length=2000).
+const MIN_DESCRIPTION_LENGTH = 10
 
 const FULL_DETAILS_PAGE_SIZE = 8
 const PANEL_PAGE_SIZE = 5
@@ -855,7 +869,7 @@ function FullDetailsModal({ locationName, onClose, onSelectProject }) {
       role="dialog"
       aria-modal="true"
       aria-label={`Full details for ${locationName}`}
-      className="fixed inset-0 z-[3000] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[6000] flex items-center justify-center p-4"
     >
       <button
         type="button"
@@ -962,7 +976,7 @@ function FullDetailsModal({ locationName, onClose, onSelectProject }) {
               onClick={() => setPage((p) => p - 1)}
               className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
             >
-              ← Prev
+              Previous
             </button>
             <span className="text-[11px] text-white/50">
               Page {page + 1} of {pageCount}
@@ -973,7 +987,7 @@ function FullDetailsModal({ locationName, onClose, onSelectProject }) {
               onClick={() => setPage((p) => p + 1)}
               className="rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-white/70 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
             >
-              Next →
+              Next
             </button>
           </div>
         )}
@@ -990,7 +1004,7 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
       role="dialog"
       aria-modal="true"
       aria-label={`Projects in this area`}
-      className="fixed inset-0 z-[3000] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[6000] flex items-center justify-center p-4"
     >
       <button
         type="button"
@@ -1207,8 +1221,18 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
 
   async function submit(event) {
     event.preventDefault()
-    if (!form.desc.trim()) {
+    const trimmedDesc = form.desc.trim()
+    if (!trimmedDesc) {
       patch({ error: 'Add a short description of what you observed.' })
+      return
+    }
+    // The backend requires a description of at least 10 characters
+    // (Form(..., min_length=10)); enforce it client-side so users get an
+    // instant, clear message instead of a generic HTTP 422.
+    if (trimmedDesc.length < MIN_DESCRIPTION_LENGTH) {
+      patch({
+        error: `Please add a bit more detail — at least ${MIN_DESCRIPTION_LENGTH} characters (currently ${trimmedDesc.length}).`,
+      })
       return
     }
     setSubmitting(true)
@@ -1293,7 +1317,7 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
       role="dialog"
       aria-modal="true"
       aria-label={`Report anomaly for ${entity}`}
-      className="fixed inset-0 z-[3100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[6100] flex items-center justify-center p-4"
     >
       <button
         type="button"
@@ -1515,10 +1539,16 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
                 id="anomaly-description"
                 rows={3}
                 value={form.desc}
+                minLength={MIN_DESCRIPTION_LENGTH}
                 onChange={(event) => patch({ desc: event.target.value, error: '' })}
-                placeholder="What did you observe?"
+                placeholder="What did you observe? (at least 10 characters)"
                 className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] text-white placeholder:text-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
               />
+              <p className="mt-1 text-right text-[10px] text-white/40">
+                {form.desc.trim().length < MIN_DESCRIPTION_LENGTH
+                  ? `${form.desc.trim().length}/${MIN_DESCRIPTION_LENGTH} characters minimum`
+                  : `${form.desc.trim().length} characters`}
+              </p>
             </div>
             {gpsStatus !== 'idle' && (
               <p
@@ -1532,9 +1562,9 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
                       : 'bg-violet-400/10 text-violet-300/70'
                 }`}
               >
-                {gpsStatus === 'acquiring' && '📍 Acquiring GPS…'}
-                {gpsStatus === 'acquired' && '📍 GPS acquired — will verify on-site'}
-                {gpsStatus === 'denied' && '📍 No GPS — report will be unverified'}
+                {gpsStatus === 'acquiring' && 'Acquiring GPS…'}
+                {gpsStatus === 'acquired' && 'GPS acquired — will verify on-site'}
+                {gpsStatus === 'denied' && 'No GPS — report will be unverified'}
               </p>
             )}
             {farFromSite != null && (
@@ -1719,7 +1749,7 @@ function ProjectDetailModal({ entity, onClose }) {
   )
 
   // Community-report filter chips + pagination.
-  const REPORTS_PER_PAGE = 5
+  const REPORTS_PER_PAGE = 6
   const filteredReports =
     reportFilter === 'all'
       ? reportList
@@ -1731,7 +1761,7 @@ function ProjectDetailModal({ entity, onClose }) {
     currentPage * REPORTS_PER_PAGE,
   )
   const filterChips = [
-    { key: 'all', label: 'All', count: reportList.length },
+    { key: 'all', label: 'All Anomalies', count: reportList.length },
     ...VERIFICATION_TONES.filter((t) => (verificationCounts[t.tone] ?? 0) > 0).map(
       (t) => ({
         key: t.tone,
@@ -1761,7 +1791,7 @@ function ProjectDetailModal({ entity, onClose }) {
       role="dialog"
       aria-modal="true"
       aria-label={`DPWH project ${entity} details`}
-      className="fixed  inset-0 z-[3000] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[6000] flex items-center justify-center p-4"
     >
       <button
         type="button"
@@ -1950,11 +1980,11 @@ function ProjectDetailModal({ entity, onClose }) {
                       No reports match this filter.
                     </p>
                   ) : (
-                    <ul className="space-y-2">
+                    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {pageReports.map((item) => (
                         <li
                           key={item.id ?? `${item.at}-${item.description}`}
-                          className="rounded-lg border border-white/10 bg-black/20 px-2.5 py-2"
+                          className="flex flex-col rounded-lg border border-white/10 bg-black/20 px-2.5 py-2"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
                             <VerificationBadgePill badge={item.badge} />
@@ -1992,7 +2022,7 @@ function ProjectDetailModal({ entity, onClose }) {
                         onClick={() => setReportPage(currentPage - 1)}
                         className="rounded-full bg-white/10 px-2.5 py-1 font-semibold text-white/80 ring-1 ring-white/15 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-35"
                       >
-                        ← Prev
+                        Previous
                       </button>
                       <span className="text-white/50">
                         Page {currentPage} of {pageCount}
@@ -2003,7 +2033,7 @@ function ProjectDetailModal({ entity, onClose }) {
                         onClick={() => setReportPage(currentPage + 1)}
                         className="rounded-full bg-white/10 px-2.5 py-1 font-semibold text-white/80 ring-1 ring-white/15 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-35"
                       >
-                        Next →
+                        Next
                       </button>
                     </div>
                   )}
@@ -2200,13 +2230,26 @@ function CebuMap() {
       if (!summary) return false
       if (activeVerificationFilter === 'verified') return summary.onSite > 0
       if (activeVerificationFilter === 'flagged') return summary.flagged > 0
-      return summary.unverified > 0
+      // 'anomalies' — any project that has at least one citizen report,
+      // regardless of its verification tone.
+      return (
+        (summary.onSite ?? 0) +
+          (summary.flagged ?? 0) +
+          (summary.unverified ?? 0) >
+        0
+      )
     },
     [activeVerificationFilter, reportSummaries],
   )
 
+  // Only paint a tone-specific pin colour for the single-tone filters. The
+  // 'anomalies' filter keeps each pin's status colour so mixed report types
+  // stay distinguishable on the map.
   const verificationTone =
-    activeVerificationFilter === 'all' ? null : activeVerificationFilter
+    activeVerificationFilter === 'verified' ||
+    activeVerificationFilter === 'flagged'
+      ? activeVerificationFilter
+      : null
 
   const filteredSpatialDots = useMemo(() => {
     if (!projectDots || projectDots.length === 0) return []

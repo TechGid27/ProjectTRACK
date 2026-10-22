@@ -25,18 +25,18 @@ describe('ChatCopilot', () => {
 
   function open() {
     render(<ChatCopilot />)
-    fireEvent.click(screen.getByText(/Ask ProjectTRACK AI/i))
+    fireEvent.click(screen.getByText(/Ask ProjectTrack Watchdog/i))
   }
 
   it('offers the "most reported" quick prompt', () => {
     open()
-    expect(screen.getByText('📣 Most reported in Cebu')).toBeInTheDocument()
+    expect(screen.getByText('Most reported in Cebu')).toBeInTheDocument()
   })
 
   it('exposes the panel as a dialog for assistive tech', () => {
     open()
     expect(
-      screen.getByRole('dialog', { name: /ProjectTRACK AI Copilot/i }),
+      screen.getByRole('dialog', { name: /ProjectTrack Watchdog/i }),
     ).toBeInTheDocument()
   })
 
@@ -47,7 +47,7 @@ describe('ChatCopilot', () => {
       throw err
     })
     open()
-    fireEvent.click(screen.getByText('📣 Most reported in Cebu'))
+    fireEvent.click(screen.getByText('Most reported in Cebu'))
     await waitFor(() =>
       expect(screen.getByText(/Rate limit reached/i)).toBeInTheDocument(),
     )

@@ -16,6 +16,8 @@ import AboutMapModal from '../components/AboutMapModal';
 import ChatBotModal from '../components/ChatBotModal';
 import MapFilterBar, { MapFilterOption } from '../components/MapFilterBar';
 import FieldAuditorModal from '../components/FieldAuditorModal';
+import CebuMapHierarchyBar from '../components/CebuMapHierarchyBar';
+import CebuRegionQuickJump from '../components/CebuRegionQuickJump';
 import { pins, initialPins } from '../../data/pins';
 import {
   mockProjects,
@@ -23,8 +25,20 @@ import {
   getProjectById,
 } from '../../data/mockApi';
 import { api } from '../../services/api';
-import { Pin, ProjectDetail, AnomalyReport, ProjectStatus } from '../../core/types';
-import { normalizeLguName, normalizeCoordinates } from '../../core/geoUtils';
+import {
+  Pin,
+  ProjectDetail,
+  AnomalyReport,
+  ProjectStatus,
+  HierarchyFilterTier,
+} from '../../core/types';
+import {
+  normalizeLguName,
+  normalizeCoordinates,
+  isLguInHierarchyTier,
+  computeBoundingBox,
+  RegionPreset,
+} from '../../core/geoUtils';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 interface MapScreenProps {
@@ -218,6 +232,8 @@ export default function MapScreen({
         scope: p.description,
         report_count: p.report_count || 0,
         is_hotspot: p.is_hotspot || false,
+        latitude: typeof p.lat === 'number' ? p.lat : undefined,
+        longitude: typeof p.lng === 'number' ? p.lng : undefined,
       }));
     }
 
@@ -286,40 +302,7 @@ export default function MapScreen({
         }
         const label = (matchedFeature as any)?.properties?.label;
         if (Array.isArray(label) && label.length === 2) {
-          mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
-        }
-      }
-    } else if (clean.length === 0 && selectedLgu) {
-      setSelectedLgu(null);
-      setSelectedPinId(null);
-    }
-  };
-
-  const handleSearchQueryChange = (query: string) => {
-    setSearchQuery(query);
-    const clean = query.trim().toLowerCase();
-    if (clean.length >= 3) {
-      const matchedFeature = cebuDataRaw?.features?.find((f: any) => {
-        const rawName = (f.properties?.name || '').toLowerCase();
-        const normName = normalizeLguName(f.properties?.name || '').toLowerCase();
-        return (
-          rawName === clean ||
-          normName === clean ||
-          rawName.startsWith(clean) ||
-          normName.startsWith(clean)
-        );
-      });
-
-      if (matchedFeature) {
-        const matchedName = normalizeLguName(matchedFeature.properties.name);
-        setSelectedLgu(matchedName);
-        setSelectedPinId(null);
-        if (sheetState === 'hidden') {
-          setSheetState('minimized');
-        }
-        const label = (matchedFeature as any)?.properties?.label;
-        if (Array.isArray(label) && label.length === 2) {
-          mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
+          mapRef.current?.animateToCoordinates(label[1], label[0], 4.2);
         }
       }
     } else if (clean.length === 0 && selectedLgu) {
@@ -341,7 +324,7 @@ export default function MapScreen({
         normalized.toLowerCase(),
     );
     if (targetFeature) {
-      const box = computeBoundingBox([targetFeature]);
+      const box = computeBoundingBox([targetFeature as any]);
       if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
         const centerLng = (box.minLng + box.maxLng) / 2;
         const centerLat = (box.minLat + box.maxLat) / 2;
@@ -354,7 +337,7 @@ export default function MapScreen({
     setSelectedPinId(pin.id);
     setSelectedLgu(pin.lgu);
 
-    const optimisticProject: ProjectDetail = getProjectById(pin.id) || {
+    const baseProject = getProjectById(pin.id) || {
       id: pin.id,
       title: pin.name,
       contractor: 'Contractor on Record',
@@ -362,6 +345,12 @@ export default function MapScreen({
       status: pin.tone === 'warning' ? 'Delayed' : 'Ongoing',
       lgu: pin.lgu,
       scope: pin.description,
+    };
+    // Always carry the pin's coordinates so field-audit geofencing targets the real site
+    const optimisticProject: ProjectDetail = {
+      ...baseProject,
+      latitude: baseProject.latitude ?? pin.lat,
+      longitude: baseProject.longitude ?? pin.lng,
     };
     setSelectedProject(optimisticProject);
     setIsDetailModalOpen(true);
@@ -484,8 +473,27 @@ export default function MapScreen({
         onSelectFilter={setActiveFilter}
       />
 
+      {/* Floating Refresh Button */}
+      <TouchableOpacity
+        style={styles.floatingRefreshBtn}
+        onPress={handleRefreshMap}
+        activeOpacity={0.8}
+        testID="map-refresh-btn"
+        accessibilityLabel="Refresh map data"
+      >
+        <Text style={styles.floatingRefreshText}>
+          {isRefreshingMap ? '⏳ Syncing…' : '↻ Refresh'}
+        </Text>
+      </TouchableOpacity>
+
       {/* Full Viewport Interactive Map (Hardware Vector on Mobile, SVG Vector on Web) */}
       <View style={styles.mapContainer}>
+        {/* Floating Region Focus Presets (Metro Cebu, North, South, Islands) */}
+        <CebuRegionQuickJump
+          onSelectPreset={handleSelectRegionPreset}
+          activePresetId={activeRegionPresetId}
+        />
+
         <UnifiedCebuMap
           ref={mapRef}
           testID="unified-cebu-map"
@@ -570,7 +578,7 @@ export default function MapScreen({
           handleSelectProjectById(projectId);
           const proj = activeProjects.find((p) => p.id === projectId);
           if (proj && typeof proj.latitude === 'number' && typeof proj.longitude === 'number') {
-            mapRef.current?.animateToCoordinates(proj.latitude, proj.longitude, 15);
+            mapRef.current?.animateToCoordinates(proj.latitude, proj.longitude, 5);
             setIsChatBotOpen(false); // auto-minimize AI chat on spatial query
           }
         }}
@@ -584,7 +592,7 @@ export default function MapScreen({
           if (feat) {
             const label = (feat as any).properties?.label;
             if (Array.isArray(label) && label.length === 2) {
-              mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
+              mapRef.current?.animateToCoordinates(label[1], label[0], 4.2);
             }
           }
         }}
@@ -600,11 +608,23 @@ export default function MapScreen({
       />
 
       <ReportAnomalyModal
-        visible={isReportModalOpen || isAuditorModalOpen}
+        visible={isReportModalOpen}
         project={selectedProject}
         availableProjects={currentLguProjects}
         onClose={() => setIsReportModalOpen(false)}
         onSubmit={handleSubmitReport}
+      />
+
+      <FieldAuditorModal
+        visible={isAuditorModalOpen}
+        project={selectedProject}
+        availableProjects={currentLguProjects}
+        onClose={() => setIsAuditorModalOpen(false)}
+        onAuditSubmitted={(receipt) => {
+          if (typeof alert !== 'undefined') {
+            alert(`Field audit queued. Receipt code: ${receipt.receiptCode}`);
+          }
+        }}
       />
     </View>
   );

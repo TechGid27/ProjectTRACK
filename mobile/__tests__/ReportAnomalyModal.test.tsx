@@ -1,8 +1,14 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 
+// Simulate real hardware GPS: a fix near Bogo City (the mock project's LGU
+// centroid fallback) so the automatic geofence opens the shutter on-site.
 jest.mock('../src/services/location', () => ({
-  getDeviceFix: jest.fn().mockResolvedValue(null),
+  getDeviceFix: jest.fn().mockResolvedValue({
+    latitude: 11.0169,
+    longitude: 123.9873,
+    accuracy: 5,
+  }),
   requestCameraPermission: jest.fn().mockResolvedValue(true),
   requestLocationPermission: jest.fn().mockResolvedValue(true),
 }));
@@ -46,7 +52,7 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
   });
 
   test('renders form fields, geofence radar, and viewfinder with default project selection', () => {
-    const { getByText, getByPlaceholderText, getByTestId } = render(
+    const { getByText, getAllByText, getByPlaceholderText, getByTestId } = render(
       <ReportAnomalyModal
         visible={true}
         project={mockProject}
@@ -57,7 +63,7 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
     );
 
     expect(getByText('Field Audit & Anomaly Report')).toBeTruthy();
-    expect(getByText('24HD0012')).toBeTruthy();
+    expect(getAllByText('24HD0012').length).toBeGreaterThan(0);
     expect(getByTestId('geofence-radar-badge')).toBeTruthy();
     expect(getByTestId('auditor-shutter-btn')).toBeTruthy();
     expect(getByText('Ghost Project / Abandoned')).toBeTruthy();
@@ -84,12 +90,12 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
     fireEvent.press(submitBtn);
 
     expect(
-      getByText('A live site photo is required to submit a verified field audit.'),
+      getByText('A live site photo is required to submit a field audit.'),
     ).toBeTruthy();
     expect(mockOnSubmit).not.toHaveBeenCalled();
   });
 
-  test('shows validation error when attempting to submit with too short description', () => {
+  test('shows validation error when attempting to submit with too short description', async () => {
     const { getByText, getByPlaceholderText, getByTestId } = render(
       <ReportAnomalyModal
         visible={true}
@@ -99,9 +105,11 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
       />,
     );
 
-    // Capture site photo
+    // Wait for the async GPS fix to classify the capture as on-site
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     const shutterBtn = getByTestId('auditor-shutter-btn');
     fireEvent.press(shutterBtn);
+    await waitFor(() => expect(getByTestId('receipt-code-badge')).toBeTruthy());
 
     const descInput = getByPlaceholderText(/Describe observed issues, missing equipment/i);
     fireEvent.changeText(descInput, 'Too short');
@@ -126,10 +134,11 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
       />,
     );
 
-    // Capture mandatory photo
+    // Wait for async GPS fix, then capture mandatory photo
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     const shutterBtn = getByTestId('auditor-shutter-btn');
     fireEvent.press(shutterBtn);
-    expect(mockOnAuditSubmitted).toHaveBeenCalled();
+    await waitFor(() => expect(mockOnAuditSubmitted).toHaveBeenCalled());
 
     // Select category "Substandard Materials"
     const catBtn = getByText('Substandard Materials');
@@ -154,6 +163,28 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
       );
       expect(typeof submittedData.timestamp).toBe('number');
     });
+  });
+
+  test('renders a live camera viewfinder and the captured photo preview after shutter', async () => {
+    const { getByTestId, getByText } = render(
+      <ReportAnomalyModal
+        visible={true}
+        project={mockProject}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+        onAuditSubmitted={mockOnAuditSubmitted}
+      />,
+    );
+
+    // Live camera feed is visible once permission is granted
+    await waitFor(() => expect(getByTestId('site-camera-preview')).toBeTruthy());
+    // GPS fix settles so the capture is classified on-site
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
+
+    // Capturing swaps the feed for the captured photo preview
+    fireEvent.press(getByTestId('auditor-shutter-btn'));
+    await waitFor(() => expect(getByTestId('captured-photo-preview')).toBeTruthy());
+    expect(mockOnAuditSubmitted).toHaveBeenCalledTimes(1);
   });
 
   test('cancel button calls onClose', () => {
@@ -196,5 +227,47 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
     expect(getAllByText(/Select Specific Project/i).length).toBeGreaterThan(0);
     expect(getByText('24HD0012')).toBeTruthy();
     expect(getByText('24HD0099')).toBeTruthy();
+  });
+
+  test('sorts project chips nearest-to-GPS first and tags NEARBY vs OFF-SITE', async () => {
+    // GPS fix is near Bogo City; Oslob is ~100km south
+    const { getByTestId, getAllByTestId, getByText } = render(
+      <ReportAnomalyModal
+        visible={true}
+        project={null}
+        availableProjects={[
+          {
+            id: '24HD0099',
+            title: 'Oslob Seawall Rehabilitation',
+            contractor: 'WTG CONSTRUCTION',
+            budget: 35000000,
+            status: 'Ongoing',
+            lgu: 'Oslob',
+          },
+          mockProject,
+        ]}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+      />,
+    );
+
+    // Bogo chip (near GPS) is sorted before the far Oslob chip
+    await waitFor(() => {
+      const chips = getAllByTestId(/^project-chip-\d/);
+      expect(chips[0].props.testID).toBe('project-chip-24HD0012');
+      expect(chips[1].props.testID).toBe('project-chip-24HD0099');
+    });
+
+    // Live distances and proximity tags
+    const nearDistance = getByTestId('project-chip-distance-24HD0012');
+    expect(String(nearDistance.props.children)).toMatch(/\d+ m$/);
+    expect(getByText('NEARBY')).toBeTruthy();
+
+    const farDistance = getByTestId('project-chip-distance-24HD0099');
+    expect(String(farDistance.props.children)).toMatch(/km$/);
+    expect(getByText('OFF-SITE')).toBeTruthy();
+
+    // Header reflects proximity ordering once GPS is live
+    expect(getByText(/NEAREST TO YOUR LOCATION/)).toBeTruthy();
   });
 });

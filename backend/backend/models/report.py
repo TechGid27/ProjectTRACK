@@ -14,15 +14,30 @@ Verdict schema (shared contract with the web & mobile clients — Pillar 5):
     created_at        : ISO-8601 timestamp
 """
 
+import re
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # Allowed enums kept here so router + store + tests share one source of truth.
 REPORT_CATEGORIES = ("ghost_project", "delay", "substandard_materials", "safety_hazard", "other")
 REPORT_STATUSES = ("verified", "pending", "flagged", "rejected")
 FORENSICS_VERDICTS = ("clean", "suspicious", "recycled")
+
+
+def sanitize_input_text(v: str, max_len: int = 2000) -> str:
+    """Strips HTML tags, script/style/iframe blocks, dangerous attributes and control codes."""
+    if not v:
+        return ""
+    v = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', v, flags=re.IGNORECASE)
+    v = re.sub(r'<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>', '', v, flags=re.IGNORECASE)
+    v = re.sub(r'<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>', '', v, flags=re.IGNORECASE)
+    v = re.sub(r'\bon\w+\s*=\s*(?:\'[^\']*\'|"[^"]*"|[^\s>]+)', '', v, flags=re.IGNORECASE)
+    v = re.sub(r'(?:javascript|vbscript|data):[^\s"\']*', '', v, flags=re.IGNORECASE)
+    v = re.sub(r'<[^>]*>', '', v)
+    v = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', v)
+    return v.strip()[:max_len]
 
 
 class ReportCreate(BaseModel):
@@ -32,6 +47,30 @@ class ReportCreate(BaseModel):
     category: str = Field(default="other", description="Report category")
     latitude: Optional[float] = Field(default=None, ge=-90, le=90, description="Reporter device latitude (WGS84)")
     longitude: Optional[float] = Field(default=None, ge=-180, le=180, description="Reporter device longitude (WGS84)")
+
+    @field_validator("project_id")
+    @classmethod
+    def validate_project_id(cls, v: str) -> str:
+        clean = sanitize_input_text(v, max_len=50)
+        if not clean:
+            raise ValueError("project_id cannot be blank")
+        return clean
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str) -> str:
+        clean = sanitize_input_text(v, max_len=2000)
+        if len(clean) < 10:
+            raise ValueError("description must be at least 10 characters after sanitization")
+        return clean
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        clean = v.strip().lower()
+        if clean not in REPORT_CATEGORIES:
+            return "other"
+        return clean
 
 
 class ReportVerification(BaseModel):

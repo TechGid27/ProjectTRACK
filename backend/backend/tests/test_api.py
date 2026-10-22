@@ -754,6 +754,34 @@ class TestBackendAPI(unittest.TestCase):
         self.assertTrue(resp.json()["guardrail"]["is_off_topic"])
 
 
+    def test_report_create_sanitizes_xss_and_scripts(self):
+        """ReportCreate model strips scripts, HTML tags, and dangerous attributes."""
+        from backend.models.report import ReportCreate
+        report = ReportCreate(
+            project_id="24HD0012<script>alert(1)</script>",
+            description="<script>alert('pwn')</script>Cracking observed on seawall embankment",
+            category="ghost_project",
+        )
+        self.assertEqual(report.project_id, "24HD0012")
+        self.assertEqual(report.description, "Cracking observed on seawall embankment")
+        self.assertNotIn("<script>", report.description)
+        self.assertNotIn("alert", report.description)
+
+    def test_chat_request_sanitizes_script_tags(self):
+        """ChatRequest model strips script tags and iframes from prompt and history."""
+        from backend.models.chat import ChatRequest, ChatMessage
+        req = ChatRequest(
+            message="<script>fetch('/evil')</script>What is the budget for Bogo flood control?",
+            history=[
+                ChatMessage(role="user", content="<img src=x onerror=alert(1)>Hello there"),
+            ],
+        )
+        self.assertEqual(req.message, "What is the budget for Bogo flood control?")
+        self.assertNotIn("<script>", req.message)
+        self.assertEqual(req.history[0].content, "Hello there")
+        self.assertNotIn("onerror", req.history[0].content)
+
+
 if __name__ == "__main__":
     unittest.main()
 

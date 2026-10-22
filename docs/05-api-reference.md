@@ -63,9 +63,20 @@ Accept: application/json
 > `projects`). In addition to budget/recency superlatives, the assistant
 > supports **report-volume** superlatives — "which project is the **most
 > reported** in Cebu?" (province-wide) or "the most reported in Toledo"
-> (LGU-scoped), plus the status-aware "most **flagged**" variant. The matching
-> project is focused at `zoom: 16` and each spatial point carries an optional
-> `report_count` (number of citizen field reports) for map badging.
+> (LGU-scoped), plus the status-aware "most **flagged**" variant. Report-volume
+> rankings are computed from the **citizen field-report store** (the same source
+> that backs the map's Report Verification legend), so the chat's "most reported"
+> result always agrees with the map. The matching project is focused at
+> `zoom: 16` and each spatial point carries an optional `report_count` (number of
+> citizen field reports) for map badging.
+>
+> **Answer framing (WHAT / WHERE / WHO / WHEN / WHY / HOW).** In `ai` mode the
+> grounded answer is organized around a project's WHAT (scope), WHERE (location),
+> WHO (contractor + implementing office), WHEN (timeline + status), WHY (public
+> benefit inferred from the project's own category/scope), and HOW
+> (funding/budget and any citizen-report activity). Only dimensions present in
+> the grounded context are stated — the model never supplements with outside or
+> real-world knowledge, and vendor/provider identifiers are never surfaced.
 >
 > **Overview vs. single-project.** Plural/list phrasing — "what are the
 > projects in Cordova?", "top **projects** in Mandaue", "list all projects in

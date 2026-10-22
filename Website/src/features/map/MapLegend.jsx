@@ -77,7 +77,7 @@ export default function MapLegend() {
           inert={minimized}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="max-h-[min(26rem,42vh)] space-y-3 overflow-y-auto p-3.5 text-xs text-white/80">
+            <div className="max-h-[min(14rem,32vh)] space-y-3 overflow-y-auto p-3.5 text-xs text-white/80 sm:max-h-[min(26rem,42vh)]">
               {/* Status filters */}
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
@@ -165,17 +165,17 @@ export default function MapLegend() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleVerifyClick('unverified')}
-                    aria-pressed={activeVerificationFilter === 'unverified'}
-                    title="Show only projects with Unverified reports"
+                    onClick={() => handleVerifyClick('anomalies')}
+                    aria-pressed={activeVerificationFilter === 'anomalies'}
+                    title="Show every project that has a citizen report (On-Site Verified, Photo Flagged, or Unverified)"
                     className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
-                      activeVerificationFilter === 'unverified'
+                      activeVerificationFilter === 'anomalies'
                         ? 'bg-white/20 text-white ring-2 ring-white/60'
                         : 'bg-white/10 text-white/60 ring-1 ring-white/15 hover:bg-white/15'
                     }`}
                   >
                     <span className="inline-block h-2 w-2 shrink-0 rotate-45 rounded-[1px] bg-white/75 shadow-[0_0_6px_#ffffff80]" />
-                    Unverified
+                    All Anomalies
                   </button>
                 </div>
               </div>

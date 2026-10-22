@@ -3,6 +3,11 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const GET_CACHE = new Map()
 const INFLIGHT = new Map()
 
+// Cap the GET cache so a long browsing session (clicking many municipalities)
+// can't grow it without bound. Map preserves insertion order, so evicting the
+// first key drops the oldest entry.
+const MAX_CACHE_ENTRIES = 100
+
 export function clearApiCache() {
   GET_CACHE.clear()
   INFLIGHT.clear()
@@ -28,9 +33,22 @@ async function request(path, options = {}) {
   }
   if (!res.ok) {
     const detail = body?.detail
-    const error = new Error(
-      typeof detail === 'string' ? detail : `Request failed (HTTP ${res.status})`,
-    )
+    let message
+    if (typeof detail === 'string') {
+      message = detail
+    } else if (Array.isArray(detail) && detail.length > 0) {
+      // FastAPI validation errors come back as an array of {loc, msg, type}.
+      message = detail
+        .map((item) => {
+          const field = Array.isArray(item?.loc)
+            ? item.loc[item.loc.length - 1]
+            : null
+          return field && item?.msg ? `${field}: ${item.msg}` : item?.msg
+        })
+        .filter(Boolean)
+        .join('; ')
+    }
+    const error = new Error(message || `Request failed (HTTP ${res.status})`)
     error.status = res.status
     throw error
   }
@@ -45,6 +63,10 @@ function cachedGet(path, ttlMs) {
   const promise = request(path)
     .then((data) => {
       GET_CACHE.set(path, { data, expires: now + ttlMs })
+      if (GET_CACHE.size > MAX_CACHE_ENTRIES) {
+        const oldest = GET_CACHE.keys().next().value
+        GET_CACHE.delete(oldest)
+      }
       return data
     })
     .finally(() => {
@@ -67,8 +89,9 @@ export function fetchTopProjects(limit = 2) {
 }
 
 export function fetchProjectsByLocation(location, limit = 5) {
-  return request(
+  return cachedGet(
     `/projects/by-location?location=${encodeURIComponent(location)}&limit=${limit}`,
+    60_000,
   )
 }
 

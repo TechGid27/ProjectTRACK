@@ -11,7 +11,9 @@ export function MapProvider({ children }) {
   const [totalLocationProjects, setTotalLocationProjects] = useState(0)
   const [displayMode, setDisplayMode] = useState('top50')
   const [activeStatusFilter, setStatusFilter] = useState('all')
-  // Map legend verification filter: 'all' | 'verified' | 'flagged' | 'unverified'
+  // Map legend verification filter: 'all' | 'verified' | 'flagged' | 'anomalies'
+  // ('anomalies' = any project that has at least one citizen report, regardless
+  // of verification tone.)
   const [activeVerificationFilter, setVerificationFilter] = useState('all')
   const [highlightedProjectId, setHighlightedProjectId] = useState(null)
   const [selectedProject, setSelectedProject] = useState(null)

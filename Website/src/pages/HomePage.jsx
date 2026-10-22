@@ -13,7 +13,7 @@ const CITY_RE = /^(City of |.* City$)/
 const FAQS = [
   {
     q: 'What data does ProjectTRACK show?',
-    a: 'ProjectTRACK loads DPWH public-works projects for Cebu Province from a Neo4j database — including project ID, description, location, contractor, budget, and status (ongoing, completed with completion percentage, or bidding/procurement).',
+    a: 'ProjectTrack loads DPWH public-works projects for Cebu Province from its project database — including project ID, description, location, contractor, budget, and status (ongoing, completed with completion percentage, or bidding/procurement).',
   },
   {
     q: 'How do I find projects in my municipality?',
@@ -36,7 +36,7 @@ const FAQS = [
 function AboutMapModal({ onClose }) {
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[6000] flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -64,7 +64,7 @@ function AboutMapModal({ onClose }) {
         </div>
         <p className="mt-4 text-sm leading-6 text-gray-a11">
           The interactive map shows every DPWH project site in Cebu Province
-          loaded from the Neo4j database. Click a municipality polygon to zoom
+          loaded from the project database. Click a municipality polygon to zoom
           in and see its projects, budgets, and statuses in the Location Intel
           panel. Click a diamond pin to open the full project details. Use the
           legend at the top-right to filter projects by status — and to show
@@ -171,15 +171,21 @@ function HomePage() {
       </Suspense>
       <section className="border-t border-gray-a5">
         <div className="mx-auto max-w-3xl px-6 py-14">
-          <h2 className="font-serif text-3xl text-gray-a12">Cebu, in text</h2>
+          <h2 className="font-serif text-3xl text-gray-a12">
+            Cebu infrastructure, made transparent
+          </h2>
           <p className="mt-4 text-base leading-7 text-gray-a11">
-            ProjectTRACK maps public works and infrastructure projects across
-            Cebu Province. The map above is interactive — each diamond marker
-            is a tracked project site, and its color shows the project’s status
-            (ongoing, completed, or bidding) or, when a Report Verification
-            filter is on, the verification tone of citizen reports filed for
-            it (On-Site Verified, Photo Flagged, Unverified). The pages below
-            present the same material as plain text, one page per municipality.
+            ProjectTrack is a civic intelligence and transparency engine for
+            Department of Public Works and Highways (DPWH) infrastructure
+            projects across all 53 Local Government Units of Cebu Province — 44
+            municipalities and 9 cities. It turns fragmented public civil-works
+            disclosures into verifiable, geospatial, community intelligence. The
+            map above is interactive: each diamond marker is a tracked project
+            site, and its color shows the project's status (ongoing, completed,
+            or bidding) or, when a Report Verification filter is on, the
+            verification tone of citizen reports filed for it (On-Site Verified,
+            Photo Flagged, Unverified). The pages below present the same material
+            as plain text, one page per municipality.
           </p>
           <p className="mt-5 text-sm text-gray-a10">
             {names.length} LGUs ·{' '}

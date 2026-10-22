@@ -197,6 +197,9 @@ To evaluate the core capabilities of ProjectTrack efficiently, follow this seque
 ### 1. Interactive Cebu Infrastructure Map (`http://localhost:5173`)
 * **53 LGU Vector Boundaries**: Examine the vector polygon rendering of Cebu Province (44 municipalities and 9 cities) without heavy satellite raster tile latency.
 * **Project Status Markers**: Select map markers across Metro Cebu or northern municipalities (such as Bogo City) to inspect project scopes, allocated budgets, designated contractors, and progress metrics.
+* **Report Verification Filter**: Use the legend's On-Site Verified, Photo Flagged, and **All Anomalies** chips (the last shows every project carrying any citizen report) to filter the map by report tone.
+* **Light / Dark Theme**: Toggle the sun/moon control in the header; the choice is persisted and defaults to your system preference. The brand wordmark renders as a tri-color "ProjectTrack".
+* **"ProjectTrack Watchdog" Assistant**: Ask the floating assistant about any LGU or project; answers are framed around the project's WHAT / WHERE / WHO / WHEN / WHY / HOW from grounded data.
 * **Administrative Zoom Threshold**: Zoom past level 12 to observe barangay-level administrative boundaries and spatial project distribution.
 
 ### 2. GraphRAG Assistant (`POST /api/chat`)
@@ -208,7 +211,7 @@ Navigate to the interactive Swagger UI at `http://localhost:8000/docs` under the
   "mode": "ai"
 }
 ```
-* **Execution Flow**: The query executes a sub-20ms Cypher graph traversal, collects factual project records from Neo4j, evaluates 5-layer domain guardrails against off-topic prompting, and formats a grounded response using `XiaomiMiMo/MiMo-V2-Flash`.
+* **Execution Flow**: The query executes a sub-20ms Cypher graph traversal, collects factual project records from Neo4j, evaluates 5-layer domain guardrails against off-topic prompting, and formats a grounded response (organized as WHAT / WHERE / WHO / WHEN / WHY / HOW) using the server-configured LLM provider. "Most reported" rankings are computed from the citizen field-report store so the chat agrees with the map legend.
 
 ### 3. Low-Latency Instant Lookups (`mode: "instant"`)
 Submit a specific DPWH project identifier (e.g. `24HH0043`):

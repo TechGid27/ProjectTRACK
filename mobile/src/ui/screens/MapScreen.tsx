@@ -60,6 +60,7 @@ export default function MapScreen({
   const [activeFilter, setActiveFilter] = useState<MapFilterOption>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [sheetState, setSheetState] = useState<SheetDisplayState>(initialSheetState);
+  const [isRefreshingMap, setIsRefreshingMap] = useState(false);
   const [mapPins, setMapPins] = useState<Pin[]>(initialPins || pins || []);
   const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>(
     initialLgu ? getProjectsByLocation(initialLgu) : mockProjects,
@@ -79,6 +80,27 @@ export default function MapScreen({
       handleSelectProjectById(initialProjectId);
     }
   }, [initialProjectId]);
+
+  const handleRefreshMap = async () => {
+    setIsRefreshingMap(true);
+    try {
+      const loc = selectedLgu || searchQuery.trim();
+      const [livePins, projects] = await Promise.all([
+        api.fetchMapPins(loc || undefined),
+        loc ? api.fetchProjectsByLocation(loc, 100) : Promise.resolve([]),
+      ]);
+      if (livePins && livePins.length > 0) {
+        setMapPins(livePins);
+      }
+      if (projects && projects.length > 0) {
+        setActiveProjects(projects);
+      }
+    } catch {
+      // retain current pins and projects
+    } finally {
+      setIsRefreshingMap(false);
+    }
+  };
 
   // Fetch live map pins on mount
   useEffect(() => {
@@ -377,6 +399,19 @@ export default function MapScreen({
         onSelectFilter={setActiveFilter}
       />
 
+      {/* Floating Refresh Button */}
+      <TouchableOpacity
+        style={styles.floatingRefreshBtn}
+        onPress={handleRefreshMap}
+        activeOpacity={0.8}
+        testID="map-refresh-btn"
+        accessibilityLabel="Refresh map data"
+      >
+        <Text style={styles.floatingRefreshText}>
+          {isRefreshingMap ? '⏳ Syncing…' : '↻ Refresh'}
+        </Text>
+      </TouchableOpacity>
+
       {/* Full Viewport Interactive Map (Hardware Vector on Mobile, SVG Vector on Web) */}
       <View style={styles.mapContainer}>
         <UnifiedCebuMap
@@ -450,12 +485,6 @@ export default function MapScreen({
       />
 
       {/* Modals */}
-      <FieldAuditorModal
-        visible={isAuditorModalOpen}
-        project={selectedProject}
-        onClose={() => setIsAuditorModalOpen(false)}
-      />
-
       <AboutMapModal
         visible={isAboutModalOpen}
         onClose={() => setIsAboutModalOpen(false)}
@@ -498,10 +527,13 @@ export default function MapScreen({
       />
 
       <ReportAnomalyModal
-        visible={isReportModalOpen}
+        visible={isReportModalOpen || isAuditorModalOpen}
         project={selectedProject}
         availableProjects={currentLguProjects}
-        onClose={() => setIsReportModalOpen(false)}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setIsAuditorModalOpen(false);
+        }}
         onSubmit={handleSubmitReport}
       />
     </View>
@@ -522,6 +554,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#cbe3df',
+  },
+  floatingRefreshBtn: {
+    position: 'absolute',
+    top: 130,
+    right: 16,
+    backgroundColor: 'rgba(31, 61, 60, 0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 6,
+    zIndex: 90,
+  },
+  floatingRefreshText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#34d399',
   },
   floatingChatBtn: {
     position: 'absolute',

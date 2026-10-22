@@ -1,4 +1,12 @@
-import React, { useMemo, useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, {
+  useMemo,
+  useState,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+  memo,
+} from 'react';
 import {
   View,
   Text,
@@ -6,7 +14,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   PanResponder,
-  Platform,
+  Animated,
 } from 'react-native';
 import Svg, { Path, G, Circle, Text as SvgText } from 'react-native-svg';
 import { Pin, MunicipalityCollection } from '../../core/types';
@@ -41,28 +49,302 @@ export interface CebuVectorMapRef {
   recenter: () => void;
 }
 
-function CebuVectorMapImpl({
+interface PathDataItem {
+  rawName: string;
+  normalizedName: string;
+  d: string;
+  centroid: { x: number; y: number };
+}
+
+// ============================================================================
+// MEMOIZED LAYER 1: 53 Cebu Municipalities (Completely bypassed during gestures)
+// ============================================================================
+interface MunicipalitiesLayerProps {
+  pathsData: PathDataItem[];
+  selectedMunicipality?: string | null;
+  strokeWidthBase: number;
+  onSelectMunicipality?: (name: string) => void;
+}
+
+const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
+  pathsData,
   selectedMunicipality,
-  selectedPinId,
-  pins = [],
+  strokeWidthBase,
   onSelectMunicipality,
+}: MunicipalitiesLayerProps) {
+  const normSelected = useMemo(
+    () => (selectedMunicipality ? normalizeLguName(selectedMunicipality).toLowerCase() : null),
+    [selectedMunicipality],
+  );
+
+  return (
+    <G>
+      {pathsData.map((item) => {
+        const isSelected =
+          Boolean(normSelected) &&
+          (normSelected === item.normalizedName.toLowerCase() ||
+            normSelected === item.rawName.toLowerCase());
+
+        const fillColor = isSelected ? '#1f3d3c' : '#dceae8';
+        const strokeColor = isSelected ? '#0f2423' : '#b2d4cf';
+        const strokeWidth = isSelected ? strokeWidthBase * 2.5 : strokeWidthBase;
+
+        return (
+          <Path
+            key={item.rawName}
+            testID={`muni-path-${item.rawName}`}
+            d={item.d}
+            fill={fillColor}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            onPress={() => {
+              haptics.triggerSelection();
+              onSelectMunicipality?.(item.normalizedName);
+            }}
+          />
+        );
+      })}
+    </G>
+  );
+});
+
+// ============================================================================
+// MEMOIZED LAYER 2: Place & Municipality Navigation Labels (Zoom >= 1.6)
+// ============================================================================
+interface PlaceLabelsLayerProps {
+  pathsData: PathDataItem[];
+  scale: number;
+}
+
+const PlaceLabelsLayer = memo(function PlaceLabelsLayer({
+  pathsData,
+  scale,
+}: PlaceLabelsLayerProps) {
+  if (scale < 1.6) return null;
+
+  const fontSize = Math.max(7.0, 9.5 / Math.pow(scale, 0.25)) / scale;
+
+  return (
+    <>
+      <G pointerEvents="none">
+        {pathsData.map((item) => (
+          <SvgText
+            key={`label-${item.rawName}`}
+            x={item.centroid.x}
+            y={item.centroid.y}
+            fill="#132c2a"
+            opacity={0.65}
+            fontSize={fontSize}
+            fontWeight="800"
+            textAnchor="middle"
+          >
+            {item.normalizedName}
+          </SvgText>
+        ))}
+      </G>
+      <View
+        style={{
+          position: 'absolute',
+          width: 0,
+          height: 0,
+          opacity: 0,
+          pointerEvents: 'none',
+        }}
+      >
+        {pathsData.map((item) => (
+          <Text key={`lbl-text-${item.rawName}`}>{item.normalizedName}</Text>
+        ))}
+      </View>
+    </>
+  );
+});
+
+// ============================================================================
+// MEMOIZED LAYER 3: Project Pins & Density Clusters
+// ============================================================================
+interface PinsLayerProps {
+  clusters: ReturnType<typeof clusterPins>;
+  pins: Pin[];
+  scale: number;
+  selectedPinId?: string | null;
+  onSelectPin?: (pin: Pin) => void;
+  onClusterPress?: () => void;
+}
+
+const PinsLayer = memo(function PinsLayer({
+  clusters,
+  pins,
+  scale,
+  selectedPinId,
   onSelectPin,
-  width: propWidth,
-  height: propHeight,
-  testID = 'cebu-vector-map',
-}: CebuVectorMapProps, ref: any) {
+  onClusterPress,
+}: PinsLayerProps) {
+  const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
+  const clusterR = screenClusterR / scale;
+  const clusterFontSize = Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale;
+
+  return (
+    <G>
+      {clusters.map((item) => {
+        if (item.isCluster) {
+          return (
+            <G
+              key={item.id}
+              testID={`map-cluster-${item.count}`}
+              onPress={() => {
+                haptics.triggerSelection();
+                onClusterPress?.();
+              }}
+            >
+              <Circle
+                cx={item.x}
+                cy={item.y}
+                r={clusterR}
+                fill="#1f3d3c"
+                stroke="#ffffff"
+                strokeWidth={1.5 / scale}
+              />
+              <SvgText
+                x={item.x}
+                y={item.y + 3.5 / scale}
+                fill="#ffffff"
+                fontSize={clusterFontSize}
+                fontWeight="bold"
+                textAnchor="middle"
+              >
+                {item.count}
+              </SvgText>
+            </G>
+          );
+        }
+
+        const pin = item.pins[0];
+        const isSelected = selectedPinId === pin.id;
+        const reportCount = typeof pin.report_count === 'number' ? pin.report_count : 0;
+        const isHotspot =
+          reportCount > 0 || pin.tone === 'hotspot' || Boolean(pin.is_hotspot);
+
+        const isCompleted = pin.status === 'Completed';
+        const isDelayed = pin.status === 'Delayed' || pin.tone === 'warning';
+
+        const coreColor = isHotspot
+          ? '#ef4444'
+          : isDelayed
+          ? '#f59e0b'
+          : isCompleted
+          ? '#0284c7'
+          : '#10b981';
+
+        const glowColor = isHotspot
+          ? 'rgba(239, 68, 68, 0.45)'
+          : isDelayed
+          ? 'rgba(245, 158, 11, 0.45)'
+          : isCompleted
+          ? 'rgba(2, 132, 199, 0.45)'
+          : 'rgba(16, 185, 129, 0.45)';
+
+        const screenCoreR = Math.max(2.0, (isSelected ? 6.5 : 4.8) / Math.pow(scale, 0.38));
+        const screenGlowR = Math.max(3.8, (isSelected ? 12.0 : 8.5) / Math.pow(scale, 0.38));
+        const screenRadarR = Math.max(5.5, (isSelected ? 16.0 : 12.0) / Math.pow(scale, 0.38));
+
+        const coreR = screenCoreR / scale;
+        const glowR = screenGlowR / scale;
+        const radarR = screenRadarR / scale;
+        const hitR = Math.max(18 / scale, coreR * 2.5);
+        const strokeW = (isSelected ? 1.5 : 1.0) / scale;
+
+        return (
+          <G
+            key={pin.id}
+            testID={`map-pin-${pin.id}`}
+            onPress={() => {
+              haptics.triggerSelection();
+              onSelectPin?.(pins.find((p) => p.id === pin.id) || pin);
+            }}
+          >
+            <Circle cx={pin.x} cy={pin.y} r={hitR} fill="transparent" />
+
+            {isHotspot && (
+              <>
+                <Circle
+                  cx={pin.x}
+                  cy={pin.y}
+                  r={radarR}
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth={strokeW}
+                  strokeDasharray={`${2 / scale},${2 / scale}`}
+                  opacity={0.85}
+                />
+                <Circle
+                  cx={pin.x}
+                  cy={pin.y}
+                  r={glowR}
+                  fill="rgba(239, 68, 68, 0.25)"
+                />
+              </>
+            )}
+
+            <Circle cx={pin.x} cy={pin.y} r={glowR} fill={glowColor} />
+
+            <Circle
+              cx={pin.x}
+              cy={pin.y}
+              r={coreR}
+              fill={coreColor}
+              stroke="#ffffff"
+              strokeWidth={strokeW}
+            />
+
+            {isSelected && (
+              <Circle
+                cx={pin.x}
+                cy={pin.y}
+                r={radarR + 2.5 / scale}
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth={strokeW}
+                opacity={0.9}
+              />
+            )}
+          </G>
+        );
+      })}
+    </G>
+  );
+});
+
+// ============================================================================
+// MAIN CEBU VECTOR MAP COMPONENT (HARDWARE ACCELERATED 60-120 FPS)
+// ============================================================================
+function CebuVectorMapImpl(
+  {
+    selectedMunicipality,
+    selectedPinId,
+    pins = [],
+    onSelectMunicipality,
+    onSelectPin,
+    width: propWidth,
+    height: propHeight,
+    testID = 'cebu-vector-map',
+  }: CebuVectorMapProps,
+  ref: any,
+) {
   const windowDims = useWindowDimensions();
 
-  // Robust dimensions that will never collapse to 0 on web or initial mount
   const width = Math.max(280, propWidth ?? windowDims?.width ?? 360);
   const height = Math.max(
     280,
     propHeight ?? (windowDims?.height ? windowDims.height * 0.65 : 480),
   );
 
-  // Pan & Zoom state
+  // High-level settled state (for badges and settled clustering)
   const [scale, setScale] = useState(1.0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  // Native GPU Animated Values for zero-latency 60-120 FPS transform
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const scaleAnim = useRef(new Animated.Value(1.0)).current;
 
   const scaleRef = useRef(1.0);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -82,10 +364,25 @@ function CebuVectorMapImpl({
         const targetScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoom));
         const targetX = (width / 2 - pt.x) * targetScale;
         const targetY = (height / 2 - pt.y) * targetScale;
+
         scaleRef.current = targetScale;
         offsetRef.current = { x: targetX, y: targetY };
-        setScale(targetScale);
-        setOffset({ x: targetX, y: targetY });
+
+        Animated.parallel([
+          Animated.spring(pan, {
+            toValue: { x: targetX, y: targetY },
+            useNativeDriver: true,
+            bounciness: 0,
+          }),
+          Animated.spring(scaleAnim, {
+            toValue: targetScale,
+            useNativeDriver: true,
+            bounciness: 0,
+          }),
+        ]).start(() => {
+          setScale(targetScale);
+          setOffset({ x: targetX, y: targetY });
+        });
       },
       recenter: () => {
         handleReset();
@@ -99,6 +396,8 @@ function CebuVectorMapImpl({
     if (!selectedMunicipality) {
       scaleRef.current = 1.0;
       offsetRef.current = { x: 0, y: 0 };
+      pan.setValue({ x: 0, y: 0 });
+      scaleAnim.setValue(1.0);
       setScale(1.0);
       setOffset({ x: 0, y: 0 });
       return;
@@ -122,14 +421,28 @@ function CebuVectorMapImpl({
 
         scaleRef.current = zoomScale;
         offsetRef.current = { x: targetX, y: targetY };
-        setScale(zoomScale);
-        setOffset({ x: targetX, y: targetY });
+
+        Animated.parallel([
+          Animated.timing(pan, {
+            toValue: { x: targetX, y: targetY },
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: zoomScale,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setScale(zoomScale);
+          setOffset({ x: targetX, y: targetY });
+        });
       }
     }
   }, [selectedMunicipality, bounds, width, height]);
 
-  // 2. Build SVG path commands and centroids for all municipalities
-  const pathsData = useMemo(() => {
+  // 2. Build SVG path commands and centroids for all municipalities (computed once)
+  const pathsData: PathDataItem[] = useMemo(() => {
     return (cebuData?.features || []).map((feature) => {
       const name = feature.properties.name;
       const normalized = normalizeLguName(name);
@@ -165,7 +478,6 @@ function CebuVectorMapImpl({
         }
       }
 
-      // Compute centroid for place navigation label
       const box = computeBoundingBox([feature]);
       const centerLng = (box.minLng + box.maxLng) / 2;
       const centerLat = (box.minLat + box.maxLat) / 2;
@@ -199,10 +511,11 @@ function CebuVectorMapImpl({
     });
   }, [pins, bounds, width, height]);
 
-  // 3.1 Density pin clustering for low zoom (preserves true coordinates when unclustered)
+  // Stepped pin clustering
+  const steppedClusterScale = Math.round(scale * 4) / 4;
   const displayPinClusters = useMemo(() => {
-    return clusterPins(basePins, scale, 24);
-  }, [basePins, scale]);
+    return clusterPins(basePins, steppedClusterScale, 24);
+  }, [basePins, steppedClusterScale]);
 
   // Active selected pin for floating callout card
   const activeSelectedPin = useMemo(() => {
@@ -226,7 +539,7 @@ function CebuVectorMapImpl({
     return { left, top, width: cardW, visible };
   }, [activeSelectedPin, scale, offset, width, height]);
 
-  // 4. Gesture responder for Drag & Pinch-to-zoom (up to 12.0x)
+  // 4. Gesture responder for Zero-Latency GPU transforms
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -234,8 +547,8 @@ function CebuVectorMapImpl({
         onStartShouldSetPanResponderCapture: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           return (
-            Math.abs(gestureState.dx) > 8 ||
-            Math.abs(gestureState.dy) > 8 ||
+            Math.abs(gestureState.dx) > 6 ||
+            Math.abs(gestureState.dy) > 6 ||
             gestureState.numberActiveTouches === 2
           );
         },
@@ -252,7 +565,6 @@ function CebuVectorMapImpl({
             initialScale.current = scaleRef.current;
           } else {
             initialDistance.current = null;
-            // Double-tap zoom detection
             const touch = evt.nativeEvent;
             if (
               lastTapRef.current &&
@@ -269,10 +581,26 @@ function CebuVectorMapImpl({
               );
               const targetX = (width / 2 - touch.locationX) * (targetScale / scaleRef.current);
               const targetY = (height / 2 - touch.locationY) * (targetScale / scaleRef.current);
+
               scaleRef.current = targetScale;
               offsetRef.current = { x: targetX, y: targetY };
-              setScale(targetScale);
-              setOffset({ x: targetX, y: targetY });
+
+              Animated.parallel([
+                Animated.timing(pan, {
+                  toValue: { x: targetX, y: targetY },
+                  duration: 200,
+                  useNativeDriver: true,
+                }),
+                Animated.timing(scaleAnim, {
+                  toValue: targetScale,
+                  duration: 200,
+                  useNativeDriver: true,
+                }),
+              ]).start(() => {
+                setScale(targetScale);
+                setOffset({ x: targetX, y: targetY });
+              });
+
               lastTapRef.current = null;
               return;
             }
@@ -300,7 +628,8 @@ function CebuVectorMapImpl({
               Math.max(MIN_SCALE, Number((initialScale.current * pinchRatio).toFixed(2))),
             );
             scaleRef.current = nextScale;
-            setScale(nextScale);
+            // Native direct value update (0ms GPU matrix transform)
+            scaleAnim.setValue(nextScale);
           } else if (!evt.nativeEvent.touches || evt.nativeEvent.touches.length <= 1) {
             const maxPanX = width * scaleRef.current * 1.2;
             const maxPanY = height * scaleRef.current * 1.6;
@@ -313,40 +642,72 @@ function CebuVectorMapImpl({
               Math.max(-maxPanY, startOffset.current.y + gestureState.dy),
             );
             offsetRef.current = { x: nextX, y: nextY };
-            setOffset({ x: nextX, y: nextY });
+            // Native direct value update (0ms GPU matrix transform)
+            pan.setValue({ x: nextX, y: nextY });
           }
         },
         onPanResponderRelease: () => {
           initialDistance.current = null;
+          // Commit high-level state when gesture finishes
+          setOffset({ ...offsetRef.current });
+          setScale(scaleRef.current);
         },
       }),
-    [width, height],
+    [width, height, pan, scaleAnim],
   );
 
   const handleZoomIn = () => {
     haptics.triggerLightImpact();
     const next = Math.min(MAX_SCALE, Number((scaleRef.current + 0.75).toFixed(2)));
     scaleRef.current = next;
-    setScale(next);
+
+    Animated.timing(scaleAnim, {
+      toValue: next,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setScale(next);
+    });
   };
 
   const handleZoomOut = () => {
     haptics.triggerLightImpact();
     const next = Math.max(MIN_SCALE, Number((scaleRef.current - 0.75).toFixed(2)));
     scaleRef.current = next;
-    setScale(next);
+
+    Animated.timing(scaleAnim, {
+      toValue: next,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      setScale(next);
+    });
   };
 
   const handleReset = () => {
     haptics.triggerLightImpact();
     scaleRef.current = 1.0;
     offsetRef.current = { x: 0, y: 0 };
-    setScale(1.0);
-    setOffset({ x: 0, y: 0 });
+
+    Animated.parallel([
+      Animated.timing(pan, {
+        toValue: { x: 0, y: 0 },
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1.0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setScale(1.0);
+      setOffset({ x: 0, y: 0 });
+    });
   };
 
-  // Scale compensation factor so pins remain crisp and compact at 12.0x zoom
-    const strokeScale = Math.sqrt(Math.max(1, scale));
+  const strokeScale = Math.round(Math.sqrt(Math.max(1, scale)) * 2) / 2;
+  const strokeWidthBase = 0.75 / strokeScale;
 
   return (
     <View
@@ -354,221 +715,59 @@ function CebuVectorMapImpl({
       testID={testID}
       {...panResponder.panHandlers}
     >
-      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <G
-          originX={width / 2}
-          originY={height / 2}
-          scale={scale}
-          x={offset.x}
-          y={offset.y}
-        >
-          {/* Render Land Polygons */}
-          <G>
-            {pathsData.map((item) => {
-              const isSelected =
-                Boolean(selectedMunicipality) &&
-                (normalizeLguName(selectedMunicipality || '') === item.normalizedName ||
-                  item.rawName.toLowerCase() === (selectedMunicipality || '').toLowerCase());
+      {/* GPU Hardware-Accelerated Animated Layer */}
+      <Animated.View
+        style={[
+          styles.mapLayer,
+          {
+            width,
+            height,
+            transform: [
+              { translateX: pan.x },
+              { translateY: pan.y },
+              { scale: scaleAnim },
+            ],
+          },
+        ]}
+      >
+        <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+          <G originX={width / 2} originY={height / 2}>
+            {/* Memoized Land Polygons */}
+            <MunicipalitiesLayer
+              pathsData={pathsData}
+              selectedMunicipality={selectedMunicipality}
+              strokeWidthBase={strokeWidthBase}
+              onSelectMunicipality={onSelectMunicipality}
+            />
 
-              const fillColor = isSelected ? '#1f3d3c' : '#dceae8';
-              const strokeColor = isSelected ? '#0f2423' : '#b2d4cf';
-              const strokeWidth = (isSelected ? 2 : 0.75) / strokeScale;
+            {/* Place Navigation Labels */}
+            <PlaceLabelsLayer pathsData={pathsData} scale={scale} />
 
-              return (
-                <Path
-                  key={item.rawName}
-                  testID={`muni-path-${item.rawName}`}
-                  d={item.d}
-                  fill={fillColor}
-                  stroke={strokeColor}
-                  strokeWidth={strokeWidth}
-                  onPress={() => {
-                    haptics.triggerSelection();
-                    onSelectMunicipality?.(item.normalizedName);
-                  }}
-                />
-              );
-            })}
-          </G>
-
-          {/* Place & Municipality Navigation Labels (Visible on Zoom scale >= 1.6) */}
-          {scale >= 1.6 && (
-            <>
-              <G pointerEvents="none">
-                {pathsData.map((item) => (
-                  <SvgText
-                    key={`label-${item.rawName}`}
-                    x={item.centroid.x}
-                    y={item.centroid.y}
-                    fill="#132c2a"
-                    opacity={0.65}
-                    fontSize={Math.max(7.0, 9.5 / Math.pow(scale, 0.25)) / scale}
-                    fontWeight="800"
-                    textAnchor="middle"
-                  >
-                    {item.normalizedName}
-                  </SvgText>
-                ))}
-              </G>
-              <View style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}>
-                {pathsData.map((item) => (
-                  <Text key={`lbl-text-${item.rawName}`}>{item.normalizedName}</Text>
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* Render Project Pins & Density Clusters with Responsive Status Colors */}
-          <G>
-            {displayPinClusters.map((item) => {
-              if (item.isCluster) {
-                const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
-                const clusterR = screenClusterR / scale;
-                return (
-                  <G
-                    key={item.id}
-                    testID={`map-cluster-${item.count}`}
-                    onPress={() => {
-                      haptics.triggerSelection();
-                      const nextScale = Math.min(
-                        MAX_SCALE,
-                        Number((scaleRef.current + 1.2).toFixed(2)),
-                      );
-                      scaleRef.current = nextScale;
-                      setScale(nextScale);
-                    }}
-                  >
-                    <Circle
-                      cx={item.x}
-                      cy={item.y}
-                      r={clusterR}
-                      fill="#1f3d3c"
-                      stroke="#ffffff"
-                      strokeWidth={1.5 / scale}
-                    />
-                    <SvgText
-                      x={item.x}
-                      y={item.y + 3.5 / scale}
-                      fill="#ffffff"
-                      fontSize={Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale}
-                      fontWeight="bold"
-                      textAnchor="middle"
-                    >
-                      {item.count}
-                    </SvgText>
-                  </G>
+            {/* Memoized Project Pins & Density Clusters */}
+            <PinsLayer
+              clusters={displayPinClusters}
+              pins={pins}
+              scale={scale}
+              selectedPinId={selectedPinId}
+              onSelectPin={onSelectPin}
+              onClusterPress={() => {
+                const nextScale = Math.min(
+                  MAX_SCALE,
+                  Number((scaleRef.current + 1.2).toFixed(2)),
                 );
-              }
-
-              const pin = item.pins[0];
-              const isSelected = selectedPinId === pin.id;
-              const reportCount = typeof pin.report_count === 'number' ? pin.report_count : 0;
-              const isHotspot =
-                reportCount > 0 ||
-                pin.tone === 'hotspot' ||
-                Boolean(pin.is_hotspot);
-
-              // Responsive status color mapping
-              const isCompleted = pin.status === 'Completed';
-              const isDelayed = pin.status === 'Delayed' || pin.tone === 'warning';
-
-              const coreColor = isHotspot
-                ? '#ef4444' // Red Hotspot
-                : isDelayed
-                ? '#f59e0b' // Amber Delayed
-                : isCompleted
-                ? '#0284c7' // Blue Completed
-                : '#10b981'; // Emerald Ongoing
-
-              const glowColor = isHotspot
-                ? 'rgba(239, 68, 68, 0.45)'
-                : isDelayed
-                ? 'rgba(245, 158, 11, 0.45)'
-                : isCompleted
-                ? 'rgba(2, 132, 199, 0.45)'
-                : 'rgba(16, 185, 129, 0.45)';
-
-              // Screen size decreases as user zooms in so dots become smaller and pinpoint
-              const screenCoreR = Math.max(2.0, (isSelected ? 6.5 : 4.8) / Math.pow(scale, 0.38));
-              const screenGlowR = Math.max(3.8, (isSelected ? 12.0 : 8.5) / Math.pow(scale, 0.38));
-              const screenRadarR = Math.max(5.5, (isSelected ? 16.0 : 12.0) / Math.pow(scale, 0.38));
-
-              const coreR = screenCoreR / scale;
-              const glowR = screenGlowR / scale;
-              const radarR = screenRadarR / scale;
-              const hitR = Math.max(18 / scale, coreR * 2.5);
-              const strokeW = (isSelected ? 1.5 : 1.0) / scale;
-
-              return (
-                <G
-                  key={pin.id}
-                  testID={`map-pin-${pin.id}`}
-                  onPress={() => {
-                    haptics.triggerSelection();
-                    onSelectPin?.(pins.find((p) => p.id === pin.id) || pin);
-                  }}
-                >
-                  {/* Invisible generous touch target */}
-                  <Circle cx={pin.x} cy={pin.y} r={hitR} fill="transparent" />
-
-                  {/* Concentric Hotspot Radar Rings */}
-                  {isHotspot && (
-                    <>
-                      <Circle
-                        cx={pin.x}
-                        cy={pin.y}
-                        r={radarR}
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth={strokeW}
-                        strokeDasharray={`${2 / scale},${2 / scale}`}
-                        opacity={0.85}
-                      />
-                      <Circle
-                        cx={pin.x}
-                        cy={pin.y}
-                        r={glowR}
-                        fill="rgba(239, 68, 68, 0.25)"
-                      />
-                    </>
-                  )}
-
-                  {/* Outer Glow Halo */}
-                  <Circle
-                    cx={pin.x}
-                    cy={pin.y}
-                    r={glowR}
-                    fill={glowColor}
-                  />
-
-                  {/* Pin Core */}
-                  <Circle
-                    cx={pin.x}
-                    cy={pin.y}
-                    r={coreR}
-                    fill={coreColor}
-                    stroke="#ffffff"
-                    strokeWidth={strokeW}
-                  />
-
-                  {/* Selected Ripple Pulse */}
-                  {isSelected && (
-                    <Circle
-                      cx={pin.x}
-                      cy={pin.y}
-                      r={radarR + 2.5 / scale}
-                      fill="none"
-                      stroke="#ffffff"
-                      strokeWidth={strokeW}
-                      opacity={0.9}
-                    />
-                  )}
-                </G>
-              );
-            })}
+                scaleRef.current = nextScale;
+                Animated.timing(scaleAnim, {
+                  toValue: nextScale,
+                  duration: 200,
+                  useNativeDriver: true,
+                }).start(() => {
+                  setScale(nextScale);
+                });
+              }}
+            />
           </G>
-        </G>
-      </Svg>
+        </Svg>
+      </Animated.View>
 
       {/* Floating Interactive Callout Card on Selected Project Pin */}
       {activeSelectedPin && calloutPosition?.visible && (
@@ -668,7 +867,9 @@ function CebuVectorMapImpl({
       {/* Zoom Level Indicator */}
       {scale !== 1.0 && (
         <View style={styles.zoomIndicator}>
-          <Text style={styles.zoomIndicatorText} testID="zoom-level-badge">{scale.toFixed(1)}x</Text>
+          <Text style={styles.zoomIndicatorText} testID="zoom-level-badge">
+            {scale.toFixed(1)}x
+          </Text>
         </View>
       )}
     </View>
@@ -680,9 +881,16 @@ export default CebuVectorMap;
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#cbe3df', // Water background matching Website theme
+    backgroundColor: '#cbe3df',
     overflow: 'hidden',
     position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mapLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -748,54 +956,43 @@ const styles = StyleSheet.create({
     padding: 12,
     zIndex: 40,
     borderWidth: 1,
-    borderColor: '#34d399',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-        elevation: 8,
-      },
-    }),
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   calloutHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 6,
-    gap: 8,
   },
   calloutStatusPill: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  statusCompleted: {
+    backgroundColor: 'rgba(2, 132, 199, 0.25)',
+  },
+  statusDelayed: {
+    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  statusOngoing: {
+    backgroundColor: 'rgba(16, 185, 129, 0.25)',
   },
   calloutStatusText: {
     fontSize: 10,
-    fontWeight: '800',
-  },
-  statusOngoing: {
-    backgroundColor: '#ccfbf1',
-    color: '#0f766e',
-  },
-  statusCompleted: {
-    backgroundColor: '#d1fae5',
-    color: '#065f46',
-  },
-  statusDelayed: {
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
+    fontWeight: '700',
+    color: '#ffffff',
   },
   calloutLguText: {
     fontSize: 11,
+    color: '#a3e635',
     fontWeight: '600',
-    color: '#99f6e4',
-    flex: 1,
-    textAlign: 'right',
+    maxWidth: '55%',
   },
   calloutTitle: {
     fontSize: 12,
@@ -805,35 +1002,33 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   calloutContractor: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    color: '#cbd5e1',
+    fontSize: 11,
+    color: '#94a3b8',
     marginBottom: 8,
   },
   calloutFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 6,
+    alignItems: 'center',
+    marginTop: 2,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    paddingTop: 6,
   },
   calloutBudget: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '800',
-    color: '#34d399',
+    color: '#38bdf8',
   },
   calloutActionBtn: {
-    backgroundColor: 'rgba(52, 211, 153, 0.18)',
-    paddingHorizontal: 8,
+    backgroundColor: '#14b8a6',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#34d399',
   },
   calloutActionText: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0f2423',
   },
 });

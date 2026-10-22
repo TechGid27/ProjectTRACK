@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
+import { api } from '../../services/api';
+
+// Safely import expo-web-browser for in-app pop-up auth session
+let WebBrowser: any = null;
+try {
+  WebBrowser = require('expo-web-browser');
+  WebBrowser?.maybeCompleteAuthSession?.();
+} catch {
+  // Gracefully fallback to Linking if not installed
+}
 
 interface SignUpScreenProps {
   onSuccess: (user: { email: string }) => void;
@@ -27,12 +39,106 @@ export default function SignUpScreen({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  const handleSocialSignUp = (provider: string) => {
-    setStatusMessage(`Redirecting to ${provider} sign-up…`);
+  // Helper to process OAuth callback tokens from URL
+  const processOAuthUrl = async (url: string) => {
+    if (!url || !url.includes('auth/callback')) return;
+
+    setStatusMessage('Verifying authentication…');
+    setErrorMessage(null);
+
+    try {
+      const fragment = url.includes('#') ? url.split('#')[1] : '';
+      const query = url.includes('?') ? url.split('?')[1].split('#')[0] : '';
+      const params = new URLSearchParams(fragment || query);
+
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token') || undefined;
+
+      if (!accessToken) {
+        const errorDesc =
+          params.get('error_description') ||
+          params.get('error') ||
+          'Google sign-up was canceled or failed.';
+        setErrorMessage(decodeURIComponent(errorDesc.replace(/\+/g, ' ')));
+        setStatusMessage(null);
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      const { user, error } = await api.exchangeOAuthCallback(accessToken, refreshToken);
+      if (error || !user) {
+        setErrorMessage(error || 'Failed to complete Google sign-up.');
+        setStatusMessage(null);
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      setStatusMessage('Success! Account verified…');
+      onSuccess(user);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error processing authentication callback.');
+      setStatusMessage(null);
+      setIsGoogleLoading(false);
+    }
   };
 
-  const handleSignUp = () => {
+  // Deep-link listener safety net
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      processOAuthUrl(event.url);
+    };
+
+    Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl) {
+        processOAuthUrl(initialUrl);
+      }
+    });
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    return () => {
+      subscription.remove();
+    };
+  }, [onSuccess]);
+
+  // In-app Google pop-up sign-up
+  const handleGoogleSignUp = async () => {
+    setIsGoogleLoading(true);
+    setErrorMessage(null);
+    setStatusMessage('Opening Google Sign-Up…');
+
+    try {
+      const redirectUri = 'projecttrack://auth/callback';
+      const { url, error } = await api.getOAuthUrl('google', redirectUri);
+
+      if (error || !url) {
+        setErrorMessage(error || 'Could not initiate Google sign-up.');
+        setStatusMessage(null);
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
+        const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+        if (result.type === 'success' && result.url) {
+          await processOAuthUrl(result.url);
+        } else if (result.type === 'cancel' || result.type === 'dismiss') {
+          setIsGoogleLoading(false);
+          setStatusMessage(null);
+        }
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to open Google sign-up.');
+      setStatusMessage(null);
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleSignUp = async () => {
     if (!email.trim() || !password.trim()) {
       setErrorMessage('Please enter email and password.');
       return;
@@ -46,11 +152,33 @@ export default function SignUpScreen({
       return;
     }
 
+    setIsSubmitting(true);
     setErrorMessage(null);
-    setStatusMessage('Account created! Logging you in…');
-    setTimeout(() => {
-      onSuccess({ email: email.trim() });
-    }, 500);
+    setStatusMessage(null);
+
+    try {
+      const { user, message, error } = await api.signUp(email.trim(), password);
+      setIsSubmitting(false);
+
+      if (error) {
+        setErrorMessage(error);
+        return;
+      }
+
+      if (user?.email || user?.id) {
+        setStatusMessage('Account created! Logging you in…');
+        setTimeout(() => {
+          onSuccess(user);
+        }, 500);
+      } else {
+        setStatusMessage(
+          message || 'Account created! Please check your email to confirm before signing in.',
+        );
+      }
+    } catch {
+      setIsSubmitting(false);
+      setErrorMessage('Network error: Unable to connect to server.');
+    }
   };
 
   return (
@@ -85,26 +213,24 @@ export default function SignUpScreen({
             </Text>
           </View>
 
-          {/* Social Sign Up */}
+          {/* Form Card */}
           <View style={styles.card}>
+            {/* Google Social Sign Up */}
             <TouchableOpacity
               style={styles.socialBtn}
-              onPress={() => handleSocialSignUp('Google')}
+              onPress={handleGoogleSignUp}
               activeOpacity={0.8}
+              disabled={isGoogleLoading || isSubmitting}
               testID="google-signup-btn"
             >
-              <Text style={styles.socialIcon}>G</Text>
-              <Text style={styles.socialBtnText}>Continue with Google</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.socialBtn}
-              onPress={() => handleSocialSignUp('Facebook')}
-              activeOpacity={0.8}
-              testID="facebook-signup-btn"
-            >
-              <Text style={styles.socialIcon}>f</Text>
-              <Text style={styles.socialBtnText}>Continue with Facebook</Text>
+              {isGoogleLoading ? (
+                <ActivityIndicator size="small" color="#1f3d3c" />
+              ) : (
+                <>
+                  <Text style={styles.socialIcon}>G</Text>
+                  <Text style={styles.socialBtnText}>Continue with Google</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={styles.dividerRow}>
@@ -126,6 +252,7 @@ export default function SignUpScreen({
               }}
               autoCapitalize="none"
               keyboardType="email-address"
+              editable={!isSubmitting}
               testID="signup-email-input"
             />
 
@@ -141,6 +268,7 @@ export default function SignUpScreen({
                 if (errorMessage) setErrorMessage(null);
               }}
               secureTextEntry={true}
+              editable={!isSubmitting}
               testID="signup-password-input"
             />
 
@@ -156,6 +284,7 @@ export default function SignUpScreen({
                 if (errorMessage) setErrorMessage(null);
               }}
               secureTextEntry={true}
+              editable={!isSubmitting}
               testID="signup-confirm-password-input"
             />
 
@@ -174,12 +303,17 @@ export default function SignUpScreen({
 
             {/* Submit Button */}
             <TouchableOpacity
-              style={styles.submitButton}
+              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
               onPress={handleSignUp}
               activeOpacity={0.8}
+              disabled={isSubmitting || isGoogleLoading}
               testID="submit-signup-btn"
             >
-              <Text style={styles.submitButtonText}>Create account</Text>
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Create account</Text>
+              )}
             </TouchableOpacity>
 
             {/* Toggle to Sign In */}
@@ -288,6 +422,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 10,
     gap: 8,
+    minHeight: 46,
   },
   socialIcon: {
     fontSize: 16,
@@ -362,6 +497,11 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
     marginTop: 16,
+    minHeight: 46,
+    justifyContent: 'center',
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonText: {
     color: '#ffffff',

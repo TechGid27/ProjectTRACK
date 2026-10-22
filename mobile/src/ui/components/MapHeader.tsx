@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface MapHeaderProps {
   totalLgus?: number;
@@ -29,6 +30,7 @@ export default function MapHeader({
   onSignOut,
   onResetSelection,
 }: MapHeaderProps) {
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
 
   const handleChangeText = (text: string) => {
@@ -47,7 +49,19 @@ export default function MapHeader({
     : 'U';
 
   return (
-    <View style={styles.container} testID="map-header">
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: Platform.select({
+            ios: Math.max(insets.top, 24),
+            android: Math.max(insets.top, 10),
+            default: 10,
+          }),
+        },
+      ]}
+      testID="map-header"
+    >
       {/* 1. App Name on Top */}
       <View style={styles.brandRow}>
         <TouchableOpacity
@@ -127,8 +141,7 @@ export default function MapHeader({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#1f3d3c',
-    paddingTop: Platform.OS === 'ios' ? 48 : 34,
-    paddingBottom: 12,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
@@ -138,7 +151,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     zIndex: 10,
-    gap: 10,
+    gap: 6,
   },
   brandRow: {
     flexDirection: 'row',

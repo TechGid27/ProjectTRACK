@@ -24,6 +24,7 @@ describe('MapScreen Component', () => {
     expect(getByTestId('unified-cebu-map')).toBeTruthy();
     expect(getByTestId('map-header')).toBeTruthy();
     expect(getByTestId('map-filter-bar')).toBeTruthy();
+    expect(getByTestId('map-refresh-btn')).toBeTruthy();
     expect(getByTestId('sheet-show-pill-btn')).toBeTruthy();
     expect(getByTestId('open-chat-bot-btn')).toBeTruthy();
     expect(getByTestId('open-about-map-btn')).toBeTruthy();
@@ -127,5 +128,19 @@ describe('MapScreen Component', () => {
     fireEvent.changeText(searchInput, 'bogo');
 
     expect(getAllByText(/Bogo/i).length).toBeGreaterThan(0);
+  });
+
+  test('tapping the floating refresh button invokes handleRefreshMap', () => {
+    const { getByTestId } = render(
+      <MapScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    const refreshBtn = getByTestId('map-refresh-btn');
+    expect(refreshBtn).toBeTruthy();
+    fireEvent.press(refreshBtn);
   });
 });

@@ -1,7 +1,29 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+
+jest.mock('../src/services/location', () => ({
+  getDeviceFix: jest.fn().mockResolvedValue(null),
+  requestCameraPermission: jest.fn().mockResolvedValue(true),
+  requestLocationPermission: jest.fn().mockResolvedValue(true),
+}));
+
 import ReportAnomalyModal from '../src/ui/components/ReportAnomalyModal';
 import { ProjectDetail } from '../src/core/types';
+import { outbox } from '../src/services/outbox';
+import { api } from '../src/services/api';
+
+jest.spyOn(api, 'submitReport').mockResolvedValue({
+  id: 'r1',
+  project_id: '24HD0012',
+  status: 'verified',
+  distance_meters: 45,
+  geofence_pass: true,
+  ela_score: 0.4,
+  phash_recycled: false,
+  forensics_verdict: 'clean',
+  reporter_reputation: 55,
+  created_at: '2026-10-20T12:00:00+00:00',
+});
 
 const mockProject: ProjectDetail = {
   id: '24HD0012',
@@ -13,31 +35,36 @@ const mockProject: ProjectDetail = {
   barangay: 'Cogon',
 };
 
-describe('ReportAnomalyModal Component', () => {
+describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)', () => {
   const mockOnClose = jest.fn();
   const mockOnSubmit = jest.fn();
+  const mockOnAuditSubmitted = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    outbox.clearQueue();
   });
 
-  test('renders form fields with default project selection', () => {
-    const { getByText, getByPlaceholderText } = render(
+  test('renders form fields, geofence radar, and viewfinder with default project selection', () => {
+    const { getByText, getByPlaceholderText, getByTestId } = render(
       <ReportAnomalyModal
         visible={true}
         project={mockProject}
         onClose={mockOnClose}
         onSubmit={mockOnSubmit}
+        onAuditSubmitted={mockOnAuditSubmitted}
       />,
     );
 
-    expect(getByText('Report Project Anomaly')).toBeTruthy();
+    expect(getByText('Field Audit & Anomaly Report')).toBeTruthy();
     expect(getByText('24HD0012')).toBeTruthy();
+    expect(getByTestId('geofence-radar-badge')).toBeTruthy();
+    expect(getByTestId('auditor-shutter-btn')).toBeTruthy();
     expect(getByText('Ghost Project / Abandoned')).toBeTruthy();
     expect(getByPlaceholderText(/Describe observed issues, missing equipment/i)).toBeTruthy();
   });
 
-  test('shows validation error when attempting to submit with too short description', () => {
+  test('shows validation error when attempting to submit without capturing a site photo', () => {
     const { getByText, getByPlaceholderText } = render(
       <ReportAnomalyModal
         visible={true}
@@ -46,6 +73,35 @@ describe('ReportAnomalyModal Component', () => {
         onSubmit={mockOnSubmit}
       />,
     );
+
+    const descInput = getByPlaceholderText(/Describe observed issues, missing equipment/i);
+    fireEvent.changeText(
+      descInput,
+      'Valid description with more than fifteen characters of detailed observation.',
+    );
+
+    const submitBtn = getByText('Submit Report');
+    fireEvent.press(submitBtn);
+
+    expect(
+      getByText('A live site photo is required to submit a verified field audit.'),
+    ).toBeTruthy();
+    expect(mockOnSubmit).not.toHaveBeenCalled();
+  });
+
+  test('shows validation error when attempting to submit with too short description', () => {
+    const { getByText, getByPlaceholderText, getByTestId } = render(
+      <ReportAnomalyModal
+        visible={true}
+        project={mockProject}
+        onClose={mockOnClose}
+        onSubmit={mockOnSubmit}
+      />,
+    );
+
+    // Capture site photo
+    const shutterBtn = getByTestId('auditor-shutter-btn');
+    fireEvent.press(shutterBtn);
 
     const descInput = getByPlaceholderText(/Describe observed issues, missing equipment/i);
     fireEvent.changeText(descInput, 'Too short');
@@ -59,15 +115,21 @@ describe('ReportAnomalyModal Component', () => {
     expect(mockOnSubmit).not.toHaveBeenCalled();
   });
 
-  test('submits valid anomaly report successfully', () => {
-    const { getByText, getByPlaceholderText } = render(
+  test('submits valid anomaly report with captured photo, geofence verification, and outbox queue', async () => {
+    const { getByText, getByPlaceholderText, getByTestId } = render(
       <ReportAnomalyModal
         visible={true}
         project={mockProject}
         onClose={mockOnClose}
         onSubmit={mockOnSubmit}
+        onAuditSubmitted={mockOnAuditSubmitted}
       />,
     );
+
+    // Capture mandatory photo
+    const shutterBtn = getByTestId('auditor-shutter-btn');
+    fireEvent.press(shutterBtn);
+    expect(mockOnAuditSubmitted).toHaveBeenCalled();
 
     // Select category "Substandard Materials"
     const catBtn = getByText('Substandard Materials');
@@ -82,14 +144,16 @@ describe('ReportAnomalyModal Component', () => {
     const submitBtn = getByText('Submit Report');
     fireEvent.press(submitBtn);
 
-    expect(mockOnSubmit).toHaveBeenCalledTimes(1);
-    const submittedData = mockOnSubmit.mock.calls[0][0];
-    expect(submittedData.projectId).toBe('24HD0012');
-    expect(submittedData.category).toBe('substandard_materials');
-    expect(submittedData.description).toBe(
-      'Severe cracks in reinforced concrete revetment wall noticed after light rain.',
-    );
-    expect(typeof submittedData.timestamp).toBe('number');
+    await waitFor(() => {
+      expect(mockOnSubmit).toHaveBeenCalledTimes(1);
+      const submittedData = mockOnSubmit.mock.calls[0][0];
+      expect(submittedData.projectId).toBe('24HD0012');
+      expect(submittedData.category).toBe('substandard_materials');
+      expect(submittedData.description).toBe(
+        'Severe cracks in reinforced concrete revetment wall noticed after light rain.',
+      );
+      expect(typeof submittedData.timestamp).toBe('number');
+    });
   });
 
   test('cancel button calls onClose', () => {
@@ -126,7 +190,7 @@ describe('ReportAnomalyModal Component', () => {
         ]}
         onClose={mockOnClose}
         onSubmit={mockOnSubmit}
-      />
+      />,
     );
 
     expect(getAllByText(/Select Specific Project/i).length).toBeGreaterThan(0);

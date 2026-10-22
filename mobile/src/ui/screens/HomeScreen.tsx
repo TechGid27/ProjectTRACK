@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
   StyleSheet,
   Modal,
   Platform,
@@ -77,6 +78,7 @@ export default function HomeScreen({
   const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
 
   const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [backendStats, setBackendStats] = useState({
     total_projects: mockProjects.length,
     total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),
@@ -84,6 +86,44 @@ export default function HomeScreen({
     total_cities: 9,
     total_municipalities: 44,
   });
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    haptics.triggerLightImpact();
+    try {
+      const [topProjs, pins, sum] = await Promise.all([
+        api.fetchTopProjects(8),
+        api.fetchMapPins(),
+        api.fetchSummary(),
+      ]);
+
+      if (topProjs && topProjs.length > 0) {
+        setLiveTopProjects(topProjs);
+      }
+      if (pins && pins.length > 0) {
+        const delayed = pins.filter(
+          (p) =>
+            p.tone === 'warning' ||
+            (p as any).status === 'Delayed' ||
+            (p as any).is_hotspot,
+        );
+        setLiveDelayedCount(delayed.length);
+      }
+      if (sum) {
+        setBackendStats({
+          total_projects: sum.total_projects,
+          total_lgus: sum.total_lgus,
+          total_cities: 9,
+          total_municipalities: 44,
+          total_budget: sum.total_budget,
+        });
+      }
+    } catch {
+      // retain current state
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -119,7 +159,6 @@ export default function HomeScreen({
     };
   }, []);
 
-
   // High impact projects for carousel
   const highImpactProjects = useMemo(() => {
     if (liveTopProjects && liveTopProjects.length > 0) return liveTopProjects;
@@ -134,7 +173,6 @@ export default function HomeScreen({
       ? liveDelayedCount
       : mockProjects.filter((p) => p.status === 'Delayed').length;
 
-  // Total monitored budget
   // Total monitored budget calculated dynamically
   const totalMonitoredBudget =
     backendStats.total_budget ||
@@ -240,16 +278,23 @@ export default function HomeScreen({
             </TouchableOpacity>
           )}
         </View>
-
-
       </View>
 
-      {/* Main Landing Page ScrollView */}
+      {/* Main Landing Page ScrollView with Pull-to-Refresh */}
       <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#10b981"
+            colors={['#10b981', '#1f3d3c']}
+            testID="home-refresh-control"
+          />
+        }
       >
         {/* 2. Civic Vital Stats (KPI Cards) */}
         <View style={styles.kpiSection} testID="kpi-vital-stats">
@@ -586,7 +631,7 @@ export default function HomeScreen({
         </View>
       </Modal>
 
-      {/* Detail, Anomaly, Field Auditor, and Info Modals */}
+      {/* Detail, Unified Field Audit/Anomaly, and Info Modals */}
       <ProjectDetailModal
         visible={isDetailModalOpen}
         project={selectedProject}
@@ -595,16 +640,14 @@ export default function HomeScreen({
       />
 
       <ReportAnomalyModal
-        visible={isReportModalOpen}
-        project={selectedProject}
-        onClose={() => setIsReportModalOpen(false)}
+        visible={isReportModalOpen || isAuditorModalOpen}
+        project={selectedProject || mockProjects[0]}
+        availableProjects={mockProjects.slice(0, 10)}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setIsAuditorModalOpen(false);
+        }}
         onSubmit={handleSubmitReport}
-      />
-
-      <FieldAuditorModal
-        visible={isAuditorModalOpen}
-        project={selectedProject}
-        onClose={() => setIsAuditorModalOpen(false)}
       />
 
       <AboutMapModal

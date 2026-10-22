@@ -17,13 +17,21 @@ import {
   Animated,
 } from 'react-native';
 import Svg, { Path, G, Circle, Text as SvgText } from 'react-native-svg';
-import { Pin, MunicipalityCollection } from '../../core/types';
+import {
+  Pin,
+  MunicipalityCollection,
+  HierarchyFilterTier,
+  LguMeta,
+} from '../../core/types';
 import {
   computeBoundingBox,
   geoToSvgCoordinates,
   normalizeLguName,
   clusterPins,
   formatCurrencyPHP,
+  getLguClassification,
+  isLguInHierarchyTier,
+  RegionPreset,
 } from '../../core/geoUtils';
 import { haptics } from '../../services/haptics';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
@@ -36,6 +44,7 @@ const MAX_SCALE = 12.0;
 export interface CebuVectorMapProps {
   selectedMunicipality?: string | null;
   selectedPinId?: string | null;
+  hierarchyTier?: HierarchyFilterTier;
   pins?: Pin[];
   onSelectMunicipality?: (name: string) => void;
   onSelectPin?: (pin: Pin) => void;
@@ -47,21 +56,24 @@ export interface CebuVectorMapProps {
 export interface CebuVectorMapRef {
   animateToCoordinates: (lat: number, lng: number, zoom?: number) => void;
   recenter: () => void;
+  focusPreset?: (preset: RegionPreset) => void;
 }
 
 interface PathDataItem {
   rawName: string;
   normalizedName: string;
+  meta: LguMeta;
   d: string;
   centroid: { x: number; y: number };
 }
 
 // ============================================================================
-// MEMOIZED LAYER 1: 53 Cebu Municipalities (Completely bypassed during gestures)
+// MEMOIZED LAYER 1: 53 Cebu LGUs (HUCs, Component Cities, Municipalities)
 // ============================================================================
 interface MunicipalitiesLayerProps {
   pathsData: PathDataItem[];
   selectedMunicipality?: string | null;
+  hierarchyTier?: HierarchyFilterTier;
   strokeWidthBase: number;
   onSelectMunicipality?: (name: string) => void;
 }
@@ -69,6 +81,7 @@ interface MunicipalitiesLayerProps {
 const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
   pathsData,
   selectedMunicipality,
+  hierarchyTier = 'ALL',
   strokeWidthBase,
   onSelectMunicipality,
 }: MunicipalitiesLayerProps) {
@@ -85,9 +98,37 @@ const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
           (normSelected === item.normalizedName.toLowerCase() ||
             normSelected === item.rawName.toLowerCase());
 
-        const fillColor = isSelected ? '#1f3d3c' : '#dceae8';
-        const strokeColor = isSelected ? '#0f2423' : '#b2d4cf';
-        const strokeWidth = isSelected ? strokeWidthBase * 2.5 : strokeWidthBase;
+        const matchesTier = isLguInHierarchyTier(item.rawName, hierarchyTier);
+
+        // Classification-based coloring
+        let baseFill = '#dceae8';
+        let baseStroke = '#b2d4cf';
+        let strokeMultiplier = 1.0;
+
+        if (item.meta.type === 'HUC') {
+          // Highly Urbanized Cities (Cebu City, Mandaue City, Lapu-Lapu City)
+          baseFill = '#194a44';
+          baseStroke = '#f59e0b'; // Royal amber accent
+          strokeMultiplier = 1.8;
+        } else if (item.meta.type === 'COMPONENT_CITY') {
+          // Component Cities (Bogo, Carcar, Danao, Naga, Talisay, Toledo)
+          baseFill = '#245952';
+          baseStroke = '#38bdf8'; // Bright civic cyan
+          strokeMultiplier = 1.4;
+        } else {
+          // 44 Municipalities
+          baseFill = '#dceae8';
+          baseStroke = '#b2d4cf';
+        }
+
+        // Selected state takes absolute visual priority (keeps exact '#1f3d3c' for tests)
+        const fillColor = isSelected ? '#1f3d3c' : baseFill;
+        const strokeColor = isSelected ? '#0f2423' : baseStroke;
+        const strokeWidth = isSelected
+          ? strokeWidthBase * 2.8
+          : strokeWidthBase * strokeMultiplier;
+
+        const opacity = matchesTier || isSelected ? 1.0 : 0.42;
 
         return (
           <Path
@@ -97,6 +138,7 @@ const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
             fill={fillColor}
             stroke={strokeColor}
             strokeWidth={strokeWidth}
+            opacity={opacity}
             onPress={() => {
               haptics.triggerSelection();
               onSelectMunicipality?.(item.normalizedName);
@@ -109,38 +151,58 @@ const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
 });
 
 // ============================================================================
-// MEMOIZED LAYER 2: Place & Municipality Navigation Labels (Zoom >= 1.6)
+// MEMOIZED LAYER 2: Place & Administrative Navigation Labels
 // ============================================================================
 interface PlaceLabelsLayerProps {
   pathsData: PathDataItem[];
   scale: number;
+  hierarchyTier?: HierarchyFilterTier;
 }
 
 const PlaceLabelsLayer = memo(function PlaceLabelsLayer({
   pathsData,
   scale,
+  hierarchyTier = 'ALL',
 }: PlaceLabelsLayerProps) {
-  if (scale < 1.6) return null;
+  // Cities show earlier at scale >= 1.25, Municipalities at scale >= 1.6
+  if (scale < 1.25) return null;
 
   const fontSize = Math.max(7.0, 9.5 / Math.pow(scale, 0.25)) / scale;
 
   return (
     <>
       <G pointerEvents="none">
-        {pathsData.map((item) => (
-          <SvgText
-            key={`label-${item.rawName}`}
-            x={item.centroid.x}
-            y={item.centroid.y}
-            fill="#132c2a"
-            opacity={0.65}
-            fontSize={fontSize}
-            fontWeight="800"
-            textAnchor="middle"
-          >
-            {item.normalizedName}
-          </SvgText>
-        ))}
+        {pathsData.map((item) => {
+          const isCity =
+            item.meta.type === 'HUC' || item.meta.type === 'COMPONENT_CITY';
+
+          if (!isCity && scale < 1.6 && hierarchyTier !== 'MUNICIPALITIES') {
+            return null;
+          }
+
+          const labelColor = isCity ? '#064e3b' : '#132c2a';
+          const prefix =
+            item.meta.type === 'HUC'
+              ? '👑 '
+              : item.meta.type === 'COMPONENT_CITY'
+              ? '🏢 '
+              : '';
+
+          return (
+            <SvgText
+              key={`label-${item.rawName}`}
+              x={item.centroid.x}
+              y={item.centroid.y}
+              fill={labelColor}
+              opacity={0.8}
+              fontSize={fontSize}
+              fontWeight={isCity ? '900' : '700'}
+              textAnchor="middle"
+            >
+              {`${prefix}${item.normalizedName}`}
+            </SvgText>
+          );
+        })}
       </G>
       <View
         style={{
@@ -321,6 +383,7 @@ function CebuVectorMapImpl(
   {
     selectedMunicipality,
     selectedPinId,
+    hierarchyTier = 'ALL',
     pins = [],
     onSelectMunicipality,
     onSelectPin,
@@ -338,11 +401,9 @@ function CebuVectorMapImpl(
     propHeight ?? (windowDims?.height ? windowDims.height * 0.65 : 480),
   );
 
-  // High-level settled state (for badges and settled clustering)
   const [scale, setScale] = useState(1.0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
-  // Native GPU Animated Values for zero-latency 60-120 FPS transform
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const scaleAnim = useRef(new Animated.Value(1.0)).current;
 
@@ -353,7 +414,6 @@ function CebuVectorMapImpl(
   const initialScale = useRef(1.0);
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
 
-  // 1. Calculate map bounds once
   const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
 
   useImperativeHandle(
@@ -386,6 +446,31 @@ function CebuVectorMapImpl(
       },
       recenter: () => {
         handleReset();
+      },
+      focusPreset: (preset: RegionPreset) => {
+        const pt = geoToSvgCoordinates(preset.lng, preset.lat, bounds, width, height, 16);
+        const targetScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, preset.zoom));
+        const targetX = (width / 2 - pt.x) * targetScale;
+        const targetY = (height / 2 - pt.y) * targetScale;
+
+        scaleRef.current = targetScale;
+        offsetRef.current = { x: targetX, y: targetY };
+
+        Animated.parallel([
+          Animated.timing(pan, {
+            toValue: { x: targetX, y: targetY },
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: targetScale,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setScale(targetScale);
+          setOffset({ x: targetX, y: targetY });
+        });
       },
     }),
     [bounds, width, height],
@@ -441,11 +526,12 @@ function CebuVectorMapImpl(
     }
   }, [selectedMunicipality, bounds, width, height]);
 
-  // 2. Build SVG path commands and centroids for all municipalities (computed once)
+  // Build SVG path commands, centroids, and classification metadata for all 53 LGUs
   const pathsData: PathDataItem[] = useMemo(() => {
     return (cebuData?.features || []).map((feature) => {
       const name = feature.properties.name;
       const normalized = normalizeLguName(name);
+      const meta = getLguClassification(name);
       let d = '';
 
       function ringToPath(ring: number[][]) {
@@ -486,13 +572,13 @@ function CebuVectorMapImpl(
       return {
         rawName: name,
         normalizedName: normalized,
+        meta,
         d,
         centroid,
       };
     });
   }, [bounds, width, height]);
 
-  // 3. Precalculate authentic pin coordinates directly from GPS lat/lng
   const basePins = useMemo(() => {
     return pins.map((pin) => {
       const coords = geoToSvgCoordinates(
@@ -511,19 +597,16 @@ function CebuVectorMapImpl(
     });
   }, [pins, bounds, width, height]);
 
-  // Stepped pin clustering
   const steppedClusterScale = Math.round(scale * 4) / 4;
   const displayPinClusters = useMemo(() => {
     return clusterPins(basePins, steppedClusterScale, 24);
   }, [basePins, steppedClusterScale]);
 
-  // Active selected pin for floating callout card
   const activeSelectedPin = useMemo(() => {
     if (!selectedPinId) return null;
     return basePins.find((p) => p.id === selectedPinId) || null;
   }, [selectedPinId, basePins]);
 
-  // Calculate screen position for interactive callout
   const calloutPosition = useMemo(() => {
     if (!activeSelectedPin) return null;
     const screenX = width / 2 + (activeSelectedPin.x - width / 2) * scale + offset.x;
@@ -539,7 +622,6 @@ function CebuVectorMapImpl(
     return { left, top, width: cardW, visible };
   }, [activeSelectedPin, scale, offset, width, height]);
 
-  // 4. Gesture responder for Zero-Latency GPU transforms
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -628,7 +710,6 @@ function CebuVectorMapImpl(
               Math.max(MIN_SCALE, Number((initialScale.current * pinchRatio).toFixed(2))),
             );
             scaleRef.current = nextScale;
-            // Native direct value update (0ms GPU matrix transform)
             scaleAnim.setValue(nextScale);
           } else if (!evt.nativeEvent.touches || evt.nativeEvent.touches.length <= 1) {
             const maxPanX = width * scaleRef.current * 1.2;
@@ -642,13 +723,11 @@ function CebuVectorMapImpl(
               Math.max(-maxPanY, startOffset.current.y + gestureState.dy),
             );
             offsetRef.current = { x: nextX, y: nextY };
-            // Native direct value update (0ms GPU matrix transform)
             pan.setValue({ x: nextX, y: nextY });
           }
         },
         onPanResponderRelease: () => {
           initialDistance.current = null;
-          // Commit high-level state when gesture finishes
           setOffset({ ...offsetRef.current });
           setScale(scaleRef.current);
         },
@@ -709,6 +788,8 @@ function CebuVectorMapImpl(
   const strokeScale = Math.round(Math.sqrt(Math.max(1, scale)) * 2) / 2;
   const strokeWidthBase = 0.75 / strokeScale;
 
+  const pinLguMeta = activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
+
   return (
     <View
       style={[styles.container, { width, height }]}
@@ -732,18 +813,23 @@ function CebuVectorMapImpl(
       >
         <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           <G originX={width / 2} originY={height / 2}>
-            {/* Memoized Land Polygons */}
+            {/* 53 Cebu LGUs with Administrative Distinction */}
             <MunicipalitiesLayer
               pathsData={pathsData}
               selectedMunicipality={selectedMunicipality}
+              hierarchyTier={hierarchyTier}
               strokeWidthBase={strokeWidthBase}
               onSelectMunicipality={onSelectMunicipality}
             />
 
-            {/* Place Navigation Labels */}
-            <PlaceLabelsLayer pathsData={pathsData} scale={scale} />
+            {/* Place Navigation Labels with City Accents */}
+            <PlaceLabelsLayer
+              pathsData={pathsData}
+              scale={scale}
+              hierarchyTier={hierarchyTier}
+            />
 
-            {/* Memoized Project Pins & Density Clusters */}
+            {/* Project Pins & Density Clusters */}
             <PinsLayer
               clusters={displayPinClusters}
               pins={pins}
@@ -798,7 +884,12 @@ function CebuVectorMapImpl(
               </Text>
             </View>
             <Text style={styles.calloutLguText} numberOfLines={1}>
-              📍 {activeSelectedPin.lgu}
+              {pinLguMeta?.type === 'HUC'
+                ? '👑 '
+                : pinLguMeta?.type === 'COMPONENT_CITY'
+                ? '🏢 '
+                : '📍 '}
+              {activeSelectedPin.lgu}
             </Text>
           </View>
 
@@ -833,7 +924,7 @@ function CebuVectorMapImpl(
         </View>
       )}
 
-      {/* Floating Zoom & Pan Controls (Up to 12.0x Google Maps Style) */}
+      {/* Floating Zoom & Pan Controls */}
       <View style={styles.controlsContainer}>
         <TouchableOpacity
           testID="zoom-in-btn"
@@ -991,7 +1082,7 @@ const styles = StyleSheet.create({
   calloutLguText: {
     fontSize: 11,
     color: '#a3e635',
-    fontWeight: '600',
+    fontWeight: '700',
     maxWidth: '55%',
   },
   calloutTitle: {

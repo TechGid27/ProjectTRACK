@@ -11,7 +11,7 @@ describe('MapScreen Component', () => {
     jest.clearAllMocks();
   });
 
-  test('renders MapHeader, Map View, and Show Details pill when sheet is initially closed', () => {
+  test('renders MapHeader, Map View, Hierarchy Bar, and Show Details pill when sheet is initially closed', () => {
     const { getByTestId } = render(
       <MapScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
@@ -22,12 +22,53 @@ describe('MapScreen Component', () => {
 
     expect(getByTestId('map-screen')).toBeTruthy();
     expect(getByTestId('unified-cebu-map')).toBeTruthy();
+    expect(getByTestId('cebu-map-hierarchy-bar')).toBeTruthy();
+    expect(getByTestId('cebu-region-quick-jump')).toBeTruthy();
     expect(getByTestId('map-header')).toBeTruthy();
     expect(getByTestId('map-filter-bar')).toBeTruthy();
     expect(getByTestId('map-refresh-btn')).toBeTruthy();
     expect(getByTestId('sheet-show-pill-btn')).toBeTruthy();
     expect(getByTestId('open-chat-bot-btn')).toBeTruthy();
     expect(getByTestId('open-about-map-btn')).toBeTruthy();
+  });
+
+  test('switching administrative hierarchy tier filters active focus', () => {
+    const { getByTestId } = render(
+      <MapScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    const citiesTierBtn = getByTestId('hierarchy-tier-cities');
+    expect(citiesTierBtn).toBeTruthy();
+    fireEvent.press(citiesTierBtn);
+
+    const muniTierBtn = getByTestId('hierarchy-tier-municipalities');
+    expect(muniTierBtn).toBeTruthy();
+    fireEvent.press(muniTierBtn);
+  });
+
+  test('toggling region focus presets expands the carousel and allows selecting a region', () => {
+    const { getByTestId, queryByTestId } = render(
+      <MapScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    expect(queryByTestId('region-presets-carousel')).toBeNull();
+
+    const toggleBtn = getByTestId('region-quick-jump-toggle-btn');
+    fireEvent.press(toggleBtn);
+
+    expect(getByTestId('region-presets-carousel')).toBeTruthy();
+
+    const bantayanPreset = getByTestId('region-preset-bantayan');
+    expect(bantayanPreset).toBeTruthy();
+    fireEvent.press(bantayanPreset);
   });
 
   test('minimizing the sheet renders the compact peek bar and gives more room to the map', () => {

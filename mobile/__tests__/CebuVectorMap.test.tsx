@@ -93,6 +93,43 @@ describe('CebuVectorMap Component', () => {
     }
   });
 
+  test('differentiates administrative tiers with distinctive styles', () => {
+    const { getByTestId } = render(
+      <CebuVectorMap
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    // HUC (Cebu City)
+    const cebuCityPath = getByTestId('muni-path-Cebu City');
+    expect(cebuCityPath.props.stroke).toBe('#f59e0b');
+
+    // Component City (Bogo City)
+    const bogoPath = getByTestId('muni-path-City of Bogo');
+    expect(bogoPath.props.stroke).toBe('#38bdf8');
+
+    // Municipality (Argao)
+    const argaoPath = getByTestId('muni-path-Argao');
+    expect(argaoPath.props.stroke).toBe('#b2d4cf');
+  });
+
+  test('subdues non-matching municipalities when hierarchy tier is CITIES', () => {
+    const { getByTestId } = render(
+      <CebuVectorMap
+        hierarchyTier="CITIES"
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const cebuCityPath = getByTestId('muni-path-Cebu City');
+    expect(cebuCityPath.props.opacity).toBe(1.0);
+
+    const argaoPath = getByTestId('muni-path-Argao');
+    expect(argaoPath.props.opacity).toBeLessThan(1.0);
+  });
+
   test('tapping zoom in button increases zoom and displays zoom level badge', () => {
     const { getByTestId, queryByTestId } = render(
       <CebuVectorMap

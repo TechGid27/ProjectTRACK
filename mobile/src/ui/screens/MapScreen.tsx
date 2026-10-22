@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import MapHeader from '../components/MapHeader';
 import UnifiedCebuMap, { UnifiedCebuMapRef } from '../components/UnifiedCebuMap';
+import CebuMapHierarchyBar from '../components/CebuMapHierarchyBar';
+import CebuRegionQuickJump from '../components/CebuRegionQuickJump';
 import LocationIntelSheet, { SheetDisplayState } from '../components/LocationIntelSheet';
 import ProjectDetailModal from '../components/ProjectDetailModal';
 import ReportAnomalyModal from '../components/ReportAnomalyModal';
@@ -23,8 +25,19 @@ import {
   getProjectById,
 } from '../../data/mockApi';
 import { api } from '../../services/api';
-import { Pin, ProjectDetail, AnomalyReport, ProjectStatus } from '../../core/types';
-import { normalizeLguName, normalizeCoordinates } from '../../core/geoUtils';
+import {
+  Pin,
+  ProjectDetail,
+  AnomalyReport,
+  ProjectStatus,
+  HierarchyFilterTier,
+} from '../../core/types';
+import {
+  normalizeLguName,
+  normalizeCoordinates,
+  isLguInHierarchyTier,
+  RegionPreset,
+} from '../../core/geoUtils';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 interface MapScreenProps {
@@ -58,6 +71,8 @@ export default function MapScreen({
   const [isChatBotOpen, setIsChatBotOpen] = useState(false);
   const [isAuditorModalOpen, setIsAuditorModalOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<MapFilterOption>('ALL');
+  const [hierarchyTier, setHierarchyTier] = useState<HierarchyFilterTier>('ALL');
+  const [activeRegionPresetId, setActiveRegionPresetId] = useState<string>('ALL_CEBU');
   const [searchQuery, setSearchQuery] = useState('');
   const [sheetState, setSheetState] = useState<SheetDisplayState>(initialSheetState);
   const [isRefreshingMap, setIsRefreshingMap] = useState(false);
@@ -190,7 +205,12 @@ export default function MapScreen({
 
   // Dynamic LGU-specific projects for LocationIntelSheet
   const currentLguProjects = useMemo(() => {
-    if (!selectedLgu) return activeProjects;
+    if (!selectedLgu) {
+      if (hierarchyTier !== 'ALL') {
+        return activeProjects.filter((p) => isLguInHierarchyTier(p.lgu, hierarchyTier));
+      }
+      return activeProjects;
+    }
     const targetNorm = normalizeLguName(selectedLgu).toLowerCase();
 
     const filteredActive = activeProjects.filter(
@@ -220,7 +240,7 @@ export default function MapScreen({
     }
 
     return getProjectsByLocation(selectedLgu);
-  }, [selectedLgu, activeProjects, mapPins]);
+  }, [selectedLgu, hierarchyTier, activeProjects, mapPins]);
 
   const filteredPins = useMemo(() => {
     let result = mapPins;
@@ -229,7 +249,10 @@ export default function MapScreen({
       result = result.filter(
         (p) => normalizeLguName(p.lgu).toLowerCase() === norm,
       );
+    } else if (hierarchyTier !== 'ALL') {
+      result = result.filter((p) => isLguInHierarchyTier(p.lgu, hierarchyTier));
     }
+
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(
@@ -255,7 +278,7 @@ export default function MapScreen({
       result = result.filter((p) => highBudgetIds.has(p.id));
     }
     return result;
-  }, [mapPins, selectedLgu, searchQuery, activeFilter]);
+  }, [mapPins, selectedLgu, hierarchyTier, searchQuery, activeFilter]);
 
   const handleSearchQueryChange = (query: string) => {
     setSearchQuery(query);
@@ -363,24 +386,35 @@ export default function MapScreen({
     setSelectedLgu(null);
     setSelectedPinId(null);
     setSearchQuery('');
+    setActiveRegionPresetId('ALL_CEBU');
+  };
+
+  const handleSelectRegionPreset = (preset: RegionPreset) => {
+    setActiveRegionPresetId(preset.id);
+    if (preset.id === 'ALL_CEBU') {
+      handleResetSelection();
+      mapRef.current?.recenter();
+    } else {
+      mapRef.current?.animateToCoordinates(preset.lat, preset.lng, preset.zoom);
+    }
   };
 
   const mapHeight = useMemo(() => {
     const screenH = windowHeight || 640;
     if (sheetState === 'hidden') {
-      return Math.max(500, screenH - 100);
+      return Math.max(500, screenH - 120);
     }
     if (sheetState === 'minimized') {
-      return Math.max(420, screenH - 160);
+      return Math.max(420, screenH - 180);
     }
-    return Math.max(340, screenH * 0.55);
+    return Math.max(340, screenH * 0.52);
   }, [windowHeight, sheetState]);
 
   const mapWidth = Math.max(320, windowWidth || 360);
 
   return (
     <View style={styles.container} testID="map-screen">
-      {/* Top Floating App Header with Navigation */}
+      {/* 1. Top App Header with Navigation */}
       <MapHeader
         totalLgus={53}
         totalPins={mapPins.length}
@@ -393,7 +427,15 @@ export default function MapScreen({
         onResetSelection={handleResetSelection}
       />
 
-      {/* Floating Status & Budget Map Filter Pills */}
+      {/* 2. Cebu Administrative Hierarchy Bar (Province > Cities > Municipalities) */}
+      <CebuMapHierarchyBar
+        selectedTier={hierarchyTier}
+        onSelectTier={setHierarchyTier}
+        selectedLgu={selectedLgu}
+        onResetLgu={handleResetSelection}
+      />
+
+      {/* 3. Floating Status & Budget Map Filter Pills */}
       <MapFilterBar
         activeFilter={activeFilter}
         onSelectFilter={setActiveFilter}
@@ -412,13 +454,20 @@ export default function MapScreen({
         </Text>
       </TouchableOpacity>
 
-      {/* Full Viewport Interactive Map (Hardware Vector on Mobile, SVG Vector on Web) */}
+      {/* 4. Full Viewport Interactive Custom Cebu Vector Map */}
       <View style={styles.mapContainer}>
+        {/* Floating Region Focus Presets (Metro Cebu, North, South, Islands) */}
+        <CebuRegionQuickJump
+          onSelectPreset={handleSelectRegionPreset}
+          activePresetId={activeRegionPresetId}
+        />
+
         <UnifiedCebuMap
           ref={mapRef}
           testID="unified-cebu-map"
           selectedMunicipality={selectedLgu}
           selectedPinId={selectedPinId}
+          hierarchyTier={hierarchyTier}
           pins={filteredPins}
           onSelectMunicipality={handleSelectMunicipality}
           onSelectPin={handleSelectPin}
@@ -498,7 +547,7 @@ export default function MapScreen({
           const proj = activeProjects.find((p) => p.id === projectId);
           if (proj && typeof proj.latitude === 'number' && typeof proj.longitude === 'number') {
             mapRef.current?.animateToCoordinates(proj.latitude, proj.longitude, 15);
-            setIsChatBotOpen(false); // auto-minimize AI chat on spatial query
+            setIsChatBotOpen(false);
           }
         }}
         onFocusLgu={(lgu) => {
@@ -557,7 +606,7 @@ const styles = StyleSheet.create({
   },
   floatingRefreshBtn: {
     position: 'absolute',
-    top: 130,
+    top: 175,
     right: 16,
     backgroundColor: 'rgba(31, 61, 60, 0.95)',
     flexDirection: 'row',

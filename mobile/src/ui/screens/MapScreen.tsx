@@ -37,6 +37,7 @@ import {
   normalizeCoordinates,
   isLguInHierarchyTier,
   RegionPreset,
+  computeBoundingBox,
 } from '../../core/geoUtils';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
@@ -320,6 +321,19 @@ export default function MapScreen({
     if (sheetState === 'hidden') {
       setSheetState('expanded');
     }
+    const targetFeature = (cebuDataRaw?.features || []).find(
+      (f: any) =>
+        normalizeLguName(f.properties?.name || '').toLowerCase() ===
+        normalized.toLowerCase(),
+    );
+    if (targetFeature) {
+      const box = computeBoundingBox([targetFeature]);
+      if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
+        const centerLng = (box.minLng + box.maxLng) / 2;
+        const centerLat = (box.minLat + box.maxLat) / 2;
+        mapRef.current?.animateToCoordinates(centerLat, centerLng, 3.5);
+      }
+    }
   };
 
   const handleSelectPin = (pin: Pin) => {
@@ -337,6 +351,7 @@ export default function MapScreen({
     };
     setSelectedProject(optimisticProject);
     setIsDetailModalOpen(true);
+    mapRef.current?.animateToCoordinates(pin.lat, pin.lng, 4.5);
 
     api.fetchProjectById(pin.id).then((live) => {
       if (live) {
@@ -348,6 +363,13 @@ export default function MapScreen({
   const handleSelectProjectCard = (project: ProjectDetail) => {
     setSelectedProject(project);
     setIsDetailModalOpen(true);
+    const matchingPin = mapPins.find((p) => p.id === project.id);
+    if (matchingPin) {
+      setSelectedPinId(matchingPin.id);
+      mapRef.current?.animateToCoordinates(matchingPin.lat, matchingPin.lng, 4.5);
+    } else if (typeof project.latitude === 'number' && typeof project.longitude === 'number') {
+      mapRef.current?.animateToCoordinates(project.latitude, project.longitude, 4.5);
+    }
   };
 
   const handleSelectProjectById = (projectId: string) => {
@@ -355,6 +377,11 @@ export default function MapScreen({
     if (optimistic) {
       setSelectedProject(optimistic);
       setIsDetailModalOpen(true);
+    }
+    const matchingPin = mapPins.find((p) => p.id === projectId);
+    if (matchingPin) {
+      setSelectedPinId(matchingPin.id);
+      mapRef.current?.animateToCoordinates(matchingPin.lat, matchingPin.lng, 4.5);
     }
     api.fetchProjectById(projectId).then((p) => {
       if (p) {
@@ -387,6 +414,7 @@ export default function MapScreen({
     setSelectedPinId(null);
     setSearchQuery('');
     setActiveRegionPresetId('ALL_CEBU');
+    mapRef.current?.recenter();
   };
 
   const handleSelectRegionPreset = (preset: RegionPreset) => {
@@ -433,6 +461,7 @@ export default function MapScreen({
         onSelectTier={setHierarchyTier}
         selectedLgu={selectedLgu}
         onResetLgu={handleResetSelection}
+        onSelectMunicipality={handleSelectMunicipality}
       />
 
       {/* 3. Floating Status & Budget Map Filter Pills */}

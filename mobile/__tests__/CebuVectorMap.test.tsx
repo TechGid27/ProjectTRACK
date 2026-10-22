@@ -233,4 +233,39 @@ describe('CebuVectorMap Component', () => {
     // Place labels for municipalities should be visible
     expect(queryByText('Bogo City')).toBeTruthy();
   });
+
+  test('imperative ref exposes zoomToLgu, recenter, and animateToCoordinates', () => {
+    const mapRef = React.createRef<any>();
+    render(
+      <CebuVectorMap
+        ref={mapRef}
+        pins={pins}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    expect(mapRef.current).toBeDefined();
+    expect(typeof mapRef.current.animateToCoordinates).toBe('function');
+    expect(typeof mapRef.current.recenter).toBe('function');
+    expect(typeof mapRef.current.zoomToLgu).toBe('function');
+
+    // Executing zoomToLgu should not throw
+    expect(() => {
+      mapRef.current.zoomToLgu('Bogo City');
+    }).not.toThrow();
+  });
+
+  test('map gesture surface is rendered for direct touch hit-testing', () => {
+    const { getByTestId } = render(
+      <CebuVectorMap
+        pins={pins}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    const gestureSurface = getByTestId('map-gesture-surface');
+    expect(gestureSurface).toBeTruthy();
+  });
 });

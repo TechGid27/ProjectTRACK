@@ -57,6 +57,7 @@ export interface CebuVectorMapRef {
   animateToCoordinates: (lat: number, lng: number, zoom?: number) => void;
   recenter: () => void;
   focusPreset?: (preset: RegionPreset) => void;
+  zoomToLgu?: (lguName: string) => void;
 }
 
 interface PathDataItem {
@@ -65,6 +66,23 @@ interface PathDataItem {
   meta: LguMeta;
   d: string;
   centroid: { x: number; y: number };
+  rings: { x: number; y: number }[][];
+}
+
+/**
+ * Standard ray-casting point-in-polygon algorithm for SVG map geometry.
+ */
+function isPointInRing(x: number, y: number, ring: { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i].x;
+    const yi = ring[i].y;
+    const xj = ring[j].x;
+    const yj = ring[j].y;
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 // ============================================================================
@@ -413,6 +431,8 @@ function CebuVectorMapImpl(
   const initialDistance = useRef<number | null>(null);
   const initialScale = useRef(1.0);
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const touchStartRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const wasDoubleTapRef = useRef<boolean>(false);
 
   const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
 
@@ -472,6 +492,44 @@ function CebuVectorMapImpl(
           setOffset({ x: targetX, y: targetY });
         });
       },
+      zoomToLgu: (lguName: string) => {
+        const normTarget = normalizeLguName(lguName).toLowerCase();
+        const targetFeature = (cebuData?.features || []).find(
+          (f: any) => normalizeLguName(f.properties?.name || '').toLowerCase() === normTarget,
+        );
+
+        if (targetFeature) {
+          const box = computeBoundingBox([targetFeature]);
+          if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
+            const centerLng = (box.minLng + box.maxLng) / 2;
+            const centerLat = (box.minLat + box.maxLat) / 2;
+            const centerPt = geoToSvgCoordinates(centerLng, centerLat, bounds, width, height, 16);
+
+            const zoomScale = 3.5;
+            const targetX = (width / 2 - centerPt.x) * zoomScale;
+            const targetY = (height / 2 - centerPt.y) * zoomScale;
+
+            scaleRef.current = zoomScale;
+            offsetRef.current = { x: targetX, y: targetY };
+
+            Animated.parallel([
+              Animated.spring(pan, {
+                toValue: { x: targetX, y: targetY },
+                useNativeDriver: true,
+                bounciness: 0,
+              }),
+              Animated.spring(scaleAnim, {
+                toValue: zoomScale,
+                useNativeDriver: true,
+                bounciness: 0,
+              }),
+            ]).start(() => {
+              setScale(zoomScale);
+              setOffset({ x: targetX, y: targetY });
+            });
+          }
+        }
+      },
     }),
     [bounds, width, height],
   );
@@ -526,16 +584,18 @@ function CebuVectorMapImpl(
     }
   }, [selectedMunicipality, bounds, width, height]);
 
-  // Build SVG path commands, centroids, and classification metadata for all 53 LGUs
+  // Build SVG path commands, centroids, rings, and classification metadata for all 53 LGUs
   const pathsData: PathDataItem[] = useMemo(() => {
     return (cebuData?.features || []).map((feature) => {
       const name = feature.properties.name;
       const normalized = normalizeLguName(name);
       const meta = getLguClassification(name);
       let d = '';
+      const rings: { x: number; y: number }[][] = [];
 
       function ringToPath(ring: number[][]) {
         let subPath = '';
+        const pts: { x: number; y: number }[] = [];
         for (let i = 0; i < ring.length; i++) {
           const pt = geoToSvgCoordinates(
             ring[i][0],
@@ -545,14 +605,16 @@ function CebuVectorMapImpl(
             height,
             16,
           );
+          pts.push(pt);
           subPath += (i === 0 ? 'M ' : ' L ') + `${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`;
         }
+        rings.push(pts);
         return subPath + ' Z ';
       }
 
       if (feature.geometry.type === 'Polygon') {
-        const rings = feature.geometry.coordinates as number[][][];
-        for (const ring of rings) {
+        const polyRings = feature.geometry.coordinates as number[][][];
+        for (const ring of polyRings) {
           d += ringToPath(ring);
         }
       } else if (feature.geometry.type === 'MultiPolygon') {
@@ -575,6 +637,7 @@ function CebuVectorMapImpl(
         meta,
         d,
         centroid,
+        rings,
       };
     });
   }, [bounds, width, height]);
@@ -625,18 +688,23 @@ function CebuVectorMapImpl(
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponder: () => true,
         onStartShouldSetPanResponderCapture: () => false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
           return (
-            Math.abs(gestureState.dx) > 6 ||
-            Math.abs(gestureState.dy) > 6 ||
+            Math.abs(gestureState.dx) > 10 ||
+            Math.abs(gestureState.dy) > 10 ||
             gestureState.numberActiveTouches === 2
           );
         },
         onMoveShouldSetPanResponderCapture: () => false,
         onPanResponderGrant: (evt) => {
           startOffset.current = { ...offsetRef.current };
+          touchStartRef.current = {
+            time: Date.now(),
+            x: evt.nativeEvent.locationX,
+            y: evt.nativeEvent.locationY,
+          };
           const now = Date.now();
           if (evt.nativeEvent.touches && evt.nativeEvent.touches.length === 2) {
             const [t1, t2] = evt.nativeEvent.touches;
@@ -684,8 +752,10 @@ function CebuVectorMapImpl(
               });
 
               lastTapRef.current = null;
+              wasDoubleTapRef.current = true;
               return;
             }
+            wasDoubleTapRef.current = false;
             lastTapRef.current = {
               time: now,
               x: touch.locationX,
@@ -726,13 +796,88 @@ function CebuVectorMapImpl(
             pan.setValue({ x: nextX, y: nextY });
           }
         },
-        onPanResponderRelease: () => {
+        onPanResponderRelease: (evt, gestureState) => {
           initialDistance.current = null;
           setOffset({ ...offsetRef.current });
           setScale(scaleRef.current);
+
+          if (wasDoubleTapRef.current) {
+            wasDoubleTapRef.current = false;
+            return;
+          }
+
+          const touchDuration = touchStartRef.current ? Date.now() - touchStartRef.current.time : 999;
+          const isTap =
+            Math.abs(gestureState.dx) < 12 &&
+            Math.abs(gestureState.dy) < 12 &&
+            touchDuration < 380;
+
+          if (!isTap) return;
+
+          const touchX = evt.nativeEvent.locationX;
+          const touchY = evt.nativeEvent.locationY;
+
+          // Convert screen touch coordinates to map SVG space
+          const svgX = (touchX - offsetRef.current.x - width / 2) / scaleRef.current + width / 2;
+          const svgY = (touchY - offsetRef.current.y - height / 2) / scaleRef.current + height / 2;
+
+          // 1. Hit-test Project Pins
+          let closestPin: (typeof basePins)[0] | null = null;
+          let minPinDist = Infinity;
+          for (const pin of basePins) {
+            const screenDist = Math.hypot(pin.x - svgX, pin.y - svgY) * scaleRef.current;
+            if (screenDist < minPinDist) {
+              minPinDist = screenDist;
+              closestPin = pin;
+            }
+          }
+
+          // If tapped within 32px of a pin on mobile screen
+          if (closestPin && minPinDist <= 32) {
+            haptics.triggerSelection();
+            const fullPin = pins.find((p) => p.id === closestPin!.id) || closestPin;
+            onSelectPin?.(fullPin);
+            return;
+          }
+
+          // 2. Hit-test Municipality Boundaries & Centroids
+          let tappedMuni: PathDataItem | null = null;
+
+          // Exact polygon ring hit test
+          for (const item of pathsData) {
+            if (item.rings) {
+              for (const ring of item.rings) {
+                if (isPointInRing(svgX, svgY, ring)) {
+                  tappedMuni = item;
+                  break;
+                }
+              }
+              if (tappedMuni) break;
+            }
+          }
+
+          // Fallback: closest centroid if tapped near coast/border
+          if (!tappedMuni) {
+            let minCentroidDist = Infinity;
+            for (const item of pathsData) {
+              const screenDist = Math.hypot(item.centroid.x - svgX, item.centroid.y - svgY) * scaleRef.current;
+              if (screenDist < minCentroidDist) {
+                minCentroidDist = screenDist;
+                tappedMuni = item;
+              }
+            }
+            if (minCentroidDist > 55) {
+              tappedMuni = null;
+            }
+          }
+
+          if (tappedMuni) {
+            haptics.triggerSelection();
+            onSelectMunicipality?.(tappedMuni.normalizedName);
+          }
         },
       }),
-    [width, height, pan, scaleAnim],
+    [width, height, pan, scaleAnim, basePins, pathsData, pins, onSelectPin, onSelectMunicipality],
   );
 
   const handleZoomIn = () => {
@@ -791,69 +936,72 @@ function CebuVectorMapImpl(
   const pinLguMeta = activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
 
   return (
-    <View
-      style={[styles.container, { width, height }]}
-      testID={testID}
-      {...panResponder.panHandlers}
-    >
-      {/* GPU Hardware-Accelerated Animated Layer */}
-      <Animated.View
-        style={[
-          styles.mapLayer,
-          {
-            width,
-            height,
-            transform: [
-              { translateX: pan.x },
-              { translateY: pan.y },
-              { scale: scaleAnim },
-            ],
-          },
-        ]}
+    <View style={[styles.container, { width, height }]} testID={testID}>
+      {/* Map touch surface for gestures & direct hit-testing */}
+      <View
+        style={StyleSheet.absoluteFill}
+        testID="map-gesture-surface"
+        {...panResponder.panHandlers}
       >
-        <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-          <G originX={width / 2} originY={height / 2}>
-            {/* 53 Cebu LGUs with Administrative Distinction */}
-            <MunicipalitiesLayer
-              pathsData={pathsData}
-              selectedMunicipality={selectedMunicipality}
-              hierarchyTier={hierarchyTier}
-              strokeWidthBase={strokeWidthBase}
-              onSelectMunicipality={onSelectMunicipality}
-            />
+        {/* GPU Hardware-Accelerated Animated Layer */}
+        <Animated.View
+          style={[
+            styles.mapLayer,
+            {
+              width,
+              height,
+              transform: [
+                { translateX: pan.x },
+                { translateY: pan.y },
+                { scale: scaleAnim },
+              ],
+            },
+          ]}
+        >
+          <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+            <G originX={width / 2} originY={height / 2}>
+              {/* 53 Cebu LGUs with Administrative Distinction */}
+              <MunicipalitiesLayer
+                pathsData={pathsData}
+                selectedMunicipality={selectedMunicipality}
+                hierarchyTier={hierarchyTier}
+                strokeWidthBase={strokeWidthBase}
+                onSelectMunicipality={onSelectMunicipality}
+              />
 
-            {/* Place Navigation Labels with City Accents */}
-            <PlaceLabelsLayer
-              pathsData={pathsData}
-              scale={scale}
-              hierarchyTier={hierarchyTier}
-            />
+              {/* Place Navigation Labels with City Accents */}
+              <PlaceLabelsLayer
+                pathsData={pathsData}
+                scale={scale}
+                hierarchyTier={hierarchyTier}
+              />
 
-            {/* Project Pins & Density Clusters */}
-            <PinsLayer
-              clusters={displayPinClusters}
-              pins={pins}
-              scale={scale}
-              selectedPinId={selectedPinId}
-              onSelectPin={onSelectPin}
-              onClusterPress={() => {
-                const nextScale = Math.min(
-                  MAX_SCALE,
-                  Number((scaleRef.current + 1.2).toFixed(2)),
-                );
-                scaleRef.current = nextScale;
-                Animated.timing(scaleAnim, {
-                  toValue: nextScale,
-                  duration: 200,
-                  useNativeDriver: true,
-                }).start(() => {
-                  setScale(nextScale);
-                });
-              }}
-            />
-          </G>
-        </Svg>
-      </Animated.View>
+              {/* Project Pins & Density Clusters */}
+              <PinsLayer
+                clusters={displayPinClusters}
+                pins={pins}
+                scale={scale}
+                selectedPinId={selectedPinId}
+                onSelectPin={onSelectPin}
+                onClusterPress={() => {
+                  const nextScale = Math.min(
+                    MAX_SCALE,
+                    Number((scaleRef.current + 1.2).toFixed(2)),
+                  );
+                  scaleRef.current = nextScale;
+                  Animated.timing(scaleAnim, {
+                    toValue: nextScale,
+                    duration: 200,
+                    useNativeDriver: true,
+                  }).start(() => {
+                    setScale(nextScale);
+                  });
+                }}
+              />
+            </G>
+          </Svg>
+        </Animated.View>
+      </View>
 
       {/* Floating Interactive Callout Card on Selected Project Pin */}
       {activeSelectedPin && calloutPosition?.visible && (

@@ -8,7 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { HierarchyFilterTier } from '../../core/types';
-import { getLguClassification } from '../../core/geoUtils';
+import { getLguClassification, normalizeLguName } from '../../core/geoUtils';
 import { haptics } from '../../services/haptics';
 
 export interface CebuMapHierarchyBarProps {
@@ -16,6 +16,7 @@ export interface CebuMapHierarchyBarProps {
   onSelectTier: (tier: HierarchyFilterTier) => void;
   selectedLgu?: string | null;
   onResetLgu?: () => void;
+  onSelectMunicipality?: (name: string) => void;
   testID?: string;
 }
 
@@ -33,11 +34,24 @@ const HIERARCHY_TIERS: TierItem[] = [
   { id: 'METRO_CEBU', label: 'Metro Cebu', countBadge: '13', icon: '🏢' },
 ];
 
+export const CEBU_9_CITIES = [
+  'Cebu City',
+  'Mandaue City',
+  'Lapu-Lapu City',
+  'Bogo City',
+  'Carcar City',
+  'Danao City',
+  'City of Naga',
+  'Talisay City',
+  'Toledo City',
+];
+
 export default function CebuMapHierarchyBar({
   selectedTier,
   onSelectTier,
   selectedLgu,
   onResetLgu,
+  onSelectMunicipality,
   testID = 'cebu-map-hierarchy-bar',
 }: CebuMapHierarchyBarProps) {
   const handleSelectTier = (tier: HierarchyFilterTier) => {
@@ -148,6 +162,49 @@ export default function CebuMapHierarchyBar({
           );
         })}
       </ScrollView>
+
+      {/* 3. Fast City Selector Carousel (Visible when CITIES tier selected) */}
+      {selectedTier === 'CITIES' && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.cityChipsScroll}
+          testID="hierarchy-cities-chips-row"
+        >
+          {CEBU_9_CITIES.map((city) => {
+            const isCityActive =
+              Boolean(selectedLgu) &&
+              normalizeLguName(selectedLgu!).toLowerCase() ===
+                normalizeLguName(city).toLowerCase();
+            return (
+              <TouchableOpacity
+                key={city}
+                style={[styles.cityChip, isCityActive && styles.cityChipActive]}
+                onPress={() => {
+                  haptics.triggerSelection();
+                  onSelectMunicipality?.(city);
+                }}
+                activeOpacity={0.7}
+                testID={`hierarchy-city-chip-${city.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                <Text style={styles.cityChipIcon}>
+                  {city === 'Cebu City' || city === 'Mandaue City' || city === 'Lapu-Lapu City'
+                    ? '👑'
+                    : '🏢'}
+                </Text>
+                <Text
+                  style={[
+                    styles.cityChipText,
+                    isCityActive && styles.cityChipTextActive,
+                  ]}
+                >
+                  {city}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -292,5 +349,39 @@ const styles = StyleSheet.create({
   },
   countBadgeTextActive: {
     color: '#ffffff',
+  },
+  cityChipsScroll: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cityChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  cityChipActive: {
+    backgroundColor: '#0284c7',
+    borderColor: '#38bdf8',
+  },
+  cityChipIcon: {
+    fontSize: 11,
+  },
+  cityChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#e2e8f0',
+  },
+  cityChipTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
   },
 });

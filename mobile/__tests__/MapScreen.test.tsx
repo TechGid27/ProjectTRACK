@@ -184,4 +184,60 @@ describe('MapScreen Component', () => {
     expect(refreshBtn).toBeTruthy();
     fireEvent.press(refreshBtn);
   });
+
+  test('selecting Cities tier shows city selector chips and tapping a city chip selects it', () => {
+    const { getByTestId, getAllByText } = render(
+      <MapScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    const citiesTierBtn = getByTestId('hierarchy-tier-cities');
+    fireEvent.press(citiesTierBtn);
+
+    const cityChipsRow = getByTestId('hierarchy-cities-chips-row');
+    expect(cityChipsRow).toBeTruthy();
+
+    const cebuCityChip = getByTestId('hierarchy-city-chip-cebu-city');
+    expect(cebuCityChip).toBeTruthy();
+    fireEvent.press(cebuCityChip);
+
+    expect(getAllByText(/Cebu City/i).length).toBeGreaterThan(0);
+  });
+
+  test('clicking a project pin directly opens ProjectDetailModal', () => {
+    const { getAllByTestId, getByTestId } = render(
+      <MapScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    const pinsOnMap = getAllByTestId(/^map-pin-/);
+    expect(pinsOnMap.length).toBeGreaterThan(0);
+
+    fireEvent.press(pinsOnMap[0]);
+    expect(getByTestId('project-detail-modal')).toBeTruthy();
+  });
+
+  test('clearing selected LGU returns to full Cebu province overview', () => {
+    const { getByTestId, queryByTestId, getAllByText } = render(
+      <MapScreen
+        initialLgu="Bogo City"
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onSignOut={mockOnSignOut}
+      />,
+    );
+
+    const clearBtn = getByTestId('clear-lgu-selection-btn');
+    expect(clearBtn).toBeTruthy();
+    fireEvent.press(clearBtn);
+
+    expect(queryByTestId('clear-lgu-selection-btn')).toBeNull();
+    expect(getAllByText(/Cebu Province/i).length).toBeGreaterThan(0);
+  });
 });

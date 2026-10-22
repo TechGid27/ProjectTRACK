@@ -19,6 +19,7 @@ export interface UnifiedCebuMapRef {
   animateToCoordinates: (lat: number, lng: number, zoomOrDelta?: number) => void;
   recenter: () => void;
   focusPreset?: (preset: RegionPreset) => void;
+  zoomToLgu?: (lguName: string) => void;
 }
 
 const UnifiedCebuMap = forwardRef<UnifiedCebuMapRef, UnifiedCebuMapProps>((props, ref) => {

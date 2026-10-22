@@ -1,10 +1,46 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSession, signOut } from '../services/auth'
 import { useRoute, navigate } from '../app/router'
+import { applyTheme, getInitialTheme, toggleTheme } from '../services/theme'
 
 function normalize(href) {
   const path = href.replace(/^#/, '')
   return path === '' || path === 'municipalities' ? '/' : path
+}
+
+// Tri-colour brand wordmark: the leading "P" and "Project" track the logo tone
+// (black in light mode, white in dark mode) while "Track" is always green.
+function Wordmark() {
+  return (
+    <span className="text-base font-bold tracking-tight">
+      <span className="text-gray-a12">Project</span>
+      <span className="text-emerald-500">Track</span>
+    </span>
+  )
+}
+
+function ThemeToggle({ theme, onToggle, className = '' }) {
+  const isDark = theme === 'dark'
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-gray-a11 transition hover:bg-gray-a3 hover:text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] ${className}`}
+    >
+      {isDark ? (
+        <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <circle cx="10" cy="10" r="4" />
+          <path d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4 4l1.4 1.4M14.6 14.6L16 16M16 4l-1.4 1.4M5.4 14.6L4 16" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <path d="M16.5 11.5A6.5 6.5 0 018.5 3.5a6.5 6.5 0 108 8z" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  )
 }
 
 function NavLink({ link, active, isSignIn, onNavigate }) {
@@ -41,8 +77,19 @@ function Header({ name, links }) {
   const [user, setUser] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [theme, setTheme] = useState(getInitialTheme)
   const menuRef = useRef(null)
   const mobileRef = useRef(null)
+  const mobileToggleRef = useRef(null)
+
+  function handleToggleTheme() {
+    setTheme((current) => toggleTheme(current))
+  }
+
+  // Keep the attribute in sync if the component mounts after a route change.
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
 
   useEffect(() => {
     let cancelled = false
@@ -72,6 +119,13 @@ function Header({ name, links }) {
   useEffect(() => {
     if (!mobileOpen) return undefined
     function onClick(event) {
+      // The hamburger button toggles `mobileOpen` itself. Without this guard the
+      // document mousedown listener would close the menu first, then the
+      // button's onClick would reopen it — so a second tap appeared to do
+      // nothing. Ignore clicks that land on the toggle button.
+      if (mobileToggleRef.current && mobileToggleRef.current.contains(event.target)) {
+        return
+      }
       if (mobileRef.current && !mobileRef.current.contains(event.target)) {
         setMobileOpen(false)
       }
@@ -112,7 +166,10 @@ function Header({ name, links }) {
   )
 
   return (
-    <header className="sticky top-0 z-[5000] border-b border-gray-a5 bg-white/85 backdrop-blur-md">
+    <header
+      className="sticky top-0 z-[5000] border-b border-gray-a5 backdrop-blur-md"
+      style={{ backgroundColor: 'var(--app-surface-alpha)' }}
+    >
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <a
           href="/"
@@ -123,15 +180,7 @@ function Header({ name, links }) {
             alt={`${name} logo`}
             className="h-10 w-10 object-contain"
           />
-          {/* <span
-            aria-hidden="true"
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1f3d3c] text-sm font-bold text-white"
-          >
-            {name.charAt(0)}
-          </span>
-          <span className="text-base font-bold tracking-tight text-gray-a12">
-            {name}
-          </span> */}
+          <Wordmark />
         </a>
 
         <nav aria-label="Main" className="hidden md:block">
@@ -149,6 +198,9 @@ function Header({ name, links }) {
                 </li>
               )
             })}
+            <li>
+              <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+            </li>
             {user && (
               <li className="relative" ref={menuRef}>
                 <button
@@ -164,7 +216,8 @@ function Header({ name, links }) {
                 {menuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 top-full z-[1001] mt-2 w-56 overflow-hidden rounded-xl border border-gray-a5 bg-white shadow-lg"
+                    className="absolute right-0 top-full z-[1001] mt-2 w-56 overflow-hidden rounded-xl border border-gray-a5 shadow-lg"
+                    style={{ backgroundColor: 'var(--app-surface)' }}
                   >
                     <div className="border-b border-gray-a5 px-4 py-3">
                       <p className="truncate text-sm font-semibold text-gray-a12">
@@ -187,7 +240,9 @@ function Header({ name, links }) {
         </nav>
 
         <div className="flex items-center gap-2 md:hidden">
+          <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
           <button
+            ref={mobileToggleRef}
             type="button"
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileOpen}
@@ -211,7 +266,8 @@ function Header({ name, links }) {
         <nav
           ref={mobileRef}
           aria-label="Mobile"
-          className="border-t border-gray-a5 bg-white px-4 py-3 md:hidden"
+          className="border-t border-gray-a5 px-4 py-3 md:hidden"
+          style={{ backgroundColor: 'var(--app-surface)' }}
         >
           <ul className="flex flex-col gap-1">
             {visibleLinks.map((link) => {

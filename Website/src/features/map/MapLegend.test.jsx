@@ -25,13 +25,13 @@ describe('MapLegend (interactive filters)', () => {
   it('switches the active verification filter (single selection)', () => {
     renderLegend()
     const verified = screen.getByRole('button', { name: /on-site verified/i })
-    const unverified = screen.getByRole('button', { name: /^unverified$/i })
+    const anomalies = screen.getByRole('button', { name: /all anomalies/i })
     fireEvent.click(verified)
     expect(verified).toHaveAttribute('aria-pressed', 'true')
-    expect(unverified).toHaveAttribute('aria-pressed', 'false')
-    fireEvent.click(unverified)
+    expect(anomalies).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(anomalies)
     expect(verified).toHaveAttribute('aria-pressed', 'false')
-    expect(unverified).toHaveAttribute('aria-pressed', 'true')
+    expect(anomalies).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('status buttons toggle the active status filter', () => {

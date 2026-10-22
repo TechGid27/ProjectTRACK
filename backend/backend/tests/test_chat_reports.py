@@ -81,8 +81,17 @@ class TestProvinceWideResolution(unittest.IsolatedAsyncioTestCase):
             "municipality": "Toledo City", "description": "flood control",
             "status": "Ongoing", "budget": "P5M", "budget_num": 5e6, "report_count": 12,
         }
+        # Province-wide "most reported" now ranks from the Supabase store; the
+        # top project id is then resolved via get_project_by_id.
+        focus = {
+            "id": "24HH0099", "latitude": 10.5, "longitude": 123.7,
+            "municipality": "Toledo City", "description": "flood control",
+            "status": "Ongoing", "budget": "P5M", "budget_numeric": 5e6,
+        }
         with patch.object(chat_mod.neo4j_service, "get_top_reported_projects", return_value=[top_row]), \
-             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value={"id": "24HH0099"}):
+             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value=focus), \
+             patch.object(chat_mod.report_store, "report_counts_by_project",
+                          new=AsyncMock(return_value={"24HH0099": 12})):
             _, matched, graph_context, spatial = await chat_mod.resolve_project_context(
                 "which project is the most reported in Cebu?", history=[]
             )
@@ -102,10 +111,15 @@ class TestScopedResolution(unittest.IsolatedAsyncioTestCase):
             {"entity": "24HH0002", "latitude": 10.4, "longitude": 123.8, "report_count": 9,
              "budget_num": 1e6, "description": "bridge", "status": "Completed", "municipality": "Toledo City"},
         ]
+        # "most reported" now ranks from the Supabase report store (same source
+        # as the map legend), so provide a count map that makes 24HH0002 win.
+        counts = {"24HH0001": 2, "24HH0002": 9}
         with patch.object(chat_mod.neo4j_service, "search_projects_by_location",
                           return_value=(loc_rows, 2, 6e6)), \
              patch.object(chat_mod.neo4j_service, "get_map_projects", return_value=loc_rows), \
-             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value={"id": "24HH0002"}):
+             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value={"id": "24HH0002"}), \
+             patch.object(chat_mod.report_store, "report_counts_by_project",
+                          new=AsyncMock(return_value=counts)):
             _, _, graph_context, spatial = await chat_mod.resolve_project_context(
                 "most reported project in Toledo", history=[]
             )
@@ -143,8 +157,11 @@ class TestOverviewFollowup(unittest.IsolatedAsyncioTestCase):
 
 class TestZeroReports(unittest.IsolatedAsyncioTestCase):
     async def test_province_wide_no_reports_is_honest(self):
-        # No project has reports -> graph query returns empty.
-        with patch.object(chat_mod.neo4j_service, "get_top_reported_projects", return_value=[]):
+        # No project has reports -> both the Supabase store and the graph query
+        # return nothing.
+        with patch.object(chat_mod.neo4j_service, "get_top_reported_projects", return_value=[]), \
+             patch.object(chat_mod.report_store, "report_counts_by_project",
+                          new=AsyncMock(return_value={})):
             targeted, matched, graph_context, spatial = await chat_mod.resolve_project_context(
                 "what is the most reported project?", history=[]
             )
@@ -165,7 +182,9 @@ class TestZeroReports(unittest.IsolatedAsyncioTestCase):
              patch.object(chat_mod.neo4j_service, "search_projects_by_location",
                           return_value=(loc_rows, 1, 5e6)), \
              patch.object(chat_mod.neo4j_service, "get_map_projects", return_value=loc_rows), \
-             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value=None):
+             patch.object(chat_mod.neo4j_service, "get_project_by_id", return_value=None), \
+             patch.object(chat_mod.report_store, "report_counts_by_project",
+                          new=AsyncMock(return_value={})):
             targeted, matched, graph_context, spatial = await chat_mod.resolve_project_context(
                 "most reported project in Lapu-Lapu City", history=[]
             )

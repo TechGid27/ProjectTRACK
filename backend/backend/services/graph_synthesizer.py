@@ -64,6 +64,22 @@ def synthesize_graph_response(
             f"It has an allocated budget of {budget} awarded to {contractor} (Status: {status})."
         )
 
+        # WHEN: construction timeline, when recorded in the context.
+        timeline = card.get("timeline")
+        if not timeline:
+            tl_m = re.search(r'Timeline:\s*([^\n]+)', graph_context)
+            timeline = tl_m.group(1).strip() if tl_m else None
+        if timeline and timeline.upper() != "N/A":
+            summary += f" Its scheduled timeline is {timeline}."
+
+        # WHO (oversight): implementing DPWH office, when recorded.
+        office = card.get("office")
+        if not office:
+            off_m = re.search(r'Implementing Office:\s*([^\n]+)', graph_context)
+            office = off_m.group(1).strip() if off_m else None
+        if office and office.upper() != "N/A":
+            summary += f" It is implemented by the {office}."
+
         # Citizen field reports: surface the count so the deterministic fallback
         # mirrors the "most reported" focus the map is showing.
         report_count = card.get("report_count")
@@ -134,7 +150,7 @@ def synthesize_graph_response(
 
     if include_setup_tip:
         tip = (
-            "\n\n⚡ [Synthesized via Instant Graph Mode — Groq limit reached or offline. "
+            "\n\n[Synthesized via Instant Graph Mode — the AI provider is rate-limited or offline. "
             "Run 'python main.py --setup-local-ai' to enable offline AI (qwen2.5:0.5b ~398MB)]"
         )
         summary += tip

@@ -190,7 +190,7 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
         ]}
         onClose={mockOnClose}
         onSubmit={mockOnSubmit}
-      />,
+      />
     );
 
     expect(getAllByText(/Select Specific Project/i).length).toBeGreaterThan(0);

@@ -259,14 +259,12 @@ const PinsLayer = memo(function PinsLayer({
   onSelectPin,
   onClusterPress,
 }: PinsLayerProps) {
-  const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
-  const clusterR = screenClusterR / scale;
-  const clusterFontSize = Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale;
-
   return (
     <G>
       {clusters.map((item) => {
         if (item.isCluster) {
+          const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
+          const clusterR = screenClusterR / scale;
           return (
             <G
               key={item.id}
@@ -288,7 +286,7 @@ const PinsLayer = memo(function PinsLayer({
                 x={item.x}
                 y={item.y + 3.5 / scale}
                 fill="#ffffff"
-                fontSize={clusterFontSize}
+                fontSize={Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale}
                 fontWeight="bold"
                 textAnchor="middle"
               >
@@ -302,18 +300,21 @@ const PinsLayer = memo(function PinsLayer({
         const isSelected = selectedPinId === pin.id;
         const reportCount = typeof pin.report_count === 'number' ? pin.report_count : 0;
         const isHotspot =
-          reportCount > 0 || pin.tone === 'hotspot' || Boolean(pin.is_hotspot);
+          reportCount > 0 ||
+          pin.tone === 'hotspot' ||
+          Boolean(pin.is_hotspot);
 
+        // Responsive status color mapping
         const isCompleted = pin.status === 'Completed';
         const isDelayed = pin.status === 'Delayed' || pin.tone === 'warning';
 
         const coreColor = isHotspot
-          ? '#ef4444'
+          ? '#ef4444' // Red Hotspot
           : isDelayed
-          ? '#f59e0b'
+          ? '#f59e0b' // Amber Delayed
           : isCompleted
-          ? '#0284c7'
-          : '#10b981';
+          ? '#0284c7' // Blue Completed
+          : '#10b981'; // Emerald Ongoing
 
         const glowColor = isHotspot
           ? 'rgba(239, 68, 68, 0.45)'
@@ -323,6 +324,7 @@ const PinsLayer = memo(function PinsLayer({
           ? 'rgba(2, 132, 199, 0.45)'
           : 'rgba(16, 185, 129, 0.45)';
 
+        // Screen size decreases as user zooms in so dots become smaller and pinpoint
         const screenCoreR = Math.max(2.0, (isSelected ? 6.5 : 4.8) / Math.pow(scale, 0.38));
         const screenGlowR = Math.max(3.8, (isSelected ? 12.0 : 8.5) / Math.pow(scale, 0.38));
         const screenRadarR = Math.max(5.5, (isSelected ? 16.0 : 12.0) / Math.pow(scale, 0.38));
@@ -342,8 +344,10 @@ const PinsLayer = memo(function PinsLayer({
               onSelectPin?.(pins.find((p) => p.id === pin.id) || pin);
             }}
           >
+            {/* Invisible generous touch target */}
             <Circle cx={pin.x} cy={pin.y} r={hitR} fill="transparent" />
 
+            {/* Concentric Hotspot Radar Rings */}
             {isHotspot && (
               <>
                 <Circle
@@ -365,8 +369,10 @@ const PinsLayer = memo(function PinsLayer({
               </>
             )}
 
+            {/* Outer Glow Halo */}
             <Circle cx={pin.x} cy={pin.y} r={glowR} fill={glowColor} />
 
+            {/* Pin Core */}
             <Circle
               cx={pin.x}
               cy={pin.y}
@@ -672,6 +678,10 @@ function CebuVectorMapImpl(
     return basePins.find((p) => p.id === selectedPinId) || null;
   }, [selectedPinId, basePins]);
 
+  const pinLguMeta = useMemo(() => {
+    return activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
+  }, [activeSelectedPin]);
+
   const calloutPosition = useMemo(() => {
     if (!activeSelectedPin) return null;
     const screenX = width / 2 + (activeSelectedPin.x - width / 2) * scale + offset.x;
@@ -951,10 +961,8 @@ function CebuVectorMapImpl(
     });
   };
 
-  const strokeScale = Math.round(Math.sqrt(Math.max(1, scale)) * 2) / 2;
-  const strokeWidthBase = 0.75 / strokeScale;
-
-  const pinLguMeta = activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
+  // Base stroke width compensation
+  const strokeWidthBase = Math.max(0.35, 0.7 / Math.sqrt(Math.max(1, scale)));
 
   return (
     <View
@@ -1138,9 +1146,7 @@ function CebuVectorMapImpl(
       {/* Zoom Level Indicator */}
       {scale !== 1.0 && (
         <View style={styles.zoomIndicator}>
-          <Text style={styles.zoomIndicatorText} testID="zoom-level-badge">
-            {scale.toFixed(1)}x
-          </Text>
+          <Text style={styles.zoomIndicatorText} testID="zoom-level-badge">{scale.toFixed(1)}x</Text>
         </View>
       )}
     </View>

@@ -455,55 +455,6 @@ class ApiService {
     }
   }
 
-  async getOAuthUrl(
-    provider: 'google' | 'facebook' | string,
-    redirectUri?: string,
-  ): Promise<{ url: string | null; error?: string }> {
-    try {
-      const redirectQuery = redirectUri
-        ? `?redirect=${encodeURIComponent(redirectUri)}`
-        : '';
-      const res = await fetch(`${this.baseUrl}/auth/oauth/${provider.toLowerCase()}${redirectQuery}`, {
-        headers: { Accept: 'application/json' },
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { url: null, error: data?.detail || `Failed to initiate ${provider} login.` };
-      }
-      return { url: data.url ?? null };
-    } catch {
-      return { url: null, error: 'Network error: Unable to connect to auth server.' };
-    }
-  }
-
-  async exchangeOAuthCallback(
-    accessToken: string,
-    refreshToken?: string,
-  ): Promise<{ user: any; error?: string }> {
-    const payload = sanitizePayload({
-      access_token: accessToken,
-      refresh_token: refreshToken || '',
-    });
-    try {
-      const res = await fetch(`${this.baseUrl}/auth/callback`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { user: null, error: data?.detail || 'OAuth callback verification failed.' };
-      }
-      return { user: data.user || data };
-    } catch {
-      return { user: null, error: 'Network error: Unable to verify OAuth callback.' };
-    }
-  }
-
   async signOut(): Promise<void> {
     try {
       await fetch(`${this.baseUrl}/auth/signout`, {

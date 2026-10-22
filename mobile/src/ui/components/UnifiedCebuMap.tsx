@@ -1,12 +1,10 @@
 import React, { forwardRef } from 'react';
 import CebuVectorMap from './CebuVectorMap';
-import { Pin, HierarchyFilterTier } from '../../core/types';
-import { RegionPreset } from '../../core/geoUtils';
+import { Pin } from '../../core/types';
 
 export interface UnifiedCebuMapProps {
   selectedMunicipality?: string | null;
   selectedPinId?: string | null;
-  hierarchyTier?: HierarchyFilterTier;
   pins?: Pin[];
   onSelectMunicipality?: (name: string) => void;
   onSelectPin?: (pin: Pin) => void;
@@ -18,8 +16,6 @@ export interface UnifiedCebuMapProps {
 export interface UnifiedCebuMapRef {
   animateToCoordinates: (lat: number, lng: number, zoomOrDelta?: number) => void;
   recenter: () => void;
-  focusPreset?: (preset: RegionPreset) => void;
-  zoomToLgu?: (lguName: string) => void;
 }
 
 const UnifiedCebuMap = forwardRef<UnifiedCebuMapRef, UnifiedCebuMapProps>((props, ref) => {

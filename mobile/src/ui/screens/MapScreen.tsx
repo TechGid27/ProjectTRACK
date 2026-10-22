@@ -9,8 +9,6 @@ import {
 } from 'react-native';
 import MapHeader from '../components/MapHeader';
 import UnifiedCebuMap, { UnifiedCebuMapRef } from '../components/UnifiedCebuMap';
-import CebuMapHierarchyBar from '../components/CebuMapHierarchyBar';
-import CebuRegionQuickJump from '../components/CebuRegionQuickJump';
 import LocationIntelSheet, { SheetDisplayState } from '../components/LocationIntelSheet';
 import ProjectDetailModal from '../components/ProjectDetailModal';
 import ReportAnomalyModal from '../components/ReportAnomalyModal';
@@ -25,20 +23,8 @@ import {
   getProjectById,
 } from '../../data/mockApi';
 import { api } from '../../services/api';
-import {
-  Pin,
-  ProjectDetail,
-  AnomalyReport,
-  ProjectStatus,
-  HierarchyFilterTier,
-} from '../../core/types';
-import {
-  normalizeLguName,
-  normalizeCoordinates,
-  isLguInHierarchyTier,
-  RegionPreset,
-  computeBoundingBox,
-} from '../../core/geoUtils';
+import { Pin, ProjectDetail, AnomalyReport, ProjectStatus } from '../../core/types';
+import { normalizeLguName, normalizeCoordinates } from '../../core/geoUtils';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 
 interface MapScreenProps {
@@ -206,12 +192,7 @@ export default function MapScreen({
 
   // Dynamic LGU-specific projects for LocationIntelSheet
   const currentLguProjects = useMemo(() => {
-    if (!selectedLgu) {
-      if (hierarchyTier !== 'ALL') {
-        return activeProjects.filter((p) => isLguInHierarchyTier(p.lgu, hierarchyTier));
-      }
-      return activeProjects;
-    }
+    if (!selectedLgu) return activeProjects;
     const targetNorm = normalizeLguName(selectedLgu).toLowerCase();
 
     const filteredActive = activeProjects.filter(
@@ -241,7 +222,7 @@ export default function MapScreen({
     }
 
     return getProjectsByLocation(selectedLgu);
-  }, [selectedLgu, hierarchyTier, activeProjects, mapPins]);
+  }, [selectedLgu, activeProjects, mapPins]);
 
   const filteredPins = useMemo(() => {
     let result = mapPins;
@@ -280,6 +261,39 @@ export default function MapScreen({
     }
     return result;
   }, [mapPins, selectedLgu, hierarchyTier, searchQuery, activeFilter]);
+
+  const handleSearchQueryChange = (query: string) => {
+    setSearchQuery(query);
+    const clean = query.trim().toLowerCase();
+    if (clean.length >= 3) {
+      const matchedFeature = cebuDataRaw?.features?.find((f: any) => {
+        const rawName = (f.properties?.name || '').toLowerCase();
+        const normName = normalizeLguName(f.properties?.name || '').toLowerCase();
+        return (
+          rawName === clean ||
+          normName === clean ||
+          rawName.startsWith(clean) ||
+          normName.startsWith(clean)
+        );
+      });
+
+      if (matchedFeature) {
+        const matchedName = normalizeLguName(matchedFeature.properties.name);
+        setSelectedLgu(matchedName);
+        setSelectedPinId(null);
+        if (sheetState === 'hidden') {
+          setSheetState('minimized');
+        }
+        const label = (matchedFeature as any)?.properties?.label;
+        if (Array.isArray(label) && label.length === 2) {
+          mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
+        }
+      }
+    } else if (clean.length === 0 && selectedLgu) {
+      setSelectedLgu(null);
+      setSelectedPinId(null);
+    }
+  };
 
   const handleSearchQueryChange = (query: string) => {
     setSearchQuery(query);
@@ -470,27 +484,8 @@ export default function MapScreen({
         onSelectFilter={setActiveFilter}
       />
 
-      {/* Floating Refresh Button */}
-      <TouchableOpacity
-        style={styles.floatingRefreshBtn}
-        onPress={handleRefreshMap}
-        activeOpacity={0.8}
-        testID="map-refresh-btn"
-        accessibilityLabel="Refresh map data"
-      >
-        <Text style={styles.floatingRefreshText}>
-          {isRefreshingMap ? '⏳ Syncing…' : '↻ Refresh'}
-        </Text>
-      </TouchableOpacity>
-
-      {/* 4. Full Viewport Interactive Custom Cebu Vector Map */}
+      {/* Full Viewport Interactive Map (Hardware Vector on Mobile, SVG Vector on Web) */}
       <View style={styles.mapContainer}>
-        {/* Floating Region Focus Presets (Metro Cebu, North, South, Islands) */}
-        <CebuRegionQuickJump
-          onSelectPreset={handleSelectRegionPreset}
-          activePresetId={activeRegionPresetId}
-        />
-
         <UnifiedCebuMap
           ref={mapRef}
           testID="unified-cebu-map"
@@ -576,7 +571,7 @@ export default function MapScreen({
           const proj = activeProjects.find((p) => p.id === projectId);
           if (proj && typeof proj.latitude === 'number' && typeof proj.longitude === 'number') {
             mapRef.current?.animateToCoordinates(proj.latitude, proj.longitude, 15);
-            setIsChatBotOpen(false);
+            setIsChatBotOpen(false); // auto-minimize AI chat on spatial query
           }
         }}
         onFocusLgu={(lgu) => {
@@ -608,10 +603,7 @@ export default function MapScreen({
         visible={isReportModalOpen || isAuditorModalOpen}
         project={selectedProject}
         availableProjects={currentLguProjects}
-        onClose={() => {
-          setIsReportModalOpen(false);
-          setIsAuditorModalOpen(false);
-        }}
+        onClose={() => setIsReportModalOpen(false)}
         onSubmit={handleSubmitReport}
       />
     </View>

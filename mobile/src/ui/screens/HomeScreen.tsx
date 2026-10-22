@@ -78,7 +78,6 @@ export default function HomeScreen({
   const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
 
   const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [backendStats, setBackendStats] = useState({
     total_projects: mockProjects.length,
     total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),
@@ -158,6 +157,7 @@ export default function HomeScreen({
       isMounted = false;
     };
   }, []);
+
 
   // High impact projects for carousel
   const highImpactProjects = useMemo(() => {
@@ -278,6 +278,8 @@ export default function HomeScreen({
             </TouchableOpacity>
           )}
         </View>
+
+
       </View>
 
       {/* Main Landing Page ScrollView with Pull-to-Refresh */}

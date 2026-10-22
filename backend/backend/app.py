@@ -90,24 +90,26 @@ def create_app() -> FastAPI:
 
     # Configure CORS for modern web frontends (React, Next.js, Vue, Svelte).
     # Cookie-based auth requires allow_credentials=True, which browsers reject
-    # together with a "*" origin. When CORS_ORIGINS is left as the permissive
-    # default, fall back to the configured FRONTEND_URL so credentialed session
-    # cookies work out of the box; otherwise honor the explicit allow-list.
+    # together with a "*" origin. So "*" (or an empty list) falls back to an
+    # explicit allow-list of FRONTEND_URL + common local dev origins. Whatever
+    # is configured, FRONTEND_URL is always included so the deployed web app
+    # can call the API with credentials as soon as FRONTEND_URL is set.
     configured_origins = settings.CORS_ORIGINS or []
+    dev_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:19006",
+        "http://127.0.0.1:19006",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
     if configured_origins in (["*"], []):
-        allowed_origins = list({
-            settings.FRONTEND_URL,
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:8081",
-            "http://127.0.0.1:8081",
-            "http://localhost:19006",
-            "http://127.0.0.1:19006",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        })
+        allowed_origins = list(dict.fromkeys([settings.FRONTEND_URL, *dev_origins]))
     else:
-        allowed_origins = configured_origins
+        allowed_origins = list(dict.fromkeys([*configured_origins, settings.FRONTEND_URL]))
+    logger.info(f"CORS allowed origins: {allowed_origins}")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,

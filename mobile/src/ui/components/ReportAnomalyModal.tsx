@@ -51,7 +51,7 @@ export default function ReportAnomalyModal({
   onAuditSubmitted,
 }: ReportAnomalyModalProps) {
   const [selectedProj, setSelectedProj] = useState<ProjectDetail | null>(
-    project || (availableProjects.length === 1 ? availableProjects[0] : null),
+    project || (availableProjects.length === 1 ? availableProjects[0] : null)
   );
   const [category, setCategory] = useState<AnomalyCategory>('ghost_project');
   const [description, setDescription] = useState('');
@@ -59,44 +59,8 @@ export default function ReportAnomalyModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Field Audit geofence state (150m proximity)
-  const [userOffsetMeters, setUserOffsetMeters] = useState(45); // 45m inside geofence
-  const [capturedReceipt, setCapturedReceipt] = useState<QueuedAudit | null>(null);
-  const [capturedPhoto, setCapturedPhoto] = useState<{
-    uri: string;
-    name?: string;
-    type?: string;
-  } | null>(null);
-  const [deviceFix, setDeviceFix] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [verdict, setVerdict] = useState<ReportVerification | null>(null);
-
-  // Reference coordinates for target project centroid
-  const targetCoords = useMemo(() => {
-    return {
-      lat: typeof (selectedProj as any)?.latitude === 'number' ? (selectedProj as any).latitude : 11.0505,
-      lng: typeof (selectedProj as any)?.longitude === 'number' ? (selectedProj as any).longitude : 124.0055,
-    };
-  }, [selectedProj]);
-
-  // Request permissions and read device GPS fix on modal open
-  useEffect(() => {
-    if (!visible) return;
-    let cancelled = false;
-    requestCameraPermission().catch(() => undefined);
-    getDeviceFix()
-      .then((fix) => {
-        if (!cancelled && fix) {
-          setDeviceFix({ latitude: fix.latitude, longitude: fix.longitude });
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [visible]);
-
   // Synchronize state when project prop changes or single available project
-  useEffect(() => {
+  React.useEffect(() => {
     if (project) {
       setSelectedProj(project);
     } else if (availableProjects.length === 1) {
@@ -106,81 +70,7 @@ export default function ReportAnomalyModal({
     }
   }, [project, availableProjects]);
 
-  // Compute geofence status (real hardware GPS fix or simulated offset)
-  const geofence = useMemo(() => {
-    const userLat = deviceFix
-      ? deviceFix.latitude
-      : targetCoords.lat + userOffsetMeters * 0.000009;
-    const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
-    return checkGeofenceProximity(
-      targetCoords.lat,
-      targetCoords.lng,
-      userLat,
-      userLng,
-      150,
-    );
-  }, [targetCoords, userOffsetMeters, deviceFix]);
-
-  if (!visible) return null;
   if (!project && (!availableProjects || availableProjects.length === 0)) return null;
-
-  // Shutter action: captures required site photo & registers durable outbox receipt
-  const handleCapturePhoto = async () => {
-    if (!geofence.isInside) {
-      haptics.triggerWarning();
-      setErrorMessage('Geofence locked: You must be within 150m of project centroid to capture verified photo.');
-      return;
-    }
-
-    haptics.triggerSuccess();
-    setErrorMessage(null);
-
-    const userLat = deviceFix
-      ? deviceFix.latitude
-      : targetCoords.lat + userOffsetMeters * 0.000009;
-    const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
-
-    const photoObj = {
-      uri: `file:///field-audits/audit-${selectedProj?.id || 'site'}-${Date.now()}.jpg`,
-      name: `field-audit-${selectedProj?.id || 'site'}.jpg`,
-      type: 'image/jpeg',
-    };
-    setCapturedPhoto(photoObj);
-
-    const sanitizedDesc = sanitizeReportDescription(
-      description.trim() || `Verified on-site within ${geofence.distanceMeters}m geofence.`,
-      2000,
-    );
-
-    // Enqueue to offline-first outbox
-    const queued = outbox.enqueueAudit({
-      projectId: selectedProj?.id || '24HD0012',
-      latitude: userLat,
-      longitude: userLng,
-      distanceMeters: geofence.distanceMeters,
-      notes: sanitizedDesc,
-    });
-    setCapturedReceipt(queued);
-    onAuditSubmitted?.(queued);
-
-    // Live submission to server
-    api
-      .submitReport({
-        projectId: selectedProj?.id || '24HD0012',
-        description: sanitizedDesc,
-        category,
-        latitude: userLat,
-        longitude: userLng,
-        photo: photoObj,
-      })
-      .then((res) => {
-        outbox.markSynced(queued.id);
-        setVerdict(res);
-      })
-      .catch(() => {
-        // offline noop, stays in outbox
-      });
-  };
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
@@ -190,19 +80,10 @@ export default function ReportAnomalyModal({
       return;
     }
 
-    // MANDATORY PHOTO REQUIREMENT
-    if (!capturedPhoto) {
-      setErrorMessage('A live site photo is required to submit a verified field audit.');
+    if (!selectedProj) {
+      setErrorMessage('Please select a specific project to report.');
       return;
     }
-
-    if (!geofence.isInside) {
-      setErrorMessage('Geofence locked: You must be within 150m of project centroid to submit.');
-      return;
-    }
-
-    // Sanitize description
-    const sanitizedDesc = sanitizeReportDescription(description, 2000);
     if (sanitizedDesc.length < 15) {
       setErrorMessage('Please provide a detailed description (at least 15 characters).');
       return;
@@ -292,20 +173,17 @@ export default function ReportAnomalyModal({
             <View style={styles.modalCard} testID="report-anomaly-modal">
               {/* Header */}
               <View style={styles.header}>
-                <View style={styles.headerTitleRow}>
-                  <View style={styles.radarDot} />
-                  <View>
-                    <Text style={styles.title}>Field Audit & Anomaly Report</Text>
-                    <Text style={styles.subtitle}>
-                      {selectedProj ? (
-                        <>
-                          Project: <Text style={styles.projectIdHighlight}>{selectedProj.id}</Text>
-                        </>
-                      ) : (
-                        'Select Specific Project to Audit'
-                      )}
-                    </Text>
-                  </View>
+                <View>
+                  <Text style={styles.title}>Report Project Anomaly</Text>
+                  <Text style={styles.subtitle}>
+                    {selectedProj ? (
+                      <>
+                        Project ID: <Text style={styles.projectIdHighlight}>{selectedProj.id}</Text>
+                      </>
+                    ) : (
+                      'Select Specific Project to Report'
+                    )}
+                  </Text>
                 </View>
 
                 <TouchableOpacity
@@ -322,7 +200,7 @@ export default function ReportAnomalyModal({
                 style={styles.formBody}
                 showsVerticalScrollIndicator={false}
               >
-                {/* Available Projects Picker (if multiple projects provided) */}
+                {/* Target Project Selection */}
                 {availableProjects.length > 0 && (
                   <View style={styles.projectSelectSection}>
                     <Text style={styles.fieldLabel}>SELECT SPECIFIC PROJECT TO REPORT</Text>
@@ -333,7 +211,11 @@ export default function ReportAnomalyModal({
                           <TouchableOpacity
                             key={p.id}
                             style={[styles.projectChip, isChosen && styles.projectChipSelected]}
-                            onPress={() => setSelectedProj(p)}
+                            onPress={() => {
+                              setSelectedProj(p);
+                              setErrorMessage(null);
+                            }}
+                            testID={`project-chip-${p.id}`}
                             activeOpacity={0.7}
                           >
                             <Text style={[styles.projectChipId, isChosen && styles.projectChipIdSelected]}>
@@ -352,124 +234,8 @@ export default function ReportAnomalyModal({
                   </View>
                 )}
 
-                {/* Target Project Card Info */}
-                {selectedProj && (
-                  <View style={styles.projectInfoBox}>
-                    <Text style={styles.projectBadgeText}>{selectedProj.id}</Text>
-                    <Text style={styles.projectTitleText} numberOfLines={2}>
-                      {selectedProj.title}
-                    </Text>
-                    <Text style={styles.projectMetaText} numberOfLines={1}>
-                      🏗️ {selectedProj.contractor} · 📍 {selectedProj.lgu}
-                    </Text>
-                  </View>
-                )}
-
-                {/* 1. Geofence Radar Banner */}
-                <View
-                  style={[
-                    styles.radarBanner,
-                    geofence.isInside ? styles.radarBannerInside : styles.radarBannerOutside,
-                  ]}
-                  testID="geofence-radar-badge"
-                >
-                  <Text style={styles.radarIcon}>{geofence.isInside ? '🎯' : '⚠️'}</Text>
-                  <View style={styles.radarTextCol}>
-                    <Text
-                      style={[
-                        styles.radarTitle,
-                        geofence.isInside ? styles.radarTitleInside : styles.radarTitleOutside,
-                      ]}
-                    >
-                      {geofence.isInside
-                        ? `Inside Geofence (${geofence.distanceMeters}m from site)`
-                        : `Outside Geofence (${geofence.distanceMeters}m away)`}
-                    </Text>
-                    <Text style={styles.radarDesc}>
-                      {geofence.isInside
-                        ? 'Hardware GPS locks satisfied. Live camera shutter is unlocked.'
-                        : 'You must be within 150m of project centroid to unlock shutter.'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Proximity Simulation Controls (Testing / Emulators) */}
-                <View style={styles.simControlsRow}>
-                  <Text style={styles.simLabel}>Simulate Location:</Text>
-                  <TouchableOpacity
-                    style={[styles.simPill, userOffsetMeters <= 50 && styles.simPillActive]}
-                    onPress={() => setUserOffsetMeters(45)}
-                  >
-                    <Text style={[styles.simPillText, userOffsetMeters <= 50 && styles.simPillTextActive]}>
-                      On-Site (45m)
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.simPill, userOffsetMeters > 150 && styles.simPillActive]}
-                    onPress={() => setUserOffsetMeters(320)}
-                  >
-                    <Text style={[styles.simPillText, userOffsetMeters > 150 && styles.simPillTextActive]}>
-                      Off-Site (320m)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* 2. Mandatory Camera Viewfinder & Photo Capture */}
-                <View style={styles.viewfinderContainer}>
-                  <Text style={styles.fieldLabel}>
-                    MANDATORY SITE PHOTO EVIDENCE{' '}
-                    <Text style={capturedPhoto ? styles.photoCapturedTag : styles.photoRequiredTag}>
-                      {capturedPhoto ? '✅ PHOTO CAPTURED' : '* REQUIRED'}
-                    </Text>
-                  </Text>
-
-                  <View style={[styles.viewfinderFrame, capturedPhoto && styles.viewfinderFrameCaptured]}>
-                    <View style={styles.crosshairH} />
-                    <View style={styles.crosshairV} />
-                    <View style={styles.viewfinderCenter}>
-                      <Text style={styles.centerIcon}>{capturedPhoto ? '📸' : '🎯'}</Text>
-                    </View>
-
-                    {/* Cryptographic Watermark Overlay */}
-                    <View style={styles.watermarkOverlay}>
-                      <Text style={styles.watermarkLine}>
-                        [PT-LOCK] LAT: {targetCoords.lat.toFixed(4)}° N | LNG: {targetCoords.lng.toFixed(4)}° E
-                      </Text>
-                      <Text style={styles.watermarkLine}>
-                        REF: {selectedProj?.id || 'SITE'} | ACCURACY: ±3.2m
-                      </Text>
-                      <Text style={styles.watermarkLine}>
-                        EXIF-TIME: {new Date().toISOString()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Shutter Capture Button */}
-                  <TouchableOpacity
-                    style={[
-                      styles.shutterButton,
-                      !geofence.isInside && styles.shutterButtonDisabled,
-                      capturedPhoto && styles.shutterButtonCaptured,
-                    ]}
-                    onPress={handleCapturePhoto}
-                    disabled={!geofence.isInside}
-                    activeOpacity={0.8}
-                    testID="auditor-shutter-btn"
-                  >
-                    <Text style={styles.shutterIcon}>📷</Text>
-                    <Text style={styles.shutterButtonText}>
-                      {!geofence.isInside
-                        ? 'Geofence Locked — Move Closer'
-                        : capturedPhoto
-                        ? '🔄 Retake Site Photo'
-                        : 'Capture Verified Site Photo'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* 3. Anomaly Category Selection */}
-                <Text style={styles.fieldLabel}>SELECT ANOMALY CATEGORY</Text>
+                {/* Issue Category Selection */}
+                <Text style={styles.fieldLabel}>CATEGORY OF ANOMALY</Text>
                 <View style={styles.categoryGrid}>
                   {CATEGORIES.map((cat) => {
                     const isSelected = category === cat.key;
@@ -1088,16 +854,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
   },
-  doneBtn: {
-    flex: 2,
-    backgroundColor: '#1f3d3c',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
+  projectSelectSection: {
+    marginBottom: 16,
   },
-  doneBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
+  projectPickerScroll: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  projectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    maxWidth: 220,
+  },
+  projectChipSelected: {
+    backgroundColor: '#1f3d3c',
+    borderColor: '#1f3d3c',
+  },
+  projectChipId: {
+    fontSize: 11,
     fontWeight: '800',
+    color: '#0d9488',
+    marginBottom: 2,
+  },
+  projectChipIdSelected: {
+    color: '#2dd4bf',
+  },
+  projectChipTitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#334155',
+  },
+  projectChipTitleSelected: {
+    color: '#ffffff',
   },
 });

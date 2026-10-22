@@ -90,7 +90,7 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
     fireEvent.press(submitBtn);
 
     expect(
-      getByText('A live site photo is required to submit a verified field audit.'),
+      getByText('A live site photo is required to submit a field audit.'),
     ).toBeTruthy();
     expect(mockOnSubmit).not.toHaveBeenCalled();
   });
@@ -105,8 +105,8 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
       />,
     );
 
-    // Capture site photo (async GPS lock, then hardware capture)
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
+    // Wait for the async GPS fix to classify the capture as on-site
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     const shutterBtn = getByTestId('auditor-shutter-btn');
     fireEvent.press(shutterBtn);
     await waitFor(() => expect(getByTestId('receipt-code-badge')).toBeTruthy());
@@ -134,8 +134,8 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
       />,
     );
 
-    // Wait for async GPS lock, then capture mandatory photo
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
+    // Wait for async GPS fix, then capture mandatory photo
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     const shutterBtn = getByTestId('auditor-shutter-btn');
     fireEvent.press(shutterBtn);
     await waitFor(() => expect(mockOnAuditSubmitted).toHaveBeenCalled());
@@ -178,8 +178,8 @@ describe('ReportAnomalyModal Component (Unified Field Audit & Anomaly Reporting)
 
     // Live camera feed is visible once permission is granted
     await waitFor(() => expect(getByTestId('site-camera-preview')).toBeTruthy());
-    // Geofence unlocks once the hardware GPS fix settles
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
+    // GPS fix settles so the capture is classified on-site
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
 
     // Capturing swaps the feed for the captured photo preview
     fireEvent.press(getByTestId('auditor-shutter-btn'));

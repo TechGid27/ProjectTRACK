@@ -61,8 +61,8 @@ describe('FieldAuditorModal hardware capture + verdict (Pillars 1 & 5)', () => {
       <FieldAuditorModal visible project={mockProject} onClose={jest.fn()} />,
     );
 
-    // Wait for the async hardware GPS fix (~40m) to unlock the shutter.
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
+    // Wait for the async hardware GPS fix (~40m) to classify as on-site.
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     fireEvent.press(getByTestId('auditor-shutter-btn'));
 
     // Receipt is enqueued once the capture settles (offline-first).
@@ -83,8 +83,8 @@ describe('FieldAuditorModal hardware capture + verdict (Pillars 1 & 5)', () => {
       <FieldAuditorModal visible project={mockProject} onClose={jest.fn()} />,
     );
 
-    // Wait for the hardware GPS fix before capturing
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
+    // Wait for the hardware GPS fix before capturing (on-site classification)
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     fireEvent.press(getByTestId('auditor-shutter-btn'));
     // Receipt still shown; item stays pending because the POST failed.
     await waitFor(() => expect(getByTestId('receipt-code-badge')).toBeTruthy());

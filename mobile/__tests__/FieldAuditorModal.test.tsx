@@ -94,7 +94,7 @@ describe('FieldAuditorModal Component', () => {
     expect(getByTestId('auditor-shutter-btn')).toBeTruthy();
   });
 
-  test('locks the shutter when the real GPS fix is far from the project', async () => {
+  test('captures off-site without geofence lock and flags the report as a photo flag', async () => {
     // Cebu City fix — ~78km away from Bogo City project centroid
     mockGetDeviceFix.mockResolvedValueOnce({
       latitude: 10.3157,
@@ -102,7 +102,7 @@ describe('FieldAuditorModal Component', () => {
       accuracy: 8,
     });
 
-    const { getByText } = render(
+    const { getByText, getByTestId, findByTestId } = render(
       <FieldAuditorModal
         visible={true}
         project={mockProject}
@@ -111,8 +111,18 @@ describe('FieldAuditorModal Component', () => {
       />,
     );
 
-    await waitFor(() => expect(getByText(/Outside Geofence/)).toBeTruthy());
-    expect(getByText('Geofence Locked — Move Closer')).toBeTruthy();
+    // Banner shows off-site status but the shutter is never locked
+    await waitFor(() => expect(getByText(/Off-site/)).toBeTruthy());
+    const shutterBtn = getByTestId('auditor-shutter-btn');
+    expect(getByText('Capture Site Photo')).toBeTruthy();
+
+    // Capture + submit work off-site; receipt is flagged, not on-site verified
+    fireEvent.press(shutterBtn);
+    await waitFor(() => expect(outbox.getAllAudits().length).toBe(1));
+    expect(getByTestId('receipt-code-badge')).toBeTruthy();
+    expect(getByText('🚩 PHOTO FLAG — OFF-SITE')).toBeTruthy();
+    expect(outbox.getAllAudits()[0].verification).toBe('photo_flag');
+    await findByTestId('report-verdict');
   });
 
   test('shows GPS acquiring state and retry re-runs acquisition until a fix arrives', async () => {
@@ -130,16 +140,16 @@ describe('FieldAuditorModal Component', () => {
 
     await waitFor(() => expect(getByText('Acquiring GPS lock…')).toBeTruthy());
     expect(getByTestId('retry-gps-btn')).toBeTruthy();
-    expect(getByText('GPS Lock Required — Enable Location')).toBeTruthy();
+    // Capture stays available even without a GPS fix
+    expect(getByText('Capture Site Photo')).toBeTruthy();
 
     // Retry re-runs the full GPS acquisition pipeline and the fix arrives
     fireEvent.press(getByTestId('retry-gps-btn'));
     await waitFor(() => expect(mockGetDeviceFix).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
-    expect(getByText('Capture Verified Site Photo')).toBeTruthy();
+    await waitFor(() => expect(getByText(/On-site/)).toBeTruthy());
   });
 
-  test('captures verified audit, enqueues to outbox, and displays receipt badge', async () => {
+  test('captures on-site audit, enqueues to outbox, and displays receipt badge', async () => {
     const { getByTestId, getByText, findByTestId } = render(
       <FieldAuditorModal
         visible={true}
@@ -150,19 +160,21 @@ describe('FieldAuditorModal Component', () => {
     );
 
     const shutterBtn = getByTestId('auditor-shutter-btn');
-    // Geofence unlocks only after the async hardware GPS fix arrives
-    await waitFor(() => expect(getByText(/Inside Geofence/)).toBeTruthy());
+    // Banner flips to on-site once the async hardware GPS fix arrives
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     fireEvent.press(shutterBtn);
 
     // Verify outbox received the item once the async capture settles
     // (the instantly-resolved API mock may already have marked it synced,
     // so assert on the full queue rather than pending-only count).
     await waitFor(() => expect(outbox.getAllAudits().length).toBe(1));
+    expect(outbox.getAllAudits()[0].verification).toBe('onsite');
     expect(mockOnAuditSubmitted).toHaveBeenCalledTimes(1);
 
-    // Verify receipt badge rendered
+    // Verify receipt badge rendered with on-site verification
     expect(getByTestId('receipt-code-badge')).toBeTruthy();
-    expect(getByText(/Audit Verified & Queued!/)).toBeTruthy();
+    expect(getByText(/On-Site Audit Queued!/)).toBeTruthy();
+    expect(getByText('📍 ONSITE VERIFIED')).toBeTruthy();
 
     // Flush the live submission so its state update does not leak across suites.
     await findByTestId('report-verdict');

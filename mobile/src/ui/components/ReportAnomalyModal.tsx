@@ -145,8 +145,11 @@ export default function ReportAnomalyModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Field Audit geofence state (150m proximity, real hardware GPS only)
+  // Field Audit capture state (real hardware GPS, offline-first outbox)
   const [capturedReceipt, setCapturedReceipt] = useState<QueuedAudit | null>(null);
+  // Captures are never geofence-locked: off-site shots are queued as a
+  // "photo flag"; on-site (within 150m) shots are verified on-site audits.
+  const [verificationMode, setVerificationMode] = useState<'onsite' | 'photo_flag'>('photo_flag');
   const [capturedPhoto, setCapturedPhoto] = useState<{
     uri: string;
     name?: string;
@@ -251,7 +254,7 @@ export default function ReportAnomalyModal({
   }, [project, availableProjects]);
 
   // Compute geofence status from the real hardware GPS fix only.
-  // Without a fix the shutter stays locked — no simulated proximity.
+  // Never blocks capture — it only classifies the report as on-site vs photo flag.
   const geofence = useMemo(() => {
     if (!deviceFix) {
       return { isInside: false, distanceMeters: null as number | null };
@@ -268,24 +271,20 @@ export default function ReportAnomalyModal({
   if (!visible) return null;
   if (!project && (!availableProjects || availableProjects.length === 0)) return null;
 
-  // Shutter action: captures required site photo & registers durable outbox receipt
+  // Shutter action: always allowed (capture is never geofence-locked).
+  // Proximity only decides the flag recorded on the outbox receipt:
+  // on-site within 150m, otherwise an off-site "photo flag".
   const handleCapturePhoto = async () => {
-    if (!deviceFix) {
-      haptics.triggerWarning();
-      setErrorMessage('GPS lock required: enable location services so on-site proximity can be verified.');
-      return;
-    }
-    if (!geofence.isInside) {
-      haptics.triggerWarning();
-      setErrorMessage('Geofence locked: You must be within 150m of project centroid to capture verified photo.');
-      return;
-    }
-
     haptics.triggerSuccess();
     setErrorMessage(null);
 
-    const userLat = deviceFix.latitude;
-    const userLng = deviceFix.longitude;
+    const isOnSite = Boolean(deviceFix && geofence.isInside);
+    const mode: 'onsite' | 'photo_flag' = isOnSite ? 'onsite' : 'photo_flag';
+    setVerificationMode(mode);
+
+    // Without a GPS fix we still record the attempt against the target coords.
+    const userLat = deviceFix ? deviceFix.latitude : targetCoords.lat;
+    const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
 
     const siteId = selectedProj?.id || 'site';
     let photoObj = {
@@ -313,18 +312,21 @@ export default function ReportAnomalyModal({
 
     setCapturedPhoto(photoObj);
 
-    const sanitizedDesc = sanitizeReportDescription(
-      description.trim() || `Verified on-site within ${geofence.distanceMeters}m geofence.`,
-      2000,
-    );
+    const defaultNote = isOnSite
+      ? `On-site field audit within ${geofence.distanceMeters}m of project centroid.`
+      : deviceFix
+      ? `Photo flag: captured off-site, ${geofence.distanceMeters}m from project centroid.`
+      : 'Photo flag: captured without a GPS fix.';
+    const sanitizedDesc = sanitizeReportDescription(description.trim() || defaultNote, 2000);
 
     // Enqueue to offline-first outbox
     const queued = outbox.enqueueAudit({
       projectId: selectedProj?.id || '24HD0012',
       latitude: userLat,
       longitude: userLng,
-      distanceMeters: geofence.distanceMeters ?? 0,
+      distanceMeters: geofence.distanceMeters ?? -1,
       notes: sanitizedDesc,
+      verification: mode,
     });
     setCapturedReceipt(queued);
     onAuditSubmitted?.(queued);
@@ -358,16 +360,7 @@ export default function ReportAnomalyModal({
 
     // MANDATORY PHOTO REQUIREMENT
     if (!capturedPhoto) {
-      setErrorMessage('A live site photo is required to submit a verified field audit.');
-      return;
-    }
-
-    if (!geofence.isInside || !deviceFix) {
-      setErrorMessage(
-        deviceFix
-          ? 'Geofence locked: You must be within 150m of project centroid to submit.'
-          : 'GPS lock required: enable location services so on-site proximity can be verified.',
-      );
+      setErrorMessage('A live site photo is required to submit a field audit.');
       return;
     }
 
@@ -385,8 +378,11 @@ export default function ReportAnomalyModal({
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const userLat = deviceFix.latitude;
-    const userLng = deviceFix.longitude;
+    // Without a GPS fix the submit still records against the target coords.
+    const userLat = deviceFix ? deviceFix.latitude : targetCoords.lat;
+    const userLng = deviceFix ? deviceFix.longitude : targetCoords.lng;
+    const submitMode: 'onsite' | 'photo_flag' =
+      deviceFix && geofence.isInside ? 'onsite' : 'photo_flag';
 
     const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
@@ -403,12 +399,14 @@ export default function ReportAnomalyModal({
     };
 
     if (!capturedReceipt) {
+      setVerificationMode(submitMode);
       const queued = outbox.enqueueAudit({
         projectId: selectedProj.id,
         latitude: userLat,
         longitude: userLng,
-        distanceMeters: geofence.distanceMeters ?? 0,
+        distanceMeters: geofence.distanceMeters ?? -1,
         notes: sanitizedDesc,
+        verification: submitMode,
       });
       setCapturedReceipt(queued);
       onAuditSubmitted?.(queued);
@@ -440,6 +438,7 @@ export default function ReportAnomalyModal({
     setErrorMessage(null);
     setCapturedPhoto(null);
     setCapturedReceipt(null);
+    setVerificationMode('photo_flag');
     setVerdict(null);
     onClose();
   };
@@ -571,7 +570,7 @@ export default function ReportAnomalyModal({
                   testID="geofence-radar-badge"
                 >
                   <Text style={styles.radarIcon}>
-                    {geofence.isInside ? '🎯' : deviceFix ? '⚠️' : '🛰️'}
+                    {geofence.isInside ? '🎯' : deviceFix ? '🚩' : '🛰️'}
                   </Text>
                   <View style={styles.radarTextCol}>
                     <Text
@@ -587,8 +586,8 @@ export default function ReportAnomalyModal({
                           ? 'Locating GPS…'
                           : 'Acquiring GPS lock…'
                         : geofence.isInside
-                        ? `Inside Geofence (${geofence.distanceMeters}m from site)`
-                        : `Outside Geofence (${geofence.distanceMeters}m away)`}
+                        ? `On-site (${geofence.distanceMeters}m from site)`
+                        : `Off-site (${geofence.distanceMeters}m away) — Photo Flag`}
                     </Text>
                     <Text style={styles.radarDesc}>
                       {!deviceFix
@@ -596,10 +595,10 @@ export default function ReportAnomalyModal({
                           ? 'Reading hardware GPS — stay outdoors with a clear view of the sky for a faster fix.'
                           : gpsAttemptCount > 1
                           ? 'Still no GPS fix. Move outdoors, keep location services on, then retry.'
-                          : 'Allow location access — on-site proximity to the project is verified automatically.'
+                          : 'Captures are always allowed — GPS only decides on-site vs photo flag.'
                         : geofence.isInside
-                        ? 'Hardware GPS lock satisfied. Live camera shutter is unlocked.'
-                        : 'You must be within 150m of project centroid to unlock shutter.'}
+                        ? 'GPS confirms you are at the project — recorded as a verified on-site audit.'
+                        : 'Capture is still allowed — the submission will be recorded as an off-site photo flag.'}
                     </Text>
                   </View>
                   {!deviceFix && (
@@ -678,27 +677,19 @@ export default function ReportAnomalyModal({
                     </View>
                   </View>
 
-                  {/* Shutter Capture Button */}
+                  {/* Shutter Capture Button — never geofence-locked */}
                   <TouchableOpacity
                     style={[
                       styles.shutterButton,
-                      (!geofence.isInside || !deviceFix) && styles.shutterButtonDisabled,
                       capturedPhoto && styles.shutterButtonCaptured,
                     ]}
                     onPress={handleCapturePhoto}
-                    disabled={!geofence.isInside || !deviceFix}
                     activeOpacity={0.8}
                     testID="auditor-shutter-btn"
                   >
                     <Text style={styles.shutterIcon}>📷</Text>
                     <Text style={styles.shutterButtonText}>
-                      {!deviceFix
-                        ? 'GPS Lock Required — Enable Location'
-                        : !geofence.isInside
-                        ? 'Geofence Locked — Move Closer'
-                        : capturedPhoto
-                        ? '🔄 Retake Site Photo'
-                        : 'Capture Verified Site Photo'}
+                      {capturedPhoto ? '🔄 Retake Site Photo' : 'Capture Site Photo'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -767,7 +758,24 @@ export default function ReportAnomalyModal({
                 {/* Success Receipt Card */}
                 {capturedReceipt && (
                   <View style={styles.receiptBox} testID="receipt-code-badge">
-                    <Text style={styles.receiptTitle}>✅ Audit Verified & Queued!</Text>
+                    <Text style={styles.receiptTitle}>
+                      {verificationMode === 'onsite'
+                        ? '✅ On-Site Audit Queued!'
+                        : '✅ Photo Flag Queued!'}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.receiptModeBadge,
+                        verificationMode === 'onsite'
+                          ? styles.receiptModeOnsite
+                          : styles.receiptModePhotoFlag,
+                      ]}
+                      testID="receipt-verification-badge"
+                    >
+                      {verificationMode === 'onsite'
+                        ? '📍 ONSITE VERIFIED'
+                        : '🚩 PHOTO FLAG — OFF-SITE'}
+                    </Text>
                     <Text style={styles.receiptSubtitle}>
                       Anonymous Whistleblower Tracking Receipt:
                     </Text>
@@ -799,7 +807,7 @@ export default function ReportAnomalyModal({
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.submitBtn, (!capturedPhoto || !geofence.isInside) && styles.submitBtnDisabled]}
+                    style={[styles.submitBtn, !capturedPhoto && styles.submitBtnDisabled]}
                     onPress={handleSubmit}
                     activeOpacity={0.8}
                     testID="submit-report-btn"
@@ -1170,9 +1178,6 @@ const styles = StyleSheet.create({
   shutterButtonCaptured: {
     backgroundColor: '#0f766e',
   },
-  shutterButtonDisabled: {
-    backgroundColor: '#cbd5e1',
-  },
   shutterIcon: {
     fontSize: 14,
   },
@@ -1316,6 +1321,22 @@ const styles = StyleSheet.create({
     color: '#475569',
     textAlign: 'center',
     lineHeight: 13,
+  },
+  receiptModeBadge: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#ffffff',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    overflow: 'hidden',
+    textAlign: 'center',
+  },
+  receiptModeOnsite: {
+    backgroundColor: '#059669',
+  },
+  receiptModePhotoFlag: {
+    backgroundColor: '#d97706',
   },
   verdictBox: {
     marginTop: 10,

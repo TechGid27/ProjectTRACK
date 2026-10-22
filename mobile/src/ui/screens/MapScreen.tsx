@@ -58,8 +58,11 @@ export default function MapScreen({
   const [isChatBotOpen, setIsChatBotOpen] = useState(false);
   const [isAuditorModalOpen, setIsAuditorModalOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<MapFilterOption>('ALL');
+  const [hierarchyTier, setHierarchyTier] = useState<HierarchyFilterTier>('ALL');
+  const [activeRegionPresetId, setActiveRegionPresetId] = useState<string>('ALL_CEBU');
   const [searchQuery, setSearchQuery] = useState('');
   const [sheetState, setSheetState] = useState<SheetDisplayState>(initialSheetState);
+  const [isRefreshingMap, setIsRefreshingMap] = useState(false);
   const [mapPins, setMapPins] = useState<Pin[]>(initialPins || pins || []);
   const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>(
     initialLgu ? getProjectsByLocation(initialLgu) : mockProjects,
@@ -79,6 +82,27 @@ export default function MapScreen({
       handleSelectProjectById(initialProjectId);
     }
   }, [initialProjectId]);
+
+  const handleRefreshMap = async () => {
+    setIsRefreshingMap(true);
+    try {
+      const loc = selectedLgu || searchQuery.trim();
+      const [livePins, projects] = await Promise.all([
+        api.fetchMapPins(loc || undefined),
+        loc ? api.fetchProjectsByLocation(loc, 100) : Promise.resolve([]),
+      ]);
+      if (livePins && livePins.length > 0) {
+        setMapPins(livePins);
+      }
+      if (projects && projects.length > 0) {
+        setActiveProjects(projects);
+      }
+    } catch {
+      // retain current pins and projects
+    } finally {
+      setIsRefreshingMap(false);
+    }
+  };
 
   // Fetch live map pins on mount
   useEffect(() => {
@@ -207,7 +231,10 @@ export default function MapScreen({
       result = result.filter(
         (p) => normalizeLguName(p.lgu).toLowerCase() === norm,
       );
+    } else if (hierarchyTier !== 'ALL') {
+      result = result.filter((p) => isLguInHierarchyTier(p.lgu, hierarchyTier));
     }
+
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(
@@ -233,7 +260,40 @@ export default function MapScreen({
       result = result.filter((p) => highBudgetIds.has(p.id));
     }
     return result;
-  }, [mapPins, selectedLgu, searchQuery, activeFilter]);
+  }, [mapPins, selectedLgu, hierarchyTier, searchQuery, activeFilter]);
+
+  const handleSearchQueryChange = (query: string) => {
+    setSearchQuery(query);
+    const clean = query.trim().toLowerCase();
+    if (clean.length >= 3) {
+      const matchedFeature = cebuDataRaw?.features?.find((f: any) => {
+        const rawName = (f.properties?.name || '').toLowerCase();
+        const normName = normalizeLguName(f.properties?.name || '').toLowerCase();
+        return (
+          rawName === clean ||
+          normName === clean ||
+          rawName.startsWith(clean) ||
+          normName.startsWith(clean)
+        );
+      });
+
+      if (matchedFeature) {
+        const matchedName = normalizeLguName(matchedFeature.properties.name);
+        setSelectedLgu(matchedName);
+        setSelectedPinId(null);
+        if (sheetState === 'hidden') {
+          setSheetState('minimized');
+        }
+        const label = (matchedFeature as any)?.properties?.label;
+        if (Array.isArray(label) && label.length === 2) {
+          mapRef.current?.animateToCoordinates(label[1], label[0], 12.5);
+        }
+      }
+    } else if (clean.length === 0 && selectedLgu) {
+      setSelectedLgu(null);
+      setSelectedPinId(null);
+    }
+  };
 
   const handleSearchQueryChange = (query: string) => {
     setSearchQuery(query);
@@ -275,6 +335,19 @@ export default function MapScreen({
     if (sheetState === 'hidden') {
       setSheetState('expanded');
     }
+    const targetFeature = (cebuDataRaw?.features || []).find(
+      (f: any) =>
+        normalizeLguName(f.properties?.name || '').toLowerCase() ===
+        normalized.toLowerCase(),
+    );
+    if (targetFeature) {
+      const box = computeBoundingBox([targetFeature]);
+      if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
+        const centerLng = (box.minLng + box.maxLng) / 2;
+        const centerLat = (box.minLat + box.maxLat) / 2;
+        mapRef.current?.animateToCoordinates(centerLat, centerLng, 3.5);
+      }
+    }
   };
 
   const handleSelectPin = (pin: Pin) => {
@@ -292,6 +365,7 @@ export default function MapScreen({
     };
     setSelectedProject(optimisticProject);
     setIsDetailModalOpen(true);
+    mapRef.current?.animateToCoordinates(pin.lat, pin.lng, 4.5);
 
     api.fetchProjectById(pin.id).then((live) => {
       if (live) {
@@ -303,6 +377,13 @@ export default function MapScreen({
   const handleSelectProjectCard = (project: ProjectDetail) => {
     setSelectedProject(project);
     setIsDetailModalOpen(true);
+    const matchingPin = mapPins.find((p) => p.id === project.id);
+    if (matchingPin) {
+      setSelectedPinId(matchingPin.id);
+      mapRef.current?.animateToCoordinates(matchingPin.lat, matchingPin.lng, 4.5);
+    } else if (typeof project.latitude === 'number' && typeof project.longitude === 'number') {
+      mapRef.current?.animateToCoordinates(project.latitude, project.longitude, 4.5);
+    }
   };
 
   const handleSelectProjectById = (projectId: string) => {
@@ -310,6 +391,11 @@ export default function MapScreen({
     if (optimistic) {
       setSelectedProject(optimistic);
       setIsDetailModalOpen(true);
+    }
+    const matchingPin = mapPins.find((p) => p.id === projectId);
+    if (matchingPin) {
+      setSelectedPinId(matchingPin.id);
+      mapRef.current?.animateToCoordinates(matchingPin.lat, matchingPin.lng, 4.5);
     }
     api.fetchProjectById(projectId).then((p) => {
       if (p) {
@@ -341,24 +427,36 @@ export default function MapScreen({
     setSelectedLgu(null);
     setSelectedPinId(null);
     setSearchQuery('');
+    setActiveRegionPresetId('ALL_CEBU');
+    mapRef.current?.recenter();
+  };
+
+  const handleSelectRegionPreset = (preset: RegionPreset) => {
+    setActiveRegionPresetId(preset.id);
+    if (preset.id === 'ALL_CEBU') {
+      handleResetSelection();
+      mapRef.current?.recenter();
+    } else {
+      mapRef.current?.animateToCoordinates(preset.lat, preset.lng, preset.zoom);
+    }
   };
 
   const mapHeight = useMemo(() => {
     const screenH = windowHeight || 640;
     if (sheetState === 'hidden') {
-      return Math.max(500, screenH - 100);
+      return Math.max(500, screenH - 120);
     }
     if (sheetState === 'minimized') {
-      return Math.max(420, screenH - 160);
+      return Math.max(420, screenH - 180);
     }
-    return Math.max(340, screenH * 0.55);
+    return Math.max(340, screenH * 0.52);
   }, [windowHeight, sheetState]);
 
   const mapWidth = Math.max(320, windowWidth || 360);
 
   return (
     <View style={styles.container} testID="map-screen">
-      {/* Top Floating App Header with Navigation */}
+      {/* 1. Top App Header with Navigation */}
       <MapHeader
         totalLgus={53}
         totalPins={mapPins.length}
@@ -371,7 +469,16 @@ export default function MapScreen({
         onResetSelection={handleResetSelection}
       />
 
-      {/* Floating Status & Budget Map Filter Pills */}
+      {/* 2. Cebu Administrative Hierarchy Bar (Province > Cities > Municipalities) */}
+      <CebuMapHierarchyBar
+        selectedTier={hierarchyTier}
+        onSelectTier={setHierarchyTier}
+        selectedLgu={selectedLgu}
+        onResetLgu={handleResetSelection}
+        onSelectMunicipality={handleSelectMunicipality}
+      />
+
+      {/* 3. Floating Status & Budget Map Filter Pills */}
       <MapFilterBar
         activeFilter={activeFilter}
         onSelectFilter={setActiveFilter}
@@ -384,6 +491,7 @@ export default function MapScreen({
           testID="unified-cebu-map"
           selectedMunicipality={selectedLgu}
           selectedPinId={selectedPinId}
+          hierarchyTier={hierarchyTier}
           pins={filteredPins}
           onSelectMunicipality={handleSelectMunicipality}
           onSelectPin={handleSelectPin}
@@ -450,12 +558,6 @@ export default function MapScreen({
       />
 
       {/* Modals */}
-      <FieldAuditorModal
-        visible={isAuditorModalOpen}
-        project={selectedProject}
-        onClose={() => setIsAuditorModalOpen(false)}
-      />
-
       <AboutMapModal
         visible={isAboutModalOpen}
         onClose={() => setIsAboutModalOpen(false)}
@@ -498,7 +600,7 @@ export default function MapScreen({
       />
 
       <ReportAnomalyModal
-        visible={isReportModalOpen}
+        visible={isReportModalOpen || isAuditorModalOpen}
         project={selectedProject}
         availableProjects={currentLguProjects}
         onClose={() => setIsReportModalOpen(false)}
@@ -522,6 +624,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#cbe3df',
+  },
+  floatingRefreshBtn: {
+    position: 'absolute',
+    top: 175,
+    right: 16,
+    backgroundColor: 'rgba(31, 61, 60, 0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 13,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 6,
+    zIndex: 90,
+  },
+  floatingRefreshText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#34d399',
   },
   floatingChatBtn: {
     position: 'absolute',

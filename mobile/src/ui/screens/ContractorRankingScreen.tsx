@@ -5,6 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
@@ -58,6 +59,21 @@ export default function ContractorRankingScreen({
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const items = await api.fetchTopContractors(50);
+      if (items && items.length > 0) {
+        setContractors(items);
+      }
+    } catch {
+      // retain state
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -170,6 +186,15 @@ export default function ContractorRankingScreen({
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#0d9488"
+              colors={['#0d9488', '#1f3d3c']}
+              testID="contractor-refresh-control"
+            />
+          }
         >
           {pagedItems.length === 0 ? (
             <View style={styles.emptyBox}>

@@ -155,3 +155,27 @@ export interface FaqItem {
   q: string;
   a: string;
 }
+
+
+export type LguType = 'HUC' | 'COMPONENT_CITY' | 'MUNICIPALITY';
+export type CebuRegionZone =
+  | 'METRO_CEBU'
+  | 'NORTH_CEBU'
+  | 'SOUTH_CEBU'
+  | 'MIDWEST_CEBU'
+  | 'ISLAND_GROUPS';
+
+export type HierarchyFilterTier =
+  | 'ALL'
+  | 'CITIES'
+  | 'MUNICIPALITIES'
+  | 'METRO_CEBU';
+
+export interface LguMeta {
+  name: string;
+  normalizedName: string;
+  type: LguType;
+  zone: CebuRegionZone;
+  district?: number;
+  islandGroup?: 'Mainland' | 'Bantayan' | 'Camotes' | 'Mactan' | 'Olango';
+}

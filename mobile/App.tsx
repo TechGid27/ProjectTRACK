@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import ContractorRankingScreen from './src/ui/screens/ContractorRankingScreen';
 import SignInScreen from './src/ui/screens/SignInScreen';
 import SignUpScreen from './src/ui/screens/SignUpScreen';
 import BottomTabBar, { TabName } from './src/ui/components/BottomTabBar';
+import { api } from './src/services/api';
 
 type AuthScreenName = 'signin' | 'signup' | null;
 
@@ -99,12 +100,29 @@ export default function App() {
     email: string;
   } | null>(null);
 
+  // Restore authenticated session on startup
+  useEffect(() => {
+    let isMounted = true;
+    api
+      .getSession()
+      .then((user) => {
+        if (isMounted && user?.email) {
+          setCurrentUser(user);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleSignInSuccess = (user: { email: string }) => {
     setCurrentUser(user);
     setAuthScreen(null);
   };
 
   const handleSignOut = () => {
+    api.signOut().catch(() => {});
     setCurrentUser(null);
   };
 

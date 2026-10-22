@@ -5,6 +5,12 @@ import {
   checkGeofenceProximity,
   clusterPins,
   geoToSvgCoordinates,
+  getLguClassification,
+  CEBU_HUCS,
+  CEBU_COMPONENT_CITIES,
+  CEBU_ALL_CITIES,
+  CEBU_REGION_PRESETS,
+  isLguInHierarchyTier,
 } from '../src/core/geoUtils';
 
 describe('geoUtils suite', () => {
@@ -106,6 +112,83 @@ describe('geoUtils suite', () => {
       expect(coord.x).toBe(200);
       // Midpoint in lat (10.0) should be height / 2 = 300
       expect(coord.y).toBe(300);
+    });
+  });
+
+  describe('Cebu Administrative Hierarchy & Classification', () => {
+    test('correctly identifies Highly Urbanized Cities (HUCs)', () => {
+      const cebuCity = getLguClassification('Cebu City');
+      expect(cebuCity.type).toBe('HUC');
+      expect(cebuCity.zone).toBe('METRO_CEBU');
+
+      const mandaue = getLguClassification('Mandaue City');
+      expect(mandaue.type).toBe('HUC');
+      expect(mandaue.zone).toBe('METRO_CEBU');
+
+      const lapuLapu = getLguClassification('Lapu-Lapu City');
+      expect(lapuLapu.type).toBe('HUC');
+      expect(lapuLapu.islandGroup).toBe('Mactan');
+
+      expect(CEBU_HUCS.size).toBe(3);
+    });
+
+    test('correctly identifies Component Cities', () => {
+      const bogo = getLguClassification('City of Bogo');
+      expect(bogo.type).toBe('COMPONENT_CITY');
+      expect(bogo.normalizedName).toBe('Bogo City');
+      expect(bogo.zone).toBe('NORTH_CEBU');
+
+      const carcar = getLguClassification('City of Carcar');
+      expect(carcar.type).toBe('COMPONENT_CITY');
+      expect(carcar.normalizedName).toBe('Carcar City');
+
+      const toledo = getLguClassification('Toledo City');
+      expect(toledo.type).toBe('COMPONENT_CITY');
+      expect(toledo.zone).toBe('MIDWEST_CEBU');
+
+      expect(CEBU_COMPONENT_CITIES.size).toBe(6);
+      expect(CEBU_ALL_CITIES.size).toBe(9);
+    });
+
+    test('correctly identifies Municipalities and Island Groups', () => {
+      const bantayan = getLguClassification('Bantayan');
+      expect(bantayan.type).toBe('MUNICIPALITY');
+      expect(bantayan.zone).toBe('ISLAND_GROUPS');
+      expect(bantayan.islandGroup).toBe('Bantayan');
+
+      const sanFrancisco = getLguClassification('San Francisco');
+      expect(sanFrancisco.type).toBe('MUNICIPALITY');
+      expect(sanFrancisco.zone).toBe('ISLAND_GROUPS');
+      expect(sanFrancisco.islandGroup).toBe('Camotes');
+
+      const moalboal = getLguClassification('Moalboal');
+      expect(moalboal.type).toBe('MUNICIPALITY');
+      expect(moalboal.zone).toBe('SOUTH_CEBU');
+    });
+
+    test('isLguInHierarchyTier filters correctly across tiers', () => {
+      expect(isLguInHierarchyTier('Cebu City', 'ALL')).toBe(true);
+      expect(isLguInHierarchyTier('Cebu City', 'CITIES')).toBe(true);
+      expect(isLguInHierarchyTier('Cebu City', 'MUNICIPALITIES')).toBe(false);
+      expect(isLguInHierarchyTier('Cebu City', 'METRO_CEBU')).toBe(true);
+
+      expect(isLguInHierarchyTier('Bogo City', 'CITIES')).toBe(true);
+      expect(isLguInHierarchyTier('Bogo City', 'MUNICIPALITIES')).toBe(false);
+
+      expect(isLguInHierarchyTier('Argao', 'CITIES')).toBe(false);
+      expect(isLguInHierarchyTier('Argao', 'MUNICIPALITIES')).toBe(true);
+      expect(isLguInHierarchyTier('Argao', 'METRO_CEBU')).toBe(false);
+    });
+
+    test('contains comprehensive region focus presets', () => {
+      expect(CEBU_REGION_PRESETS.length).toBeGreaterThanOrEqual(7);
+      const presetIds = CEBU_REGION_PRESETS.map((p) => p.id);
+      expect(presetIds).toContain('ALL_CEBU');
+      expect(presetIds).toContain('METRO_CEBU');
+      expect(presetIds).toContain('NORTH_CEBU');
+      expect(presetIds).toContain('SOUTH_CEBU');
+      expect(presetIds).toContain('BANTAYAN');
+      expect(presetIds).toContain('CAMOTES');
     });
   });
 });

@@ -36,6 +36,7 @@ from backend.models.report import (
     ProjectReportSummary,
     ReportSummariesResponse,
     REPORT_CATEGORIES,
+    sanitize_input_text,
 )
 from backend.services.report_store import report_store, ReportStoreError
 from backend.services.neo4j_service import neo4j_service
@@ -108,7 +109,15 @@ async def submit_report(
     picture: Optional[UploadFile] = File(default=None),
     user: AuthUser = Depends(get_current_user),  # Pillar 3: identity required
 ) -> ReportVerification:
-    # --- validate inputs ----------------------------------------------------
+    # --- sanitize & validate inputs -----------------------------------------
+    project_id = sanitize_input_text(project_id, max_len=50)
+    description = sanitize_input_text(description, max_len=2000)
+    if len(description) < 10:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Description must be at least 10 characters after sanitization.",
+        )
+
     if category not in REPORT_CATEGORIES:
         category = "other"
 

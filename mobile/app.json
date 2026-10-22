@@ -2,6 +2,7 @@
   "expo": {
     "name": "ProjectTRACK",
     "slug": "projecttrack-mobile",
+    "scheme": "projecttrack",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

@@ -61,9 +61,6 @@ function barangayPlaceIcon(name) {
 }
 
 function getSpatialPinIcon(status, isHighlighted, verificationTone = null) {
-  // When a legend verification filter is active, the diamond is painted in the
-  // filter's tone (violet/rose/white) so "Photo Flagged" literally shows red
-  // diamonds on the map.
   let toneClass
   if (verificationTone === 'verified') {
     toneClass = 'pin--violet'
@@ -175,8 +172,6 @@ function MapBackgroundClick({ onClear }) {
       if (target.closest('.leaflet-interactive')) return
       if (target.closest('.location-intel-panel')) return
       if (target.closest('[role="dialog"]')) return
-      // Legend / map-control clicks must never deselect the current LGU or
-      // clear the spatial search — the filters apply live to the open view.
       if (target.closest('.map-controls-overlay')) return
       onClear()
     }
@@ -377,12 +372,6 @@ function parseStatus(status) {
   return { base, pct }
 }
 
-/**
- * Single source of truth for pin colors AND the legend status filter.
- * DPWH statuses like "On-Going (62% Completed)" must classify as ongoing —
- * "ongoing" is checked before the "completed" substring so progress notes
- * never paint an ongoing site green.
- */
 // eslint-disable-next-line react-refresh/only-export-components
 export function statusCategory(status) {
   const { base, pct } = parseStatus(status)
@@ -451,8 +440,6 @@ function LocationIntelPanel({
   const nearbySites = useMemo(() => {
     if (!selected) return []
     const origin = [selected.lat, selected.lng]
-    // Single pass keeping only the 4 nearest pins — avoids allocating a new
-    // array for all ~5000 pins and sorting the whole thing on every selection.
     const top = []
     for (const pin of mapPins) {
       if (pin.name === selected.name) continue
@@ -821,11 +808,7 @@ function LocationIntelPanel({
 }
 
 const REPORTS_KEY = 'projecttrack-project-reports'
-
-// Mirrors the backend contract: submit_report() requires
-// description = Form(..., min_length=10, max_length=2000).
 const MIN_DESCRIPTION_LENGTH = 10
-
 const FULL_DETAILS_PAGE_SIZE = 8
 const PANEL_PAGE_SIZE = 5
 
@@ -1085,11 +1068,6 @@ function CoordGroupModal({ projects, onClose, onSelectProject }) {
   )
 }
 
-/**
- * Derive a Pillar 5 badge (tone + label) from the server's report verdict
- * fields. The backend returns `status` (verified | pending | flagged |
- * rejected) rather than a pre-rendered badge, so clients map it here.
- */
 function deriveBadge(report) {
   const status = report?.status
   if (status === 'verified') return { tone: 'success', label: 'On-Site Verified' }
@@ -1149,13 +1127,13 @@ function VerificationBadgePill({ badge }) {
 
 function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, onSubmitted }) {
   const [signedIn, setSignedIn] = useState(undefined)
-  const [sessionUser, setSessionUser] = useState(undefined) // undefined = checking, null = guest
+  const [sessionUser, setSessionUser] = useState(undefined)
   const [submitting, setSubmitting] = useState(false)
-  const [verdict, setVerdict] = useState(null) // ReportVerification after submit
-  const [gpsStatus, setGpsStatus] = useState('idle') // idle | acquiring | acquired | denied
-  const [farFromSite, setFarFromSite] = useState(null) // km from project site, set once per confirm
+  const [verdict, setVerdict] = useState(null)
+  const [gpsStatus, setGpsStatus] = useState('idle')
+  const [farFromSite, setFarFromSite] = useState(null)
   const [catOpen, setCatOpen] = useState(false)
-  const [picPreview, setPicPreview] = useState(null) // object URL for the chosen photo
+  const [picPreview, setPicPreview] = useState(null)
   const catRef = useRef(null)
   const picPreviewRef = useRef(null)
   const [form, setForm] = useState({
@@ -1187,7 +1165,6 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
     }
   }, [])
 
-  // Close the custom category dropdown on outside click.
   useEffect(() => {
     if (!catOpen) return undefined
     function onClick(event) {
@@ -1199,7 +1176,6 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
     return () => document.removeEventListener('mousedown', onClick)
   }, [catOpen])
 
-  // Revoke the photo preview object URL when it changes or the modal closes.
   useEffect(() => {
     picPreviewRef.current = picPreview
     return () => {
@@ -1226,9 +1202,6 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
       patch({ error: 'Add a short description of what you observed.' })
       return
     }
-    // The backend requires a description of at least 10 characters
-    // (Form(..., min_length=10)); enforce it client-side so users get an
-    // instant, clear message instead of a generic HTTP 422.
     if (trimmedDesc.length < MIN_DESCRIPTION_LENGTH) {
       patch({
         error: `Please add a bit more detail — at least ${MIN_DESCRIPTION_LENGTH} characters (currently ${trimmedDesc.length}).`,
@@ -1238,17 +1211,11 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
     setSubmitting(true)
     patch({ error: '' })
 
-    // Pillar 1 — capture browser GPS for server-side geofence verification.
-    // Never blocks submission: denial/timeout resolves null and the backend
-    // tags the report "unverified_no_gps".
     const alreadyConfirmedFar = farFromSite != null
     setGpsStatus('acquiring')
     const gps = await captureGeolocation()
     setGpsStatus(gps ? 'acquired' : 'denied')
 
-    // Client-side preflight: the server geofence is ≤150m. If the device is
-    // clearly far from the project site, require an explicit "submit anyway"
-    // confirmation instead of silently filing a report that will be flagged.
     if (
       !alreadyConfirmedFar &&
       gps &&
@@ -1288,12 +1255,10 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
         status: saved.status ?? 'pending',
         at: saved.created_at ?? new Date().toISOString(),
         pending: false,
-        // Pillar 5 — badge derived client-side from the server's verdict fields.
         badge: deriveBadge(saved),
         distanceMeters: saved.distance_meters ?? null,
         forensicsVerdict: saved.forensics_verdict ?? null,
         geofenceStatus: saved.geofence_pass ? 'inside' : 'outside',
-        // Auth identity — only the session that filed the report may see the thank-you.
         submittedBy: sessionUser?.id ?? null,
       })
     } catch (error) {
@@ -1635,7 +1600,7 @@ function writeReport(id, value) {
     all[id] = value
     window.localStorage.setItem(REPORTS_KEY, JSON.stringify(all))
   } catch {
-    // storage unavailable — report only kept in component state
+    // storage unavailable
   }
 }
 
@@ -1644,11 +1609,10 @@ function ProjectDetailModal({ entity, onClose }) {
   const [reportState, setReportState] = useState({ id: null, value: null })
   const [reportsState, setReportsState] = useState({ id: null, list: [] })
   const [reportModalOpen, setReportModalOpen] = useState(false)
-  const [reportFilter, setReportFilter] = useState('all') // 'all' | badge tone
+  const [reportFilter, setReportFilter] = useState('all')
   const [reportPage, setReportPage] = useState(1)
-  const [viewer, setViewer] = useState(undefined) // undefined = checking, null = guest
+  const [viewer, setViewer] = useState(undefined)
 
-  // Fresh project → start from the full list, page 1 (render-phase reset).
   const [prevReportEntity, setPrevReportEntity] = useState(entity)
   if (prevReportEntity !== entity) {
     setPrevReportEntity(entity)
@@ -1701,7 +1665,6 @@ function ProjectDetailModal({ entity, onClose }) {
             photoUrl: latest.photo_url ?? null,
             at: latest.created_at,
             pending: false,
-            // Pillar 5 — badge derived client-side from the server's verdict.
             badge: deriveBadge(latest),
             distanceMeters: latest.distance_meters ?? null,
             forensicsVerdict: latest.forensics_verdict ?? null,
@@ -1727,28 +1690,25 @@ function ProjectDetailModal({ entity, onClose }) {
   if (!entity) return null
   const project = detailState.id === entity ? detailState.data : null
 
-  // Newest-first list: local (just submitted / offline-pending) + all fetched,
-  // deduped by id so an online submission isn't shown twice.
   const fetchedReports = reportsState.id === entity ? reportsState.list : []
   const fetchedIds = new Set(fetchedReports.map((r) => r.id))
   const reportList = [
     ...(report && !fetchedIds.has(report.id) ? [report] : []),
     ...[...fetchedReports].reverse(),
   ]
+
+  const hasReports = reportList.length > 0
+
   const verificationCounts = reportList.reduce((acc, r) => {
     const tone = r.badge?.tone ?? 'neutral'
     acc[tone] = (acc[tone] ?? 0) + 1
     return acc
   }, {})
 
-  // Only the signed-in reporter who actually filed this local report may see
-  // the thank-you / "saved on this device" confirmation. Guests and other
-  // accounts never see it (the report itself is still public in the list).
   const canSeeThankYou = Boolean(
     report?.submittedBy && viewer?.id && viewer.id === report.submittedBy,
   )
 
-  // Community-report filter chips + pagination.
   const REPORTS_PER_PAGE = 6
   const filteredReports =
     reportFilter === 'all'
@@ -1799,8 +1759,12 @@ function ProjectDetailModal({ entity, onClose }) {
         onClick={onClose}
         className="absolute inset-0 bg-black/55 backdrop-blur-sm"
       />
-      <div className="relative mt-15  z-10 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/95 p-5 shadow-2xl backdrop-blur-md">
-        <div className="flex items-start justify-between gap-3">
+      <div
+        className={`relative z-10 max-h-[85vh] w-full ${
+          hasReports ? 'max-w-3xl' : 'max-w-lg'
+        } overflow-y-auto rounded-2xl border border-white/10 bg-[#0c1418]/95 p-5 shadow-2xl backdrop-blur-md transition-all duration-300`}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
           <div>
             <p className="text-[10px] font-semibold tracking-widest text-white/40">
               DPWH PROJECT
@@ -1822,88 +1786,121 @@ function ProjectDetailModal({ entity, onClose }) {
         </div>
 
         {!project ? (
-          <p className="mt-6 text-sm text-white/50">
-            Loading project details…
-          </p>
+          <div className="flex h-64 items-center justify-center text-sm text-white/50">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 animate-ping rounded-full bg-emerald-400" />
+              Loading project details…
+            </span>
+          </div>
         ) : (
-          <>
-            <p className="mt-3 text-sm leading-relaxed break-words text-white/85">
-              {project.description}
-            </p>
-            {(() => {
-              const { base, pct } = parseStatus(project.status)
-              if (pct == null) return null
-              return (
-                <div className="mt-4">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span
-                      className={`font-semibold ${
-                        base === 'Completed'
-                          ? 'text-sky-300'
-                          : 'text-emerald-300'
-                      }`}
-                    >
-                      {base} · {pct}% complete
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className={`mt-4 grid grid-cols-1 gap-5 ${
+              hasReports ? 'md:grid-cols-2' : ''
+            }`}
+          >
+            {/* Left Column: Details */}
+            <div className="flex flex-col justify-between space-y-4">
+              <div>
+                <p className="text-sm leading-relaxed break-words text-white/85">
+                  {project.description}
+                </p>
+                {(() => {
+                  const { base, pct } = parseStatus(project.status)
+                  if (pct == null) return null
+                  return (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span
+                          className={`font-semibold ${
+                            base === 'Completed'
+                              ? 'text-sky-300'
+                              : 'text-emerald-300'
+                          }`}
+                        >
+                          {base} · {pct}% complete
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className={`h-full rounded-full ${
+                            base === 'Completed' ? 'bg-sky-400' : 'bg-emerald-400'
+                          }`}
+                          style={{ width: `${Math.min(pct, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })()}
+                <dl className="mt-4 space-y-2">
+                  {rows.map(([label, value]) => (
                     <div
-                      className={`h-full rounded-full ${
-                        base === 'Completed' ? 'bg-sky-400' : 'bg-emerald-400'
-                      }`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })()}
-            <dl className="mt-4 space-y-2">
-              {rows.map(([label, value]) => (
-                <div
-                  key={label}
-                  className="flex items-start justify-between gap-4 border-b border-white/5 pb-2 text-[12px]"
-                >
-                  <dt className="shrink-0 text-white/45">{label}</dt>
-                  <dd className="break-words text-right font-medium text-white/90">
-                    {value ?? '—'}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-3">
-              <p className="text-[10px] font-semibold tracking-widest text-white/40">
-                COMMUNITY REPORT
-              </p>
-              <p className="mt-1.5 text-[11px] leading-snug text-white/60">
-                Observed an anomaly on-site? Send a report with a picture,
-                location, and short description.
-              </p>
-              {reportList.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setReportModalOpen(true)}
-                  className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-400/40 bg-red-400/10 px-3 py-2 text-[11px] font-semibold text-red-300 transition hover:bg-red-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400/70"
-                >
-                  <svg
-                    viewBox="0 0 20 20"
-                    className="h-3.5 w-3.5 shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    aria-hidden="true"
+                      key={label}
+                      className="flex items-start justify-between gap-4 border-b border-white/5 pb-2 text-[12px]"
+                    >
+                      <dt className="shrink-0 text-white/45">{label}</dt>
+                      <dd className="break-words text-right font-medium text-white/90">
+                        {value ?? '—'}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {project.url && (
+                  <a
+                    href={project.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#1f3d3c] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70"
                   >
-                    <path
-                      d="M10 2.5L1.5 17h17L10 2.5z"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M10 8v3.5" strokeLinecap="round" />
-                    <circle cx="10" cy="14" r="0.6" fill="currentColor" />
-                  </svg>
-                  Report Anomaly
-                </button>
-              ) : (
+                    View on BetterGov
+                    <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                      <path d="M8 4H4v12h12v-4M12 4h4v4M16 4l-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </a>
+                )}
+                {!hasReports && (
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(true)}
+                    className="flex items-center justify-center gap-1.5 rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2.5 text-xs font-semibold text-red-300 transition hover:bg-red-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400/70"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      className="h-3.5 w-3.5 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      aria-hidden="true"
+                    >
+                      <path d="M10 2.5L1.5 17h17L10 2.5z" strokeLinejoin="round" />
+                      <path d="M10 8v3.5" strokeLinecap="round" />
+                      <circle cx="10" cy="14" r="0.6" fill="currentColor" />
+                    </svg>
+                    Report Anomaly
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column: Community Reports (only shown when reports exist) */}
+            {hasReports && (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <p className="text-[10px] font-semibold tracking-widest text-white/40">
+                    COMMUNITY REPORT
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(true)}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-red-400 transition hover:text-red-300"
+                  >
+                    + Report Anomaly
+                  </button>
+                </div>
+
                 <div className="mt-2.5 space-y-2.5">
-                  {/* Aggregate verification summary */}
                   <p
                     data-testid="report-verification-summary"
                     className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-white/70"
@@ -1927,7 +1924,6 @@ function ProjectDetailModal({ entity, onClose }) {
                       </span>
                     ))}
                   </p>
-                  {/* Filter by verification tone (single-select) */}
                   <div className="flex flex-wrap gap-1.5">
                     {filterChips.map((chip) => {
                       const active = reportFilter === chip.key
@@ -1980,7 +1976,7 @@ function ProjectDetailModal({ entity, onClose }) {
                       No reports match this filter.
                     </p>
                   ) : (
-                    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <ul className="space-y-2">
                       {pageReports.map((item) => (
                         <li
                           key={item.id ?? `${item.at}-${item.description}`}
@@ -2038,24 +2034,12 @@ function ProjectDetailModal({ entity, onClose }) {
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-            {project.url && (
-              <a
-                href={project.url}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1f3d3c] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2a5452] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/70"
-              >
-                View on BetterGov
-                <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <path d="M8 4H4v12h12v-4M12 4h4v4M16 4l-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </a>
+              </div>
             )}
-          </>
+          </div>
         )}
       </div>
+
       {reportModalOpen && (
         <ReportAnomalyModal
           entity={entity}
@@ -2163,8 +2147,6 @@ function CebuMap() {
     highlightProject,
   } = useMapContext()
 
-  // Phones start with the intel panel closed so it doesn't overlap the
-  // legend/controls on the right — the "Location Intel" button re-opens it.
   const [intelOpen, setIntelOpen] = useState(
     () => typeof window !== 'undefined' && window.innerWidth >= 768,
   )
@@ -2177,7 +2159,6 @@ function CebuMap() {
   const [mapPins, setMapPins] = useState([])
   const [lguPinState, setLguPinState] = useState({ name: null, pins: [] })
   const [municipalities, setMunicipalities] = useState(null)
-  // projectId -> { onSite, flagged, unverified, total } from GET /reports/summaries
   const [reportSummaries, setReportSummaries] = useState(null)
   const [locState, setLocState] = useState({
     name: null,
@@ -2202,8 +2183,6 @@ function CebuMap() {
         setReportSummaries(map)
       })
       .catch(() => {
-        // Report datastore unavailable (e.g. migrations not applied yet) —
-        // verification filters simply match nothing until it is reachable.
         if (!cancelled) setReportSummaries(new Map())
       })
     return () => {
@@ -2230,8 +2209,6 @@ function CebuMap() {
       if (!summary) return false
       if (activeVerificationFilter === 'verified') return summary.onSite > 0
       if (activeVerificationFilter === 'flagged') return summary.flagged > 0
-      // 'anomalies' — any project that has at least one citizen report,
-      // regardless of its verification tone.
       return (
         (summary.onSite ?? 0) +
           (summary.flagged ?? 0) +
@@ -2242,9 +2219,6 @@ function CebuMap() {
     [activeVerificationFilter, reportSummaries],
   )
 
-  // Only paint a tone-specific pin colour for the single-tone filters. The
-  // 'anomalies' filter keeps each pin's status colour so mixed report types
-  // stay distinguishable on the map.
   const verificationTone =
     activeVerificationFilter === 'verified' ||
     activeVerificationFilter === 'flagged'
@@ -2258,14 +2232,9 @@ function CebuMap() {
     )
   }, [projectDots, matchesStatusFilter, matchesVerificationFilter])
 
-  // Deterministic micro-dispersion for projects sharing exact coordinates
   const displaySpatialDots = useMemo(() => {
     if (!filteredSpatialDots || filteredSpatialDots.length === 0) return []
 
-    // Cluster markers that are close ON SCREEN at the current zoom (not just
-    // those sharing an exact coordinate), then fan out each cluster so every
-    // project stays individually visible and clickable. As the user zooms in,
-    // the pixel threshold covers less ground, so clusters separate naturally.
     const clusters = clusterByProximity(
       filteredSpatialDots.filter((d) => d.latitude != null && d.longitude != null),
       zoom,
@@ -2282,8 +2251,6 @@ function CebuMap() {
           displayLng: group[0].longitude,
         })
       } else {
-        // Fan the colliding points out around the cluster anchor. The radius is
-        // scaled to the current zoom so the spread stays visually consistent.
         const spreadPx = 16
         const dLat = spreadPx * (360 / (256 * Math.pow(2, zoom)))
         group.forEach((dot, idx) => {
@@ -2353,7 +2320,6 @@ function CebuMap() {
   }, [municipalities])
 
   useEffect(() => {
-    // Copilot "clear conversation" also resets the map selection/highlights.
     function onClearMap() {
       setSelected(null)
       setHighlightEntity(null)
@@ -2398,10 +2364,6 @@ function CebuMap() {
     }
   }, [])
 
-  // Send the full canonical LGU name to the backend. The API normalizes
-  // "City of X" / "X City" and isolates projects by exact municipality, so
-  // stripping the " City" suffix here would broaden the query and leak dots
-  // from other LGUs (e.g. "Cebu City" -> "Cebu" matched the whole province).
   const queryName = selected ? selected.name : null
   const locProjects =
     queryName && locState.name === queryName ? locState.data : null
@@ -2510,11 +2472,6 @@ function CebuMap() {
       (a, b) => (b.budgetNum ?? 0) - (a.budgetNum ?? 0),
     )
 
-    // Group pins that overlap ON SCREEN at the current zoom (projects that are
-    // close, not only those at an identical coordinate). Each cluster renders
-    // as a single pin with a count badge; clicking it opens the group list.
-    // Pins are pre-sorted by budget desc, so the cluster anchor/representative
-    // is the most prominent project in that cluster.
     const clusters = clusterByProximity(
       sorted,
       zoom,
@@ -2579,7 +2536,6 @@ function CebuMap() {
         {municipalities?.features.map((feature) => (
           <Marker
             key={feature.properties.name}
-            // GeoJSON is [lng, lat]; Leaflet markers expect [lat, lng].
             position={[feature.properties.label[1], feature.properties.label[0]]}
             icon={labelIcon(feature.properties.name)}
             interactive={false}
@@ -2590,8 +2546,6 @@ function CebuMap() {
         <div className="map-controls-overlay absolute right-3 top-3 z-[1000]">
           <MapControls />
         </div>
-        {/* Legend: bottom-center on phones (Ask-AI pill sits just above it);
-            top-right (left of the zoom controls) on sm+ — same desktop layout. */}
         <div className="map-controls-overlay absolute inset-x-0 bottom-3 z-[1000] flex justify-center px-3 sm:inset-x-auto sm:bottom-auto sm:right-14 sm:top-3 sm:justify-end">
           <MapLegend />
         </div>
@@ -2606,7 +2560,6 @@ function CebuMap() {
         <ZoomWatcher onZoom={onZoom} />
         <BarangayLayer target={selected} visible={showDetail} zoom={zoom} />
         
-        {/* Synchronized AI Copilot Spatial Dots */}
         {isSpatialActive
           ? displaySpatialDots.map((dot) => {
               const isHighlighted = highlightedProjectId === dot.id

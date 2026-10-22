@@ -238,12 +238,28 @@ browser never handles raw tokens. The web client calls these with
 | `GET`  | `/api/auth/session` | Current user (`{ user }` or `{ user: null }`); auto-refreshes an expired token |
 | `POST` | `/api/auth/signin` | Email/password sign-in; opens the session cookie |
 | `POST` | `/api/auth/signup` | Email/password registration (honors Supabase email-confirmation) |
+| `POST` | `/api/auth/resend` | Re-send the confirmation e-mail; surfaces Supabase's delivery error |
 | `POST` | `/api/auth/signout` | Revoke the session and clear the cookie |
 
 **Setup:** add `SUPABASE_ANON_KEY` (and keep `SUPABASE_URL`) to the backend
 `.env`, and set `FRONTEND_URL` to your web origin so credentialed cookies and
 the default OAuth redirect work. For a cross-site frontend over HTTPS, set
 `AUTH_COOKIE_SECURE=true` and `AUTH_COOKIE_SAMESITE=none`.
+
+The `redirect` query on `/api/auth/oauth/{provider}` and the `redirect` field on
+`/api/auth/signup` are validated against `FRONTEND_URL` + `CORS_ORIGINS` (plus
+local dev origins), so a bad origin fails loudly instead of silently bouncing
+users elsewhere. Every origin you serve the web app from must **also** be in
+Supabase Dashboard → Authentication → URL Configuration → **Redirect URLs**,
+otherwise Supabase silently redirects back to the project Site URL:
+
+    http://localhost:5173/**            # local dev (Vite)
+    https://projecttrack.pages.dev/**   # production
+
+Registration e-mails are sent by Supabase, so configure a custom SMTP provider
+under Authentication → Email: the built-in mailer only delivers to the
+organization's team members (2 per hour), so external addresses never receive
+the confirmation link.
 
 **Protecting a route (for teammates):**
 ```python

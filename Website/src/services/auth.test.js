@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { completeOAuthCallback, getSession, signInWithEmail } from './auth'
+import {
+  completeOAuthCallback,
+  getSession,
+  resendConfirmationEmail,
+  signInWithEmail,
+  signUpWithEmail,
+} from './auth'
 
 describe('auth service (backend proxy)', () => {
   beforeEach(() => {
@@ -58,6 +64,48 @@ describe('auth service (backend proxy)', () => {
     await expect(
       signInWithEmail('a@b.c', 'wrong-password'),
     ).rejects.toThrow('Invalid login credentials.')
+  })
+
+  it('signUpWithEmail sends the current origin as the confirmation redirect', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ user: null, message: 'check your email' }),
+    })
+    await signUpWithEmail('a@b.c', 'correct-horse')
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain('/api/auth/signup')
+    expect(JSON.parse(options.body)).toEqual({
+      email: 'a@b.c',
+      password: 'correct-horse',
+      redirect: window.location.origin,
+    })
+  })
+
+  it('resendConfirmationEmail asks the backend to re-send the link', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: 'sent again' }),
+    })
+    const result = await resendConfirmationEmail('a@b.c')
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain('/api/auth/resend')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body)).toEqual({
+      email: 'a@b.c',
+      redirect: window.location.origin,
+    })
+    expect(result).toEqual({ message: 'sent again' })
+  })
+
+  it('resendConfirmationEmail surfaces the Supabase delivery error', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ detail: 'Email rate limit exceeded' }),
+    })
+    await expect(resendConfirmationEmail('a@b.c')).rejects.toThrow(
+      'Email rate limit exceeded',
+    )
   })
 
   it('fails with a generic message when the backend returns a non-string detail', async () => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
+import { api } from '../../services/api';
+
+// Safely import expo-web-browser for in-app pop-up auth session
+let WebBrowser: any = null;
+try {
+  WebBrowser = require('expo-web-browser');
+  WebBrowser?.maybeCompleteAuthSession?.();
+} catch {
+  // Gracefully fallback to Linking if not installed
+}
 
 interface SignInScreenProps {
   onSuccess: (user: { email: string; role?: string }) => void;
@@ -26,21 +38,131 @@ export default function SignInScreen({
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  const handleSocialSignIn = (provider: string) => {
-    setStatusMessage(`Redirecting to ${provider}…`);
+  // Helper to process OAuth callback tokens from URL
+  const processOAuthUrl = async (url: string) => {
+    if (!url || !url.includes('auth/callback')) return;
+
+    setStatusMessage('Verifying authentication…');
+    setErrorMessage(null);
+
+    try {
+      const fragment = url.includes('#') ? url.split('#')[1] : '';
+      const query = url.includes('?') ? url.split('?')[1].split('#')[0] : '';
+      const params = new URLSearchParams(fragment || query);
+
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token') || undefined;
+
+      if (!accessToken) {
+        const errorDesc =
+          params.get('error_description') ||
+          params.get('error') ||
+          'Google sign-in was canceled or failed.';
+        setErrorMessage(decodeURIComponent(errorDesc.replace(/\+/g, ' ')));
+        setStatusMessage(null);
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      const { user, error } = await api.exchangeOAuthCallback(accessToken, refreshToken);
+      if (error || !user) {
+        setErrorMessage(error || 'Failed to complete Google login.');
+        setStatusMessage(null);
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      setStatusMessage('Success! Logging you in…');
+      onSuccess(user);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error processing authentication callback.');
+      setStatusMessage(null);
+      setIsGoogleLoading(false);
+    }
   };
 
-  const handleSignIn = () => {
+  // Deep-link listener safety net
+  useEffect(() => {
+    const handleDeepLink = (event: { url: string }) => {
+      processOAuthUrl(event.url);
+    };
+
+    Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl) {
+        processOAuthUrl(initialUrl);
+      }
+    });
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    return () => {
+      subscription.remove();
+    };
+  }, [onSuccess]);
+
+  // In-app Google pop-up sign-in
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    setErrorMessage(null);
+    setStatusMessage('Opening Google Sign-In…');
+
+    try {
+      const redirectUri = 'projecttrack://auth/callback';
+      const { url, error } = await api.getOAuthUrl('google', redirectUri);
+
+      if (error || !url) {
+        setErrorMessage(error || 'Could not initiate Google login.');
+        setStatusMessage(null);
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      // Check if in-app WebBrowser is available for smooth modal popup
+      if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
+        const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+        if (result.type === 'success' && result.url) {
+          await processOAuthUrl(result.url);
+        } else if (result.type === 'cancel' || result.type === 'dismiss') {
+          setIsGoogleLoading(false);
+          setStatusMessage(null);
+        }
+      } else {
+        // Fallback to Linking
+        await Linking.openURL(url);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to open Google authentication.');
+      setStatusMessage(null);
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) {
       setErrorMessage('Please enter your email and password.');
       return;
     }
 
+    setIsSubmitting(true);
     setErrorMessage(null);
-    onSuccess({
-      email: email.trim(),
-    });
+    setStatusMessage(null);
+
+    try {
+      const { user, error } = await api.signIn(email.trim(), password);
+      setIsSubmitting(false);
+
+      if (error || !user) {
+        setErrorMessage(error || 'Invalid email or password.');
+        return;
+      }
+
+      onSuccess(user);
+    } catch {
+      setIsSubmitting(false);
+      setErrorMessage('Network error: Unable to connect to server.');
+    }
   };
 
   return (
@@ -70,32 +192,28 @@ export default function SignInScreen({
             </View>
             <Text style={styles.brandTitle}>Sign in</Text>
             <Text style={styles.brandSubtitle}>
-              Access ProjectTRACK with your Facebook or Google account, or with
-              your email and password.
+              Access ProjectTRACK with your Google account, or with your email and password.
             </Text>
           </View>
 
           {/* Form Card */}
           <View style={styles.card}>
-            {/* Social Logins */}
+            {/* Google In-App Social Login */}
             <TouchableOpacity
               style={styles.socialBtn}
-              onPress={() => handleSocialSignIn('Google')}
+              onPress={handleGoogleSignIn}
               activeOpacity={0.8}
+              disabled={isGoogleLoading || isSubmitting}
               testID="google-signin-btn"
             >
-              <Text style={styles.socialIcon}>G</Text>
-              <Text style={styles.socialBtnText}>Continue with Google</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.socialBtn}
-              onPress={() => handleSocialSignIn('Facebook')}
-              activeOpacity={0.8}
-              testID="facebook-signin-btn"
-            >
-              <Text style={styles.socialIcon}>f</Text>
-              <Text style={styles.socialBtnText}>Continue with Facebook</Text>
+              {isGoogleLoading ? (
+                <ActivityIndicator size="small" color="#1f3d3c" />
+              ) : (
+                <>
+                  <Text style={styles.socialIcon}>G</Text>
+                  <Text style={styles.socialBtnText}>Continue with Google</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={styles.dividerRow}>
@@ -117,6 +235,7 @@ export default function SignInScreen({
               }}
               autoCapitalize="none"
               keyboardType="email-address"
+              editable={!isSubmitting}
               testID="signin-email-input"
             />
 
@@ -132,6 +251,7 @@ export default function SignInScreen({
                 if (errorMessage) setErrorMessage(null);
               }}
               secureTextEntry={true}
+              editable={!isSubmitting}
               testID="signin-password-input"
             />
 
@@ -151,12 +271,17 @@ export default function SignInScreen({
 
             {/* Submit Button */}
             <TouchableOpacity
-              style={styles.submitButton}
+              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
               onPress={handleSignIn}
               activeOpacity={0.8}
+              disabled={isSubmitting || isGoogleLoading}
               testID="submit-signin-btn"
             >
-              <Text style={styles.submitButtonText}>Sign in with email</Text>
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Sign in with email</Text>
+              )}
             </TouchableOpacity>
 
             {/* Switch to Sign Up */}
@@ -267,6 +392,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: 10,
     gap: 8,
+    minHeight: 46,
   },
   socialIcon: {
     fontSize: 16,
@@ -341,6 +467,11 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     alignItems: 'center',
     marginTop: 16,
+    minHeight: 46,
+    justifyContent: 'center',
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonText: {
     color: '#ffffff',

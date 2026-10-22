@@ -53,7 +53,7 @@ flowchart TD
         Anonymizer["PII Scrubbing & EXIF Stripping"]
         
         L4 <--> Neo4j
-        L5 --> LLM["Xiaomi MiMo-V2-Flash"]
+        L5 --> LLM["Configurable LLM Provider"]
         Pydantic --> ELA
         ELA --> Anonymizer
     end
@@ -86,7 +86,7 @@ To prevent LLM jailbreaking, prompt injection, persona manipulation, and off-top
 * Direct string concatenation or raw string formatting (`f"MATCH (p:Project {id: '{user_input}'})"`) is strictly prohibited in the codebase, preventing Cypher injection attacks equivalent to SQL injection.
 
 ### Layer 5: Fact-Grounded Synthesis and Hallucination Suppression
-* When `mode: "ai"` is active, the prompt delivered to `XiaomiMiMo/MiMo-V2-Flash` is strictly enclosed in isolated system delimiters.
+* When `mode: "ai"` is active, the prompt delivered to the configured LLM (provider set server-side and never surfaced in the UI) is strictly enclosed in isolated system delimiters.
 * The model is instructed under strict zero-shot constraints:
   ```text
   You are an infrastructure auditor assistant for DPWH Cebu civil works.

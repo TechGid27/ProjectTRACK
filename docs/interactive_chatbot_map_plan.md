@@ -7,7 +7,7 @@ Transform the DPWH Cebu Knowledge Graph AI into an **Interactive Spatial Copilot
 3. **Dynamically render interactive project dots** on the map with status-coded colors and pulsing animations.
 4. **Provide a Density Filter Toggle** on the map: Default to **Top 50 (Fast & Clean)** with a seamless one-click option to **Show All Projects** (e.g., all 195 projects in Toledo).
 5. **Display an Interactive Map Legend** overlay showing status color codes (Emerald = Completed, Pulsing Amber = Ongoing, Cyan = Bidding/Planning).
-6. **Stream grounded AI engineering insights** in real time via Groq into a modern **Floating Copilot Card** overlaid on the map.
+6. **Stream grounded AI engineering insights** in real time (via the server-configured LLM provider) into a modern **Floating Assistant Card** ("ProjectTrack Watchdog") overlaid on the map.
 
 ---
 
@@ -89,14 +89,15 @@ flowchart TD
 
 #### [NEW] [`ChatCopilot.jsx`](file:///C:/Users/User/VSCode_Programming/track/ProjectTRACK/Website/src/features/chat/ChatCopilot.jsx)
 - **Floating Glassmorphic Card** positioned in the bottom-right corner over the map:
-  - Header: `ProjectTRACK Copilot` with active status badge (`Groq LPU Active`), Minimize/Expand button, and Clear Chat.
-  - Collapsed State: Sleek floating pill button: `✦ Ask ProjectTRACK AI`.
+  - Header: `ProjectTrack Watchdog` with an `Online` status badge (no provider/vendor identifier surfaced), Minimize/Expand button, and Clear Chat.
+  - Collapsed State: Sleek floating pill button: `Ask ProjectTrack Watchdog`.
   - Message Stream: Real-time SSE token streaming, markdown formatting, and interactive Project ID chips (`24HN0012`) that highlight the dot on the map when clicked.
-  - Quick-Prompt Suggestion Pills:
-    - `📍 Projects in Cordova`
-    - `🏗️ Top projects in Mandaue`
-    - `💰 Flood mitigation in Cebu City`
-    - `🔍 Tell me about 24HH0043`
+  - Quick-Prompt Suggestion Pills (emoji-free for a professional tone):
+    - `Projects in Cordova`
+    - `Top projects in Mandaue`
+    - `Flood mitigation in Cebu City`
+    - `Most reported in Cebu`
+    - `Tell me about 24HH0043`
   - Input field with automatic focus, send button, and loading spinner.
 
 #### [NEW] [`MapContext.jsx`](file:///C:/Users/User/VSCode_Programming/track/ProjectTRACK/Website/src/features/map/MapContext.jsx)

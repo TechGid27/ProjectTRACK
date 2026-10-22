@@ -102,7 +102,7 @@ Bypasses LLM generation entirely for instant `<10ms` response times. Ideal for m
 ```json
 {
   "answer": "Project 24HH0043: Construction (Completion) of Multi-Purpose Building, Barangay Mabolo, Cebu City\nContractor: ZL2 BUILDERS\nBudget: ₱ 4,950,000.00\nLocation: Barangay Mabolo, Cebu City",
-  "graph_context": "Project: DPWH Project 24HH0043\nCategory: Buildings and Other Structures\nLocation: Barangay Mabolo, Cebu City\nScope Description: Construction (Completion) of Multi-Purpose Building, Barangay Mabolo, Cebu City\nContractor: ZL2 BUILDERS\nBudget: ₱ 4,950,000.00\nStatus: Completed",
+  "graph_context": "Project: DPWH Project 24HH0043\nCategory: Buildings and Other Structures\nLocation: Barangay Mabolo, Cebu City\nScope Description: Construction (Completion) of Multi-Purpose Building, Barangay Mabolo, Cebu City\nContractor: ZL2 BUILDERS\nImplementing Office: Cebu City DEO\nBudget: ₱ 4,950,000.00\nTimeline: 2024-03-01 to 2024-12-15\nStatus: Completed",
   "project_card": {
     "id": "24HH0043",
     "description": "Construction (Completion) of Multi-Purpose Building, Barangay Mabolo, Cebu City",

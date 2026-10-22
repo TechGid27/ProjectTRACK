@@ -35,7 +35,7 @@ flowchart TD
         API["REST & SSE Endpoints"]
         Guardrails["5-Layer Domain Guardrails"]
         GraphEngine["Cypher Traversal Engine\n(Sub-20ms Query Execution)"]
-        LLMService["GraphRAG Engine\n(Xiaomi MiMo-V2-Flash / Ollama)"]
+        LLMService["GraphRAG Engine\n(Configurable LLM / local Ollama)"]
         ForensicsEngine["Image Forensics Engine\n(ELA & EXIF Geofence Audit)"]
         
         API <--> Guardrails
@@ -141,7 +141,7 @@ sequenceDiagram
     participant API as FastAPI Backend
     participant Guard as 5-Layer Guardrails
     participant Graph as Neo4j Cypher Engine
-    participant LLM as Xiaomi MiMo-V2-Flash
+    participant LLM as Configurable LLM Provider
     
     User->>Web: "What flood control projects exist in Bogo City?"
     Web->>API: POST /api/chat {message, mode: "ai"}
@@ -159,7 +159,7 @@ sequenceDiagram
             API-->>Web: Subgraph Summary & Cards (<10ms)
         else mode == "ai"
             API->>LLM: Prompt Context + Graph Subgraph + Strict System Grounding
-            LLM-->>API: Synthesized Domain-Grounded Response
+            LLM-->>API: Grounded answer framed as WHAT/WHERE/WHO/WHEN/WHY/HOW
             API-->>Web: Formatted Response with Citations & Project Cards
         end
     end
@@ -179,7 +179,7 @@ To prevent hallucination, jailbreaks, and resource exhaustion on third-party LLM
 4. **Layer 4: Parametric Subgraph Extraction**:
    Translates recognized entities into parameterized, safe Cypher queries to eliminate Cypher injection risks.
 5. **Layer 5: Fact-Grounded Synthesis Validation**:
-   Enforces strict context boundaries in LLM prompts (`XiaomiMiMo/MiMo-V2-Flash`), mandating that the model answer solely from graph data and return a refusal if facts are absent.
+   Enforces strict context boundaries in the LLM prompt (provider-agnostic; the vendor is configured server-side and never surfaced in the UI), mandating that the model answer solely from the retrieved graph data — organized around the project's WHAT / WHERE / WHO / WHEN / WHY / HOW — and return a refusal if the facts are absent. The model must not substitute or embellish with outside/real-world knowledge about named landmarks.
 
 ---
 

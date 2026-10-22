@@ -146,6 +146,28 @@ describe('api service', () => {
     expect(options.body.get('category')).toBe('ghost_project')
   })
 
+  it('surfaces FastAPI validation (array) detail messages', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        detail: [
+          {
+            loc: ['body', 'description'],
+            msg: 'String should have at least 10 characters',
+            type: 'string_too_short',
+          },
+        ],
+      }),
+    })
+    await expect(
+      submitAnomalyReport({
+        projectId: '24HH0043',
+        description: 'too short',
+      }),
+    ).rejects.toThrow(/description: String should have at least 10 characters/)
+  })
+
   it('submitAnomalyReport surfaces a 429 rate-limit error', async () => {
     fetch.mockResolvedValue({
       ok: false,

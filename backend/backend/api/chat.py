@@ -285,6 +285,26 @@ async def _flagged_counts() -> Dict[str, int]:
         return {}
 
 
+async def _all_report_counts() -> Dict[str, int]:
+    """Fetch per-project total report counts from Supabase, degrading to {}.
+
+    This is the same store that backs the map's Report Verification legend, so
+    the chat's "most reported" ranking stays consistent with what the user sees
+    on the map (and with the reports they actually submitted).
+    """
+    try:
+        return await report_store.report_counts_by_project(status=None)
+    except ReportStoreError:
+        return {}
+    except Exception:  # pragma: no cover - defensive
+        return {}
+
+
+def _counts_for_reports_intent(intent: str):
+    """Return the Supabase count map matching a reports superlative intent."""
+    return _flagged_counts() if intent == "most_flagged" else _all_report_counts()
+
+
 async def resolve_project_context(
     question: str,
     history: List[Any]
@@ -383,7 +403,9 @@ async def resolve_project_context(
             f"Location: {clean_location(targeted_project.get('location'))}\n"
             f"Scope Description: {clean_description(targeted_project.get('description'))}\n"
             f"Contractor: {targeted_project.get('contractor', 'N/A')}\n"
+            f"Implementing Office: {targeted_project.get('office', 'N/A')}\n"
             f"Budget: {targeted_project.get('budget', 'N/A')}\n"
+            f"Timeline: {targeted_project.get('timeline', 'N/A')}\n"
             f"Status: {targeted_project.get('status', 'Completed')}"
         )
         if targeted_project.get("latitude") and targeted_project.get("longitude"):
@@ -433,13 +455,47 @@ async def resolve_project_context(
     # ("most reported in Toledo") falls through to the location path below.
     reports_intent = _detect_single_project_intent(question)
     if reports_intent in ("most_reported", "most_flagged") and not detected_muni:
-        status_filter = _reports_status_for_intent(reports_intent)
-        top = neo4j_service.get_top_reported_projects(
-            municipality=None, status=status_filter, limit=1
-        )
-        if top:
-            chosen = top[0]
-            rcount = int(chosen.get("report_count") or 0)
+        # Rank province-wide from the SAME Supabase store that backs the map's
+        # Report Verification legend, so the chat's "most reported" matches the
+        # map and the reports the user actually submitted. Fall back to the
+        # graph-maintained counter only if the store is unreachable.
+        counts = await _counts_for_reports_intent(reports_intent)
+        chosen = None
+        rcount = 0
+        if counts:
+            top_pid, top_n = max(counts.items(), key=lambda kv: kv[1])
+            if top_n > 0:
+                focus_project = neo4j_service.get_project_by_id(top_pid.upper())
+                if focus_project and focus_project.get("latitude") and focus_project.get("longitude"):
+                    chosen = {
+                        "entity": focus_project["id"],
+                        "id": focus_project["id"],
+                        "latitude": focus_project.get("latitude"),
+                        "longitude": focus_project.get("longitude"),
+                        "municipality": focus_project.get("municipality"),
+                        "barangay": focus_project.get("barangay"),
+                        "formatted_address": focus_project.get("formatted_address"),
+                        "description": focus_project.get("description"),
+                        "category": focus_project.get("category"),
+                        "status": focus_project.get("status"),
+                        "budget": focus_project.get("budget"),
+                        "budget_num": focus_project.get("budget_numeric"),
+                        "contractor": focus_project.get("contractor"),
+                    }
+                    rcount = int(top_n)
+
+        if chosen is None:
+            # Store unreachable or no Supabase reports — fall back to the
+            # graph-maintained counter.
+            status_filter = _reports_status_for_intent(reports_intent)
+            top = neo4j_service.get_top_reported_projects(
+                municipality=None, status=status_filter, limit=1
+            )
+            if top:
+                chosen = top[0]
+                rcount = int(chosen.get("report_count") or 0)
+
+        if chosen and rcount > 0:
             graph_context, spatial_context = _build_report_focus(
                 chosen, "Cebu Province", rcount
             )
@@ -513,8 +569,13 @@ async def resolve_project_context(
             # flagged counts from Supabase; plain "most reported" uses each
             # row's graph-maintained report_count. Other intents ignore counts.
             report_counts = None
-            if single_intent == "most_flagged":
-                report_counts = await _flagged_counts()
+            # Reports superlatives ("most reported" / "most flagged" in <LGU>)
+            # rank from the SAME Supabase store that backs the map's Report
+            # Verification legend, so the chat agrees with the map and reflects
+            # the reports the user actually filed. Other intents ignore counts.
+            report_counts = None
+            if single_intent in ("most_reported", "most_flagged"):
+                report_counts = await _counts_for_reports_intent(single_intent)
 
             chosen = _select_project_for_intent(
                 single_intent, loc_projects, last_pid, report_counts=report_counts
@@ -824,7 +885,7 @@ async def chat_endpoint(request: ChatRequest):
         is_single_project=bool(targeted_project)
     )
 
-    answer = await llm_service.generate_response(messages=messages, max_tokens=150)
+    answer = await llm_service.generate_response(messages=messages, max_tokens=320)
     duration = (time.perf_counter() - start_time) * 1000
 
     return ChatResponse(
@@ -913,7 +974,7 @@ async def chat_stream_endpoint(request: ChatRequest):
             is_single_project=bool(targeted_project)
         )
 
-        async for chunk in llm_service.stream_tokens(messages=messages, max_tokens=150):
+        async for chunk in llm_service.stream_tokens(messages=messages, max_tokens=320):
             yield f"event: token\ndata: {json.dumps({'token': chunk})}\n\n"
 
         duration = (time.perf_counter() - start_time) * 1000

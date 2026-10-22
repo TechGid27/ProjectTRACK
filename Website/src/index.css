@@ -29,6 +29,55 @@
   --accent-a10: #0086f0fa;
   --accent-a11: #006dcbf2;
   --accent-a12: #002359ee;
+
+  /* App chrome surfaces — re-themed in dark mode below. */
+  --app-bg: #ffffff;
+  --app-surface: #ffffff;
+  --app-surface-alpha: rgba(255, 255, 255, 0.85);
+}
+
+/* Dark theme — Radix Themes' dark gray alpha ramp (white-based alphas layered
+   over a dark page background). Keyed off the `data-theme="dark"` attribute set
+   by services/theme.js. Only app chrome re-themes; the map legend, chat panel,
+   and project modal keep their dark glass styling in both themes. */
+:root[data-theme='dark'] {
+  --gray-a1: #ffffff00;
+  --gray-a2: #ffffff03;
+  --gray-a3: #ffffff12;
+  --gray-a4: #ffffff1b;
+  --gray-a5: #ffffff22;
+  --gray-a6: #ffffff2c;
+  --gray-a7: #ffffff3b;
+  --gray-a8: #ffffff55;
+  --gray-a9: #ffffff64;
+  --gray-a10: #ffffff72;
+  --gray-a11: #ffffffaf;
+  --gray-a12: #ffffffed;
+
+  --accent-a1: #0012fb03;
+  --accent-a2: #1156f70d;
+  --accent-a3: #2b6efd27;
+  --accent-a4: #3573fb3b;
+  --accent-a5: #3f7bfd49;
+  --accent-a6: #4a85ff58;
+  --accent-a7: #528bff70;
+  --accent-a8: #5791ff95;
+  --accent-a9: #3b82f6;
+  --accent-a10: #2c73f0;
+  --accent-a11: #70a8ff;
+  --accent-a12: #c2d6ff;
+
+  --app-bg: #0c1418;
+  --app-surface: #111c21;
+  --app-surface-alpha: rgba(17, 28, 33, 0.85);
+
+  color-scheme: dark;
+}
+
+/* Page background follows the active theme. */
+html,
+body {
+  background: var(--app-bg);
 }
 
 @theme inline {

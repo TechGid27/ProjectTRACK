@@ -3,11 +3,11 @@ import { streamChatMessage } from '../../services/api'
 import { useMapContext } from '../map/MapContext'
 
 const QUICK_PROMPTS = [
-  { label: '📍 Projects in Cordova', query: 'What are the projects in Cordova?' },
-  { label: '🏗️ Top projects in Mandaue', query: 'Show top infrastructure projects in Mandaue City' },
-  { label: '💰 Flood mitigation in Cebu City', query: 'What are the flood control projects in Cebu City?' },
-  { label: '📣 Most reported in Cebu', query: 'Which project is the most reported in Cebu?' },
-  { label: '🔍 Tell me about 24HH0043', query: 'Tell me about project 24HH0043' },
+  { label: 'Projects in Cordova', query: 'What are the projects in Cordova?' },
+  { label: 'Top projects in Mandaue', query: 'Show top infrastructure projects in Mandaue City' },
+  { label: 'Flood mitigation in Cebu City', query: 'What are the flood control projects in Cebu City?' },
+  { label: 'Most reported in Cebu', query: 'Which project is the most reported in Cebu?' },
+  { label: 'Tell me about 24HH0043', query: 'Tell me about project 24HH0043' },
 ]
 
 const PROJECT_ID_REGEX = /\b(\d{2}[A-Za-z]{1,2}\d{4,5})\b/g
@@ -33,7 +33,6 @@ function renderTextWithProjectChips(text, onChipClick) {
         className="mx-0.5 inline-flex cursor-pointer items-center gap-1 rounded-md bg-teal-500/20 px-1.5 py-0.5 text-xs font-mono font-semibold text-teal-300 ring-1 ring-teal-400/40 transition hover:bg-teal-500/35 hover:text-white"
         title={`Focus project ${pid} on map`}
       >
-        <span>📍</span>
         <span>{pid}</span>
       </button>,
     )
@@ -209,30 +208,30 @@ export default function ChatCopilot() {
             <span className="relative h-1.5 w-1.5 rounded-full bg-teal-400 shadow-[0_0_6px_#2dd4bf]" />
           </span>
           <span className="bg-gradient-to-r from-teal-200 to-emerald-200 bg-clip-text text-transparent">
-            ✦ Ask ProjectTRACK AI
+            Ask ProjectTrack Watchdog
           </span>
         </button>
       ) : (
         <div
           role="dialog"
-          aria-label="ProjectTRACK AI Copilot"
+          aria-label="ProjectTrack Watchdog"
           aria-modal="false"
           className="flex h-[min(32.5rem,calc(100dvh-6.5rem))] w-[375px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-3xl border border-white/20 bg-black/85 shadow-2xl backdrop-blur-2xl transition sm:w-[410px]"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-3">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-7 w-7 place-items-center rounded-xl bg-teal-500/20 text-teal-300 ring-1 ring-teal-500/30">
-                ✦
+              <span className="grid h-7 w-7 place-items-center rounded-xl bg-teal-500/20 text-[11px] font-bold text-teal-300 ring-1 ring-teal-500/30">
+                PT
               </span>
               <div>
                 <h3 className="text-xs font-bold tracking-wide text-white">
-                  ProjectTRACK Copilot
+                  ProjectTrack Watchdog
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
                   <span className="text-[10px] font-medium text-white/60">
-                    Groq LPU Active · Neo4j
+                    Online
                   </span>
                 </div>
               </div>
@@ -251,7 +250,7 @@ export default function ChatCopilot() {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                title="Minimize Copilot"
+                title="Minimize assistant"
                 className="cursor-pointer rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

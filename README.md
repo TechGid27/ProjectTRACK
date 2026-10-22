@@ -155,7 +155,7 @@ ProjectTrack/
 │   ├── 06-roadmap.md
 │   └── 07-security.md
 ├── Website/                             <-- React 19 + Leaflet geospatial web platform
-├── mobile/                              <-- Planned React Native Expo field auditor app
+├── mobile/                              <-- React Native Expo field auditor app (live backend data)
 └── backend/                             <-- FastAPI, Neo4j GraphRAG, and scraping pipeline
 ```
 

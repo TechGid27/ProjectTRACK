@@ -1,8 +1,32 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import CebuVectorMap from '../src/ui/components/CebuVectorMap';
-import { pins } from '../src/data/pins';
+import { Pin } from '../src/core/types';
 import cebuData from '../src/assets/cebuMunicipalities.json';
+
+// Inline fixture (mock data files were removed in favor of live backend data).
+const pins: Pin[] = [
+  {
+    id: 'bogo',
+    name: 'Bogo City Central Hub',
+    lat: 11.054,
+    lng: 124.006,
+    tone: 'default',
+    report_count: 0,
+    is_hotspot: false,
+    lgu: 'Bogo City',
+    description: 'Northern Cebu civil works and flood mitigation.',
+  },
+  {
+    id: 'cebu-city',
+    name: 'Cebu City Urban Drainage',
+    lat: 10.3157,
+    lng: 123.8854,
+    tone: 'accent',
+    lgu: 'Cebu City',
+    description: 'Lahug river flood control and farm-to-market roads.',
+  },
+];
 
 describe('CebuVectorMap Component', () => {
   const mockOnSelectMunicipality = jest.fn();
@@ -170,6 +194,28 @@ describe('CebuVectorMap Component', () => {
     fireEvent.press(resetBtn);
 
     // Badge should be hidden after reset back to 1.0x
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+  });
+
+  test('zoom controls re-rasterize via committed zoom state (crisp, not raster scale)', () => {
+    const { getByTestId, queryByTestId } = render(
+      <CebuVectorMap
+        width={360}
+        height={480}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    // The crisp vector canvas is rendered (viewBox-driven, no Animated raster layer).
+    expect(getByTestId('map-svg-canvas')).toBeTruthy();
+
+    // At 1.0x no badge; zooming in commits a new scale (drives the viewBox).
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+    fireEvent.press(getByTestId('zoom-in-btn'));
+    expect(getByTestId('zoom-level-badge')).toBeTruthy();
+
+    fireEvent.press(getByTestId('zoom-reset-btn'));
     expect(queryByTestId('zoom-level-badge')).toBeNull();
   });
 

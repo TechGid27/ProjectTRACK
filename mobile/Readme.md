@@ -10,7 +10,7 @@
 
 ## Overview
 
-The mobile client is the planned companion app for on-the-ground infrastructure monitoring. It enables field auditors and citizen volunteers to verify DPWH project progress with GPS-locked photo evidence, offline-capable data access, and a conversational assistant — all synced to the ProjectTrack backend.
+The mobile client is the companion app for on-the-ground infrastructure monitoring. It enables field auditors and citizen volunteers to verify DPWH project progress with GPS-locked photo evidence, live backend data, and a conversational assistant — all synced to the ProjectTrack backend. All data is live (no mock data); the UI renders loading, empty, and error states when the backend is unreachable.
 
 ### Capabilities
 
@@ -21,9 +21,11 @@ The mobile client is the planned companion app for on-the-ground infrastructure 
 | **Verification Badging** | Each submitted report surfaces its verdict — status, distance from site, forensics result, and reporter reputation — using the same schema as the web client. |
 | **Offline-First Architecture** | An in-memory outbox queues audits captured offline; `api.syncPendingAudits()` POSTs them to the backend when connectivity returns, marking each synced on success. |
 | **Conversational Field Assistant** | On-device access to the GraphRAG chat via SSE streaming for contextual project queries. |
-| **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. |
+| **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. Zoom and pan are driven by the SVG `viewBox`, so boundaries, labels, and pins re-rasterize crisply at every zoom level (no blur from raster magnification). |
+| **Live Backend Data (No Mock Data)** | All project, pin, contractor, summary, and chat data is fetched live from the backend. There is no bundled mock dataset — screens render explicit loading, empty, and error (retry) states when the backend is unreachable. |
+| **Brand Logo** | The ProjectTRACK logo is bundled as the app icon, splash image, and in-app header mark (`src/ui/components/Logo.tsx`). |
 | **Client-Side Input Sanitizer** | Strict client-side hardening in `sanitizer.ts` strips Cypher/SQL injection vectors, script tags, control codes, and null bytes before user inputs reach the network. |
-| **Dynamic Backend Integration** | Live REST & GraphRAG queries for map pins (`/api/projects/map`), municipality civil works (`/api/projects/by-location`), contractor leaderboards (`/api/analytics/top-contractors`), and top projects (`/api/analytics/top-projects`) with graceful offline fallbacks. |
+| **Dynamic Backend Integration** | Live REST & GraphRAG queries for map pins (`/api/projects/map`), municipality civil works (`/api/projects/by-location`), contractor leaderboards (`/api/analytics/top-contractors`), and top projects (`/api/analytics/top-projects`). Data is live-only: when a request fails the service returns empty results and the UI shows loading/empty/error states (no mock fallback). |
 | **Citizen Anomaly Hotspots** | Concentric red beacon markers highlight sites with multiple citizen-submitted field reports and anomalies, visible on the map and detailed in the project modal. |
 | **Contractor Project Drilldown** | Tapping any contractor displays their full civil works portfolio with one-touch `View on Map` navigation to zoom into the project site. |
 | **Maximized Viewport & Auto-Zoom** | Clean 3-item header (App Name, Search, Sign In) maximizes map viewport with automatic camera centering and zoom when an LGU is selected or queried. |
@@ -73,10 +75,15 @@ Key variables:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `API_BASE_URL` | `http://10.0.2.2:8000/api` | Backend gateway (`10.0.2.2` is the Android emulator's host alias) |
-| `GEOFENCE_RADIUS_METERS` | `100` | Required proximity to project coordinates for photo capture |
+| `EXPO_PUBLIC_API_URL` | `http://10.0.2.2:8000/api` | Backend gateway read by the app. Auto-defaults per platform (Android emulator `10.0.2.2`, web `<host>`, iOS `localhost`). Set explicitly to reach the backend **cross-origin** from a physical LAN device (`http://<LAN_IP>:8000/api`) or a deployed server. Only `EXPO_PUBLIC_`-prefixed vars reach the client bundle. |
+| `GEOFENCE_RADIUS_METERS` | `150` | Required proximity to project coordinates for photo capture |
 | `MAX_OFFLINE_QUEUE_ITEMS` | `500` | Maximum queued observations before forced sync |
 | `ENABLE_MOCK_GPS` | `false` | Set `true` only for emulator testing |
+
+> **Cross-origin:** the backend CORS policy already allows local/LAN origins
+> (`localhost`, `127.0.0.1`, `192.168.x.x`, `10.x.x.x`) plus `FRONTEND_URL`, so
+> pointing `EXPO_PUBLIC_API_URL` at your machine's LAN IP works without backend
+> changes for on-device testing.
 
 ---
 
@@ -102,14 +109,15 @@ Key variables:
 mobile/
 ├── App.tsx                  # Root component
 ├── src/
-│   ├── core/                # Shared types and geo utilities (Haversine, coordinate math)
-│   ├── data/                # Static data, mock API fixtures, FAQ entries
+│   ├── core/                # Shared types and geo utilities (Haversine, coordinate math, viewBox zoom)
+│   ├── data/                # Static UI content only (FAQ entries) — no mock data
 │   ├── services/            # API client, haptics service, offline outbox queue
 │   ├── ui/
-│   │   ├── components/      # Reusable UI components (BottomTabBar, MapHeader, etc.)
-│   │   └── screens/         # App screens (Home, Map, Contractors, Auth)
-│   └── assets/              # GeoJSON boundaries and static assets
-├── __tests__/               # Jest test suite (18 test files)
+│   │   ├── components/      # Reusable UI components (BottomTabBar, MapHeader, Logo, etc.)
+│   │   ├── screens/         # App screens (Home, Map, Contractors, Auth)
+│   │   └── theme.ts         # Shared sizing tokens (MIN_TOUCH = 44px touch targets)
+│   └── assets/              # GeoJSON boundaries, logo, and static assets
+├── __tests__/               # Jest test suite (28 test files)
 ├── app.json                 # Expo configuration
 ├── tsconfig.json            # TypeScript configuration
 ├── babel.config.js          # Babel configuration

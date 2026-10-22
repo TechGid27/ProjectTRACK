@@ -55,6 +55,18 @@ class Settings(BaseSettings):
     # Apify (Web Scraper)
     APIFY_TOKEN: Optional[str] = Field(default=None, description="Apify API Token")
 
+    # Passive Periodic Scraping (APScheduler)
+    # Keeps the deployed knowledge graph fresh by re-scraping DPWH/PhilGEPS on a
+    # recurring interval and syncing new records into Neo4j — with no manual
+    # trigger. Durable last-run state lives in Supabase (pipeline_schedule_state)
+    # so the quarterly clock survives restarts/redeploys.
+    PASSIVE_SCRAPE_ENABLED: bool = Field(default=False, description="Enable the background periodic scraper (set True in production)")
+    PASSIVE_SCRAPE_INTERVAL_DAYS: int = Field(default=90, ge=1, description="Days between passive scrape+sync runs (default ~3 months)")
+    PASSIVE_SCRAPE_MAX_ITEMS: int = Field(default=500, ge=1, le=5000, description="Max civil-works items to scrape per passive run")
+    PASSIVE_SCRAPE_SYNC_AFTER: bool = Field(default=True, description="Run the Supabase→Neo4j sync after each passive scrape")
+    PASSIVE_SCRAPE_RUN_ON_STARTUP: bool = Field(default=False, description="If overdue at boot, run once shortly after startup instead of waiting a full interval")
+    PASSIVE_SCRAPE_JOB_NAME: str = Field(default="passive_scrape", description="pipeline_schedule_state row key for durable last-run tracking")
+
     # LLM Configuration (Groq / OpenAI-compatible / Ollama API)
     LLM_BASE_URL: str = Field(default="https://api.groq.com/openai/v1", description="LLM Base URL (e.g. Groq or OpenAI-compatible endpoint)")
     LLM_NATIVE_OLLAMA_URL: str = Field(default="http://localhost:11434/api/chat", description="Ollama native endpoint (fallback)")

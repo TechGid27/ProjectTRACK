@@ -12,14 +12,22 @@ for any future direct-from-client access.
 | :--- | :--- |
 | `migrations/0001_reports_verification.sql` | `reports` + `user_reputation` tables, indexes, RLS |
 | `migrations/0002_storage_report_photos.sql` | `report-photos` Storage bucket + read policy |
+| `migrations/0003_pipeline_schedule_state.sql` | `pipeline_schedule_state` table — durable last-run state for the passive periodic scraper |
 
 ## Apply (SQL Editor — simplest)
 
 1. Open your project → **SQL Editor** → **New query**.
 2. Paste the contents of `0001_reports_verification.sql`, run it.
 3. Paste the contents of `0002_storage_report_photos.sql`, run it.
-4. Confirm under **Table Editor** that `reports` and `user_reputation` exist, and
-   under **Storage** that the `report-photos` bucket exists.
+4. Paste the contents of `0003_pipeline_schedule_state.sql`, run it.
+5. Confirm under **Table Editor** that `reports`, `user_reputation`, and
+   `pipeline_schedule_state` exist, and under **Storage** that the
+   `report-photos` bucket exists.
+
+> The `pipeline_schedule_state` table is **optional** — the passive scraper
+> (see the backend README) degrades gracefully and uses an in-memory clock if
+> it is absent. Apply 0003 to make the quarterly schedule survive restarts and
+> redeploys.
 
 ## Apply (Supabase CLI)
 
@@ -29,6 +37,7 @@ supabase db push          # if using the CLI migration workflow
 # — or apply each file directly —
 supabase db execute --file supabase/migrations/0001_reports_verification.sql
 supabase db execute --file supabase/migrations/0002_storage_report_photos.sql
+supabase db execute --file supabase/migrations/0003_pipeline_schedule_state.sql
 ```
 
 ## Required backend environment

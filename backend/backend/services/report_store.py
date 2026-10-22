@@ -136,6 +136,25 @@ class ReportStore:
             raise ReportStoreError(resp.status_code, self._extract_error(resp))
         return resp.json() if resp.content else []
 
+    async def summarize_reports(self, limit: int = 5000) -> List[Dict[str, Any]]:
+        """Return (project_id, status) rows for the map-wide verification legend.
+
+        Public/redacted: only the two columns needed to aggregate badge tones —
+        no descriptions, photos, reporter ids, or coordinates leave the store.
+        """
+        self._ensure_configured()
+        params = {"select": "project_id,status", "limit": str(limit)}
+        url = f"{self._rest_url}/{self.REPORTS_TABLE}"
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(url, headers=self._headers(), params=params)
+        except Exception as e:
+            logger.warning(f"summarize_reports transport error: {e}")
+            raise ReportStoreError(503, "Could not reach the report datastore.")
+        if resp.status_code >= 400:
+            raise ReportStoreError(resp.status_code, self._extract_error(resp))
+        return resp.json() if resp.content else []
+
     async def recent_report_count(self, user_id: str, since: datetime) -> int:
         """Count reports a user filed at/after ``since`` (Pillar 3 rate limit)."""
         self._ensure_configured()
@@ -164,6 +183,44 @@ class ReportStore:
         # Fallback: count the returned rows.
         body = resp.json() if resp.content else []
         return len(body) if isinstance(body, list) else 0
+
+    async def report_counts_by_project(
+        self, status: Optional[str] = None
+    ) -> Dict[str, int]:
+        """
+        Return a ``{project_id: report_count}`` map aggregated across all reports,
+        optionally restricted to a single verdict ``status`` (e.g. ``"flagged"``).
+
+        PostgREST group-by aggregation varies by deployment, so this fetches the
+        ``project_id`` column (with an optional ``status`` filter) and tallies
+        client-side — portable and index-friendly. Resilient by design: when the
+        datastore is unconfigured or the request fails it returns ``{}`` so the
+        caller can fall back to the graph-maintained ``report_count`` ranking.
+        """
+        if not self.is_configured():
+            return {}
+        params = {"select": "project_id"}
+        if status:
+            params["status"] = f"eq.{status}"
+        url = f"{self._rest_url}/{self.REPORTS_TABLE}"
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.get(url, headers=self._headers(), params=params)
+        except Exception as e:
+            logger.warning(f"report_counts_by_project transport error: {e}")
+            return {}
+        if resp.status_code >= 400:
+            logger.warning(
+                "report_counts_by_project failed: %s", self._extract_error(resp)
+            )
+            return {}
+        rows = resp.json() if resp.content else []
+        counts: Dict[str, int] = {}
+        for row in rows:
+            if isinstance(row, dict) and row.get("project_id"):
+                pid = str(row["project_id"])
+                counts[pid] = counts.get(pid, 0) + 1
+        return counts
 
     async def all_phashes(self) -> List[str]:
         """Return all non-null perceptual hashes from prior reports (Pillar 2)."""

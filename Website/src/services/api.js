@@ -104,8 +104,11 @@ export async function submitAnomalyReport({
   if (category) formData.append('category', category)
   // Browser geolocation is lower-trust than mobile hardware GPS; the backend
   // re-validates the ≤150m geofence against the project's DPWH coordinates.
-  if (typeof latitude === 'number') formData.append('latitude', String(latitude))
-  if (typeof longitude === 'number') formData.append('longitude', String(longitude))
+  // Partial fixes (one coordinate only) are omitted — both are required.
+  if (latitude != null && longitude != null) {
+    formData.append('latitude', String(latitude))
+    formData.append('longitude', String(longitude))
+  }
   if (picture) formData.append('picture', picture)
 
   return request('/reports', {
@@ -116,6 +119,10 @@ export async function submitAnomalyReport({
 
 export function fetchProjectReports(projectId) {
   return request(`/reports/${encodeURIComponent(projectId)}`)
+}
+
+export function fetchReportSummaries() {
+  return request('/reports/summaries')
 }
 
 export async function postChatMessage({
@@ -135,6 +142,7 @@ export async function streamChatMessage({
   mode = 'ai',
   history = [],
   onEvent,
+  signal,
 }) {
   const res = await fetch(`${BASE_URL}/api/chat/stream`, {
     method: 'POST',
@@ -144,6 +152,7 @@ export async function streamChatMessage({
       Accept: 'text/event-stream',
     },
     body: JSON.stringify({ message, mode, history }),
+    signal,
   })
   if (res.status === 404 || res.status === 501) {
     const data = await postChatMessage({ message, mode, history }).catch(

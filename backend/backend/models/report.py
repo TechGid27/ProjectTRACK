@@ -64,6 +64,21 @@ class ReportListResponse(BaseModel):
     reports: List[ReportRecord] = Field(default_factory=list)
 
 
+class ProjectReportSummary(BaseModel):
+    """Aggregated verification counts for one project (map legend filters)."""
+    project_id: str
+    on_site: int = Field(0, description="Reports with status=verified (On-Site Verified)")
+    flagged: int = Field(0, description="Reports with status pending|flagged|rejected (Photo Flagged)")
+    unverified: int = Field(0, description="Reports with any other/missing status (Unverified)")
+    total: int = Field(0, description="Total reports for the project")
+
+
+class ReportSummariesResponse(BaseModel):
+    """Retrieval payload for GET /api/reports/summaries (map-wide, redacted)."""
+    count: int = Field(..., description="Number of projects with at least one report")
+    summaries: List[ProjectReportSummary] = Field(default_factory=list)
+
+
 class ReputationRecord(BaseModel):
     """A reporter's accumulated reputation (Pillar 3)."""
     user_id: str

@@ -11,6 +11,8 @@ export function MapProvider({ children }) {
   const [totalLocationProjects, setTotalLocationProjects] = useState(0)
   const [displayMode, setDisplayMode] = useState('top50')
   const [activeStatusFilter, setStatusFilter] = useState('all')
+  // Map legend verification filter: 'all' | 'verified' | 'flagged' | 'unverified'
+  const [activeVerificationFilter, setVerificationFilter] = useState('all')
   const [highlightedProjectId, setHighlightedProjectId] = useState(null)
   const [selectedProject, setSelectedProject] = useState(null)
   const [loadingAll, setLoadingAll] = useState(false)
@@ -30,6 +32,7 @@ export function MapProvider({ children }) {
     setTotalLocationProjects(totalCount)
     setDisplayMode('top50')
     setStatusFilter('all')
+    setVerificationFilter('all')
 
     // When the chat narrows to a single project, highlight its pin so the
     // zoomed-in map clearly marks the one the user is asking about.
@@ -71,6 +74,7 @@ export function MapProvider({ children }) {
     setTotalLocationProjects(0)
     setDisplayMode('top50')
     setStatusFilter('all')
+    setVerificationFilter('all')
     setHighlightedProjectId(null)
   }, [])
 
@@ -91,6 +95,7 @@ export function MapProvider({ children }) {
         latitude: p.latitude,
         longitude: p.longitude,
         formatted_address: p.formatted_address || p.municipality,
+        report_count: p.report_count ?? null,
       }))
       setProjectDots(mapped)
       setDisplayMode('all')
@@ -143,6 +148,7 @@ export function MapProvider({ children }) {
       totalLocationProjects,
       displayMode,
       activeStatusFilter,
+      activeVerificationFilter,
       highlightedProjectId,
       selectedProject,
       loadingAll,
@@ -154,6 +160,7 @@ export function MapProvider({ children }) {
       highlightProject,
       flyToCoords,
       setStatusFilter,
+      setVerificationFilter,
       setHighlightedProjectId,
       setSelectedProject,
     }),
@@ -165,6 +172,7 @@ export function MapProvider({ children }) {
       totalLocationProjects,
       displayMode,
       activeStatusFilter,
+      activeVerificationFilter,
       highlightedProjectId,
       selectedProject,
       loadingAll,
@@ -193,6 +201,7 @@ export function useMapContext() {
       totalLocationProjects: 0,
       displayMode: 'top50',
       activeStatusFilter: 'all',
+      activeVerificationFilter: 'all',
       highlightedProjectId: null,
       selectedProject: null,
       loadingAll: false,
@@ -204,6 +213,7 @@ export function useMapContext() {
       highlightProject: () => {},
       flyToCoords: () => {},
       setStatusFilter: () => {},
+      setVerificationFilter: () => {},
       setHighlightedProjectId: () => {},
       setSelectedProject: () => {},
     }

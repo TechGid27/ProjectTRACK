@@ -16,7 +16,6 @@ import ProjectDetailModal from '../components/ProjectDetailModal';
 import ReportAnomalyModal from '../components/ReportAnomalyModal';
 import AboutMapModal from '../components/AboutMapModal';
 import ChatBotModal from '../components/ChatBotModal';
-import FieldAuditorModal from '../components/FieldAuditorModal';
 import { pins, initialPins } from '../../data/pins';
 import {
   mockProjects,

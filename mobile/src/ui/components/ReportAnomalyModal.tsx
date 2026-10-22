@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { ProjectDetail, AnomalyCategory, AnomalyReport, ReportVerification } from '../../core/types';
-import { sanitizeReportDescription, sanitizeSearchQuery } from '../../core/sanitizer';
+import { sanitizeReportDescription } from '../../core/sanitizer';
 import { checkGeofenceProximity } from '../../core/geoUtils';
 import { outbox, QueuedAudit } from '../../services/outbox';
 import { haptics } from '../../services/haptics';

@@ -1,5 +1,5 @@
 import React from 'react';
-import ReportAnomalyModal, { ReportAnomalyModalProps } from './ReportAnomalyModal';
+import ReportAnomalyModal from './ReportAnomalyModal';
 import { ProjectDetail } from '../../core/types';
 import { QueuedAudit } from '../../services/outbox';
 

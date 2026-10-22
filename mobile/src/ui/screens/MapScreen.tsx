@@ -17,7 +17,6 @@ import ReportAnomalyModal from '../components/ReportAnomalyModal';
 import AboutMapModal from '../components/AboutMapModal';
 import ChatBotModal from '../components/ChatBotModal';
 import MapFilterBar, { MapFilterOption } from '../components/MapFilterBar';
-import FieldAuditorModal from '../components/FieldAuditorModal';
 import { pins, initialPins } from '../../data/pins';
 import {
   mockProjects,
@@ -31,6 +30,7 @@ import {
   AnomalyReport,
   ProjectStatus,
   HierarchyFilterTier,
+  MunicipalityFeature,
 } from '../../core/types';
 import {
   normalizeLguName,
@@ -327,7 +327,7 @@ export default function MapScreen({
         normalized.toLowerCase(),
     );
     if (targetFeature) {
-      const box = computeBoundingBox([targetFeature]);
+      const box = computeBoundingBox([targetFeature as unknown as MunicipalityFeature]);
       if (box.minLng !== Infinity && box.maxLng !== -Infinity) {
         const centerLng = (box.minLng + box.maxLng) / 2;
         const centerLat = (box.minLat + box.maxLat) / 2;

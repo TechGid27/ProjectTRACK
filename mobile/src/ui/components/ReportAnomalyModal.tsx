@@ -147,13 +147,18 @@ export default function ReportAnomalyModal({
     };
     setCapturedPhoto(photoObj);
 
+    const sanitizedDesc = sanitizeReportDescription(
+      description.trim() || `Verified on-site within ${geofence.distanceMeters}m geofence.`,
+      2000,
+    );
+
     // Enqueue to offline-first outbox
     const queued = outbox.enqueueAudit({
       projectId: selectedProj?.id || '24HD0012',
       latitude: userLat,
       longitude: userLng,
       distanceMeters: geofence.distanceMeters,
-      notes: description.trim() || `Verified on-site within ${geofence.distanceMeters}m geofence.`,
+      notes: sanitizedDesc,
     });
     setCapturedReceipt(queued);
     onAuditSubmitted?.(queued);
@@ -162,7 +167,7 @@ export default function ReportAnomalyModal({
     api
       .submitReport({
         projectId: selectedProj?.id || '24HD0012',
-        description: description.trim() || `Verified on-site field audit within ${geofence.distanceMeters}m geofence.`,
+        description: sanitizedDesc,
         category,
         latitude: userLat,
         longitude: userLng,

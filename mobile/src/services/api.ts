@@ -18,6 +18,7 @@ import {
   sanitizeChatMessage,
   sanitizeReportDescription,
   sanitizeEmail,
+  sanitizePayload,
 } from '../core/sanitizer';
 
 const getInitialBaseUrl = (): string => {
@@ -317,6 +318,11 @@ class ApiService {
       content: sanitizeChatMessage(h.content, 1000),
     }));
 
+    const sanitizedPayload = sanitizePayload({
+      message: cleanMsg,
+      history: cleanHistory,
+    });
+
     try {
       const res = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
@@ -324,7 +330,7 @@ class ApiService {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify({ message: cleanMsg, history: cleanHistory }),
+        body: JSON.stringify(sanitizedPayload),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -396,6 +402,7 @@ class ApiService {
 
   async signIn(email: string, password: string): Promise<{ user: any; error?: string }> {
     const cleanEmail = sanitizeEmail(email);
+    const sanitizedPayload = sanitizePayload({ email: cleanEmail, password });
     try {
       const res = await fetch(`${this.baseUrl}/auth/signin`, {
         method: 'POST',
@@ -404,7 +411,7 @@ class ApiService {
           Accept: 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ email: cleanEmail, password }),
+        body: JSON.stringify(sanitizedPayload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -423,6 +430,11 @@ class ApiService {
   ): Promise<{ user: any; message?: string; error?: string }> {
     const cleanEmail = sanitizeEmail(email);
     const cleanName = fullName ? sanitizeSearchQuery(fullName, 100) : undefined;
+    const sanitizedPayload = sanitizePayload({
+      email: cleanEmail,
+      password,
+      full_name: cleanName,
+    });
     try {
       const res = await fetch(`${this.baseUrl}/auth/signup`, {
         method: 'POST',
@@ -431,7 +443,7 @@ class ApiService {
           Accept: 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ email: cleanEmail, password, full_name: cleanName }),
+        body: JSON.stringify(sanitizedPayload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -468,6 +480,10 @@ class ApiService {
     accessToken: string,
     refreshToken?: string,
   ): Promise<{ user: any; error?: string }> {
+    const payload = sanitizePayload({
+      access_token: accessToken,
+      refresh_token: refreshToken || '',
+    });
     try {
       const res = await fetch(`${this.baseUrl}/auth/callback`, {
         method: 'POST',
@@ -476,10 +492,7 @@ class ApiService {
           Accept: 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({
-          access_token: accessToken,
-          refresh_token: refreshToken || '',
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -530,9 +543,15 @@ class ApiService {
     longitude?: number;
     photo?: { uri: string; name?: string; type?: string } | null;
   }): Promise<ReportVerification> {
-    const cleanId = sanitizeSearchQuery(input.projectId, 50);
-    const cleanDesc = sanitizeReportDescription(input.description, 2000);
-    const cleanCat = input.category ? sanitizeSearchQuery(input.category, 50) : undefined;
+    const cleanPayload = sanitizePayload({
+      projectId: input.projectId,
+      description: input.description,
+      category: input.category,
+    });
+
+    const cleanId = sanitizeSearchQuery(cleanPayload.projectId, 50);
+    const cleanDesc = sanitizeReportDescription(cleanPayload.description, 2000);
+    const cleanCat = cleanPayload.category ? sanitizeSearchQuery(cleanPayload.category, 50) : undefined;
 
     const form = new FormData();
     form.append('project_id', cleanId);

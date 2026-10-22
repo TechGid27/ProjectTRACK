@@ -100,9 +100,37 @@ class SupabaseAuthService:
         return resp.json() if resp.content else {}
 
     # -- public API -----------------------------------------------------------
-    async def sign_up(self, email: str, password: str) -> Dict[str, Any]:
-        """Register a new email/password user. May require email confirmation."""
-        return await self._post("/signup", {"email": email, "password": password})
+    async def sign_up(
+        self, email: str, password: str, redirect_to: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Register a new email/password user. May require email confirmation.
+
+        ``redirect_to`` goes in the query string, not the JSON body: GoTrue has no
+        ``redirect_to`` field on its signup payload — it reads the parameter off
+        the request when building the confirmation e-mail link, and falls back to
+        the project Site URL when it is missing, which bounces users to the wrong
+        origin after they click "confirm".
+        """
+        path = "/signup"
+        if redirect_to:
+            path = f"{path}?{urlencode({'redirect_to': redirect_to})}"
+        return await self._post(path, {"email": email, "password": password})
+
+    async def resend_confirmation(
+        self, email: str, redirect_to: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Ask GoTrue to re-send the confirmation e-mail for an unconfirmed signup.
+
+        GoTrue reports every delivery failure here (unauthorized address, rate
+        limit, SMTP error), so surfacing it in the UI is how the client finds out
+        why a confirmation never arrived.
+        """
+        path = "/resend"
+        if redirect_to:
+            path = f"{path}?{urlencode({'redirect_to': redirect_to})}"
+        return await self._post(path, {"type": "signup", "email": email})
 
     async def sign_in_password(self, email: str, password: str) -> Dict[str, Any]:
         """Exchange email/password for a Supabase session (access + refresh token)."""

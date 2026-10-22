@@ -90,25 +90,13 @@ def create_app() -> FastAPI:
 
     # Configure CORS for modern web frontends (React, Next.js, Vue, Svelte).
     # Cookie-based auth requires allow_credentials=True, which browsers reject
-    # together with a "*" origin. So "*" (or an empty list) falls back to an
+    # together with a "*" origin, so "*" (or an empty list) falls back to an
     # explicit allow-list of FRONTEND_URL + common local dev origins. Whatever
     # is configured, FRONTEND_URL is always included so the deployed web app
     # can call the API with credentials as soon as FRONTEND_URL is set.
-    configured_origins = settings.CORS_ORIGINS or []
-    dev_origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8081",
-        "http://127.0.0.1:8081",
-        "http://localhost:19006",
-        "http://127.0.0.1:19006",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    if configured_origins in (["*"], []):
-        allowed_origins = list(dict.fromkeys([settings.FRONTEND_URL, *dev_origins]))
-    else:
-        allowed_origins = list(dict.fromkeys([*configured_origins, settings.FRONTEND_URL]))
+    # Settings.allowed_origins is the same allow-list used to validate the
+    # OAuth `redirect` parameter, so both stay in sync.
+    allowed_origins = settings.allowed_origins
     logger.info(f"CORS allowed origins: {allowed_origins}")
     app.add_middleware(
         CORSMiddleware,

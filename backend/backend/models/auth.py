@@ -18,12 +18,28 @@ class SignUpRequest(BaseModel):
     """Email/password registration payload."""
     email: EmailStr = Field(..., description="New account email address")
     password: str = Field(..., min_length=6, max_length=256, description="New account password")
+    redirect: Optional[str] = Field(
+        default=None,
+        description=(
+            "Frontend origin the confirmation e-mail link should return to. "
+            "Must be one of the backend's allowed origins; defaults to FRONTEND_URL."
+        ),
+    )
 
 
 class OAuthCallbackRequest(BaseModel):
     """Tokens returned by Supabase after an OAuth redirect, posted by the client."""
     access_token: str = Field(..., description="Supabase access token from the OAuth redirect")
     refresh_token: Optional[str] = Field(default=None, description="Supabase refresh token")
+
+
+class ResendConfirmationRequest(BaseModel):
+    """Ask for the account confirmation e-mail to be sent again."""
+    email: EmailStr = Field(..., description="Address that has not confirmed yet")
+    redirect: Optional[str] = Field(
+        default=None,
+        description="Frontend origin the confirmation e-mail link should return to",
+    )
 
 
 class AuthUser(BaseModel):

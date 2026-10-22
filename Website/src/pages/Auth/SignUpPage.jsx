@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import Layout from '../../layout/Layout'
-import { redirectToOAuth, signUpWithEmail } from '../../services/auth'
+import {
+  redirectToOAuth,
+  resendConfirmationEmail,
+  signUpWithEmail,
+} from '../../services/auth'
 
 function GoogleIcon() {
   return (
@@ -31,11 +35,15 @@ function SignUpPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // Set once a signup is waiting on e-mail confirmation, so the user can retry
+  // the send and see Supabase's actual delivery error instead of a silent miss.
+  const [resendTo, setResendTo] = useState(null)
 
   async function signIn(provider) {
     const label = provider.charAt(0).toUpperCase() + provider.slice(1)
     setBusy(provider)
     setStatus(null)
+    setResendTo(null)
     try {
       await redirectToOAuth(provider)
       setStatus(`Redirecting to ${label}…`)
@@ -54,14 +62,29 @@ function SignUpPage() {
     }
     setBusy('email')
     setStatus(null)
+    setResendTo(null)
     try {
       const result = await signUpWithEmail(email, password)
       setStatus(result.message || 'Check your email to confirm your account.')
-      setEmail('')
+      if (result.email_confirmation_required) setResendTo(email)
+      // Keep the address in the field so the user can see where the link went.
       setPassword('')
       setConfirmPassword('')
     } catch (error) {
       setStatus(error.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleResend() {
+    setBusy('resend')
+    setStatus(null)
+    try {
+      const result = await resendConfirmationEmail(resendTo)
+      setStatus(result.message || `Confirmation email sent to ${resendTo}.`)
+    } catch (error) {
+      setStatus(`Could not resend the confirmation email: ${error.message}`)
     } finally {
       setBusy(null)
     }
@@ -159,6 +182,17 @@ function SignUpPage() {
             >
               {status}
             </p>
+          )}
+
+          {resendTo && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={handleResend}
+              className="mt-3 w-full rounded-xl border border-gray-a6 bg-white px-6 py-3 text-sm font-semibold text-gray-a12 transition hover:bg-gray-a2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] disabled:opacity-60"
+            >
+              Resend confirmation email
+            </button>
           )}
 
           <p className="mt-8 text-center text-xs text-gray-a10">

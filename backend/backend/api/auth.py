@@ -119,10 +119,24 @@ def _validate_redirect_target(redirect: Optional[str], *, param: str = "redirect
     """
     target = (redirect or "").strip() or settings.FRONTEND_URL
     parsed = urlparse(target)
+
+    # Native mobile apps deep-link back via a custom URL scheme (e.g.
+    # "projecttrack://auth/callback") or the Expo Go client ("exp://..."), which
+    # is not an http(s) URL. Accept schemes explicitly allow-listed in
+    # settings.MOBILE_APP_SCHEMES so native OAuth works without weakening the
+    # http(s) origin allow-list used by the web client.
+    scheme = (parsed.scheme or "").lower()
+    if scheme and scheme in settings.MOBILE_APP_SCHEMES:
+        return target
+
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid '{param}': expected an absolute http(s) URL such as {settings.FRONTEND_URL}.",
+            detail=(
+                f"Invalid '{param}': expected an absolute http(s) URL such as "
+                f"{settings.FRONTEND_URL}, or a registered app scheme "
+                f"({', '.join(s + '://' for s in settings.MOBILE_APP_SCHEMES)})."
+            ),
         )
     origin = f"{parsed.scheme}://{parsed.netloc}"
     if origin not in settings.allowed_origins:

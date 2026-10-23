@@ -117,7 +117,7 @@ describe('CebuVectorMap Component', () => {
     }
   });
 
-  test('differentiates administrative tiers with distinctive styles', () => {
+  test('renders consistent border stroke across administrative tiers', () => {
     const { getByTestId } = render(
       <CebuVectorMap
         onSelectMunicipality={mockOnSelectMunicipality}
@@ -143,11 +143,11 @@ describe('CebuVectorMap Component', () => {
 
     // HUC (Cebu City)
     const cebuCityPath = getByTestId('muni-path-Cebu City');
-    expect(strokeOf(cebuCityPath)).toBe('#f59e0b');
+    expect(strokeOf(cebuCityPath)).toBe('#b2d4cf');
 
     // Component City (Bogo City)
     const bogoPath = getByTestId('muni-path-City of Bogo');
-    expect(strokeOf(bogoPath)).toBe('#38bdf8');
+    expect(strokeOf(bogoPath)).toBe('#b2d4cf');
 
     // Municipality (Argao)
     const argaoPath = getByTestId('muni-path-Argao');

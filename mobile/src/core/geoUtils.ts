@@ -240,7 +240,6 @@ export function disperseCoLocatedPins<T extends { id: string; x: number; y: numb
   return pins;
 }
 
-
 /**
  * Hard geographic bounds for the whole Cebu province view, covering the mainland
  * plus the Bantayan and Camotes island groups (GeoJSON extends to ~124.57°E and
@@ -307,6 +306,7 @@ export const CEBU_COMPONENT_CITIES = new Set<string>([
   'Carcar City',
   'Danao City',
   'Naga City',
+  'City of Naga',
   'Talisay City',
   'Toledo City',
 ]);
@@ -322,6 +322,7 @@ export const METRO_CEBU_LGUS = new Set<string>([
   'Lapu-Lapu City',
   'Talisay City',
   'Naga City',
+  'City of Naga',
   'Carcar City',
   'Danao City',
   'Consolacion',
@@ -331,6 +332,8 @@ export const METRO_CEBU_LGUS = new Set<string>([
   'San Fernando',
   'Minglanilla',
 ]);
+
+export const CEBU_METRO_LGUS = METRO_CEBU_LGUS;
 
 export const BANTAYAN_GROUP_LGUS = new Set<string>([
   'Bantayan',
@@ -416,71 +419,87 @@ export interface RegionPreset {
   lat: number;
   lng: number;
   zoom: number;
+  name?: string; // backwards compatibility alias for label
+  description?: string;
 }
 
 export const CEBU_REGION_PRESETS: RegionPreset[] = [
   {
     id: 'ALL_CEBU',
     label: 'All Cebu',
+    name: 'All Cebu',
     subtitle: 'Province View',
     icon: '🏝️',
     lat: 10.3157,
     lng: 123.8854,
     zoom: 1.0,
+    description: 'Full provincial geography & island groups',
   },
   {
     id: 'METRO_CEBU',
     label: 'Metro Cebu',
+    name: 'Metro Cebu',
     subtitle: 'Tri-Cities & Hubs',
     icon: '🏙️',
     lat: 10.3157,
     lng: 123.9000,
     zoom: 3.8,
+    description: 'Urban agglomeration & tri-cities',
   },
   {
     id: 'NORTH_CEBU',
     label: 'North Cebu',
+    name: 'North Cebu',
     subtitle: 'Bogo & Daanbantayan',
     icon: '🌾',
     lat: 11.0200,
     lng: 123.9800,
     zoom: 3.5,
+    description: 'Bogo City & northern agricultural municipalities',
   },
   {
     id: 'SOUTH_CEBU',
     label: 'South Cebu',
+    name: 'South Cebu',
     subtitle: 'Argao, Oslob & Heritage',
     icon: '🌊',
     lat: 9.7800,
     lng: 123.4800,
     zoom: 3.4,
+    description: 'Heritage coastal towns & southern corridor',
   },
   {
     id: 'MIDWEST_CEBU',
     label: 'Mid-West Coast',
+    name: 'Mid-West Coast',
     subtitle: 'Toledo & Balamban',
     icon: '⛰️',
     lat: 10.4200,
     lng: 123.6800,
     zoom: 3.6,
+    description: 'Toledo City, Balamban & western industrial zone',
   },
   {
     id: 'BANTAYAN',
     label: 'Bantayan Island',
+    name: 'Bantayan Island',
     subtitle: 'North Island Group',
     icon: '🏖️',
     lat: 11.2000,
     lng: 123.7400,
     zoom: 4.8,
+    description: 'Bantayan, Madridejos, and Santa Fe',
   },
   {
     id: 'CAMOTES',
     label: 'Camotes Islands',
+    name: 'Camotes Islands',
     subtitle: 'East Island Group',
     icon: '⛵',
     lat: 10.6600,
     lng: 124.3600,
     zoom: 4.5,
+    description: 'San Francisco, Poro, Tudela, and Pilar',
   },
 ];
 
@@ -497,7 +516,11 @@ export function isLguInHierarchyTier(
     return meta.type === 'MUNICIPALITY';
   }
   if (tier === 'METRO_CEBU') {
-    return METRO_CEBU_LGUS.has(meta.normalizedName);
+    return (
+      METRO_CEBU_LGUS.has(meta.normalizedName) ||
+      METRO_CEBU_LGUS.has(meta.name) ||
+      METRO_CEBU_LGUS.has(lguName)
+    );
   }
   return true;
 }

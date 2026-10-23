@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
+import { api } from '../../services/api';
+import { haptics } from '../../services/haptics';
 
 interface AboutMapModalProps {
   visible: boolean;
@@ -15,6 +19,43 @@ interface AboutMapModalProps {
 }
 
 export default function AboutMapModal({ visible, onClose }: AboutMapModalProps) {
+  const [currentUrl, setCurrentUrl] = useState(api.getBaseUrl());
+  const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setCurrentUrl(api.getBaseUrl());
+      setTestStatus(null);
+    }
+  }, [visible]);
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestStatus(null);
+    haptics.triggerLightImpact();
+    const start = Date.now();
+    try {
+      api.setBaseUrl(currentUrl.trim());
+      const sum = await api.fetchSummary();
+      const elapsed = Date.now() - start;
+      if (sum && sum.total_projects) {
+        setTestStatus(`✅ Connected (${elapsed}ms) · ${sum.total_projects} projects active`);
+      } else {
+        setTestStatus(`⚠️ Server reachable, but returned degraded dataset`);
+      }
+    } catch (err: any) {
+      setTestStatus(`❌ Connection failed: ${err.message || 'Cannot reach host'}`);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleSaveUrl = () => {
+    api.setBaseUrl(currentUrl.trim());
+    haptics.triggerSuccess();
+    setTestStatus('💾 API endpoint saved!');
+  };
   return (
     <Modal
       visible={visible}
@@ -79,6 +120,48 @@ export default function AboutMapModal({ visible, onClose }: AboutMapModalProps) 
                     boundary (tap to select)
                   </Text>
                 </View>
+              </View>
+
+              {/* Physical Device Connection Switcher */}
+              <View style={styles.connectionBox}>
+                <Text style={styles.connectionTitle}>🌐 Backend Connection (Physical Device)</Text>
+                <Text style={styles.connectionDesc}>
+                  On physical Android devices, enter your computer's Wi-Fi IP (e.g. http://192.168.1.50:8000/api)
+                  or production domain.
+                </Text>
+                <TextInput
+                  style={styles.connectionInput}
+                  value={currentUrl}
+                  onChangeText={setCurrentUrl}
+                  placeholder="http://192.168.1.xxx:8000/api"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <View style={styles.connectionBtnRow}>
+                  <TouchableOpacity
+                    style={styles.testBtn}
+                    onPress={handleTestConnection}
+                    disabled={isTesting}
+                    activeOpacity={0.8}
+                  >
+                    {isTesting ? (
+                      <ActivityIndicator size="small" color="#0d9488" />
+                    ) : (
+                      <Text style={styles.testBtnText}>⚡ Test Connection</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.saveBtn}
+                    onPress={handleSaveUrl}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.saveBtnText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+                {testStatus && (
+                  <Text style={styles.testStatusText}>{testStatus}</Text>
+                )}
               </View>
 
               <Text style={styles.footerText}>
@@ -210,6 +293,76 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     lineHeight: 18,
+  },
+  connectionBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  connectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0f2423',
+    marginBottom: 4,
+  },
+  connectionDesc: {
+    fontSize: 11,
+    color: '#64748b',
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  connectionInput: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: '#0f172a',
+    marginBottom: 10,
+  },
+  connectionBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  testBtn: {
+    flex: 1,
+    backgroundColor: '#e6fffa',
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  testBtnText: {
+    color: '#0d9488',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  saveBtn: {
+    backgroundColor: '#1f3d3c',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  testStatusText: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0f172a',
   },
   doneButton: {
     backgroundColor: '#1f3d3c',

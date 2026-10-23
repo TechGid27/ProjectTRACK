@@ -15,6 +15,10 @@ jest.mock('../src/services/api', () => ({
     getOAuthUrl: jest.fn(),
     exchangeOAuthCallback: jest.fn(),
   },
+  NATIVE_OAUTH_REDIRECT: 'projecttrack://auth/callback',
+  // Force the native redirect so the WebBrowser deep-link flow is exercised
+  // deterministically across jest-expo's ios/android/web projects.
+  resolveOAuthRedirect: jest.fn(() => 'projecttrack://auth/callback'),
 }));
 
 describe('SignInScreen Component', () => {

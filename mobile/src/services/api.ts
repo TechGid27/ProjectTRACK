@@ -34,6 +34,32 @@ const getInitialBaseUrl = (): string => {
 
 const DEFAULT_API_BASE = getInitialBaseUrl();
 
+/**
+ * Resolve the OAuth redirect target the backend will accept.
+ *
+ * The backend rejects any redirect that is not an absolute http(s) URL within
+ * its allow-list (FRONTEND_URL + CORS origins), so a custom "projecttrack://"
+ * scheme fails on web with "Invalid 'redirect': expected an absolute http(s)
+ * URL". We therefore:
+ *   • Web   -> use the current web origin (`<origin>/auth/callback`), which
+ *              matches FRONTEND_URL / the CORS allow-list.
+ *   • Native-> use the app's custom scheme for deep-link return.
+ * Returns `undefined` when no origin can be resolved on web, letting the caller
+ * omit the param so the backend falls back to its configured FRONTEND_URL.
+ */
+export const NATIVE_OAUTH_REDIRECT = 'projecttrack://auth/callback';
+
+export function resolveOAuthRedirect(): string | undefined {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/auth/callback`;
+    }
+    return undefined;
+  }
+  return NATIVE_OAUTH_REDIRECT;
+}
+
+
 export interface BackendSummary {
   total_projects: number;
   total_contractors: number;

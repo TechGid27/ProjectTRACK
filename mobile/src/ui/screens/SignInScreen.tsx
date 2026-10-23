@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { api } from '../../services/api';
+import { api, resolveOAuthRedirect, NATIVE_OAUTH_REDIRECT } from '../../services/api';
+import Logo from '../components/Logo';
 
 // Safely import expo-web-browser for in-app pop-up auth session
 let WebBrowser: any = null;
@@ -109,7 +110,11 @@ export default function SignInScreen({
     setStatusMessage('Opening Google Sign-In…');
 
     try {
-      const redirectUri = 'projecttrack://auth/callback';
+      // The backend only accepts an absolute http(s) redirect whose origin is in
+      // its allow-list. resolveOAuthRedirect() returns the web origin on web and
+      // the app scheme on native (see api.ts).
+      const redirectUri = resolveOAuthRedirect();
+      const isNativeRedirect = redirectUri === NATIVE_OAUTH_REDIRECT;
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {
@@ -119,9 +124,15 @@ export default function SignInScreen({
         return;
       }
 
-      // Check if in-app WebBrowser is available for smooth modal popup
-      if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
-        const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+      // Native: open an in-app auth session that deep-links back via the app
+      // scheme. Web: hand off to the browser (the provider redirects back to the
+      // web origin, handled by the deep-link/URL listener).
+      if (
+        isNativeRedirect &&
+        WebBrowser &&
+        typeof WebBrowser.openAuthSessionAsync === 'function'
+      ) {
+        const result = await WebBrowser.openAuthSessionAsync(url, NATIVE_OAUTH_REDIRECT);
         if (result.type === 'success' && result.url) {
           await processOAuthUrl(result.url);
         } else if (result.type === 'cancel' || result.type === 'dismiss') {
@@ -129,7 +140,6 @@ export default function SignInScreen({
           setStatusMessage(null);
         }
       } else {
-        // Fallback to Linking
         await Linking.openURL(url);
       }
     } catch (err: any) {
@@ -188,7 +198,7 @@ export default function SignInScreen({
           {/* Branding Header */}
           <View style={styles.brandHeader}>
             <View style={styles.logoBadge}>
-              <Text style={styles.logoBadgeText}>PT</Text>
+              <Logo size={40} variant="light" testID="signin-logo" />
             </View>
             <Text style={styles.brandTitle}>Sign in</Text>
             <Text style={styles.brandSubtitle}>

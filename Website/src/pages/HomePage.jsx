@@ -1,5 +1,4 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import Layout from '../layout/Layout'
 import { fetchSummary } from '../services/api'
 import { CEBU_LGU_NAMES } from '../data/cebuLguNames'
 
@@ -160,7 +159,6 @@ function HomePage() {
 
   return (
     <MapProvider>
-      <Layout>
       <Suspense
         fallback={
           <div className="grid h-[80vh] min-h-96 w-full place-items-center bg-gray-a2 lg:h-[91vh]">
@@ -283,9 +281,8 @@ function HomePage() {
         <ChatCopilot />
       </Suspense>
       {aboutOpen && <AboutMapModal onClose={() => setAboutOpen(false)} />}
-    </Layout>
-  </MapProvider>
-)
+    </MapProvider>
+  )
 }
 
 export default HomePage

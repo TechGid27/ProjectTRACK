@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import Layout from '../../layout/Layout'
 import {
   redirectToOAuth,
   resendConfirmationEmail,
@@ -91,10 +90,9 @@ function SignUpPage() {
   }
 
   return (
-    <Layout>
-      <section>
-        <div className="mx-auto max-w-md px-6 py-16">
-          <h1 className="font-serif text-3xl text-gray-a12">Create account</h1>
+    <section>
+      <div className="mx-auto max-w-md px-6 py-16">
+        <h1 className="font-serif text-3xl text-gray-a12">Create account</h1>
           <p className="mt-2 text-sm text-gray-a11">
             Join ProjectTRACK to track Cebu public works, file anomaly reports,
             and ask the GraphRAG assistant.
@@ -211,7 +209,6 @@ function SignUpPage() {
           </p>
         </div>
       </section>
-    </Layout>
   )
 }
 

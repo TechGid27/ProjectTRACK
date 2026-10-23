@@ -210,4 +210,18 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
 
     expect(await findByText(/53 of 53/i)).toBeTruthy();
   });
+
+  test('pull-to-refresh on home screen executes handleRefresh without reference errors', async () => {
+    const { getByTestId } = render(
+      <HomeScreen
+        onNavigateToSignIn={mockOnNavigateToSignIn}
+        onNavigateToContractors={mockOnNavigateToContractors}
+        onNavigateToMap={mockOnNavigateToMap}
+      />,
+    );
+
+    const refreshControl = getByTestId('home-refresh-control');
+    expect(refreshControl.props.refreshing).toBe(false);
+    fireEvent(refreshControl, 'refresh');
+  });
 });

@@ -1,4 +1,11 @@
-import { BoundingBox, MunicipalityFeature } from './types';
+  import {
+  BoundingBox,
+  MunicipalityFeature,
+  LguType,
+  CebuRegionZone,
+  HierarchyFilterTier,
+  LguMeta,
+} from './types';
 
 /**
  * Calculates great-circle distance between two coordinates in kilometers using Haversine formula.
@@ -234,7 +241,6 @@ export function disperseCoLocatedPins<T extends { id: string; x: number; y: numb
   return pins;
 }
 
-
 export const CEBU_GEO_BOUNDS = {
   n: 11.45,
   s: 9.35,
@@ -273,4 +279,272 @@ export function normalizeCoordinates(
   }
 
   return { lat, lng, status: 'ok' };
+}
+
+export interface RegionPreset {
+  id: string;
+  name: string;
+  label?: string;
+  lat: number;
+  lng: number;
+  zoom: number;
+  description?: string;
+}
+
+export const CEBU_REGION_PRESETS: RegionPreset[] = [
+  {
+    id: 'ALL_CEBU',
+    name: 'All Cebu',
+    label: 'All Cebu',
+    lat: 10.3157,
+    lng: 123.8854,
+    zoom: 1.0,
+    description: 'Full provincial geography & island groups',
+  },
+  {
+    id: 'METRO_CEBU',
+    name: 'Metro Cebu',
+    label: 'Metro Cebu',
+    lat: 10.3157,
+    lng: 123.8854,
+    zoom: 2.8,
+    description: 'Urban agglomeration & tri-cities',
+  },
+  {
+    id: 'NORTH_CEBU',
+    name: 'North Cebu',
+    label: 'North Cebu',
+    lat: 11.0000,
+    lng: 123.9500,
+    zoom: 2.2,
+    description: 'Bogo City & northern agricultural municipalities',
+  },
+  {
+    id: 'SOUTH_CEBU',
+    name: 'South Cebu',
+    label: 'South Cebu',
+    lat: 9.8000,
+    lng: 123.4500,
+    zoom: 2.2,
+    description: 'Heritage coastal towns & southern corridor',
+  },
+  {
+    id: 'MIDWEST_CEBU',
+    name: 'Midwest Cebu',
+    label: 'Midwest Cebu',
+    lat: 10.4500,
+    lng: 123.7000,
+    zoom: 2.2,
+    description: 'Toledo City, Balamban & western industrial zone',
+  },
+  {
+    id: 'BANTAYAN',
+    name: 'Bantayan Islands',
+    label: 'Bantayan',
+    lat: 11.2000,
+    lng: 123.7300,
+    zoom: 3.2,
+    description: 'Bantayan, Madridejos, and Santa Fe',
+  },
+  {
+    id: 'CAMOTES',
+    name: 'Camotes Islands',
+    label: 'Camotes',
+    lat: 10.6500,
+    lng: 124.4000,
+    zoom: 3.0,
+    description: 'San Francisco, Poro, Tudela, and Pilar',
+  },
+];
+
+export const CEBU_HUCS: Set<string> = new Set([
+  'Cebu City',
+  'Mandaue City',
+  'Lapu-Lapu City',
+]);
+
+export const CEBU_COMPONENT_CITIES: Set<string> = new Set([
+  'Bogo City',
+  'Carcar City',
+  'Danao City',
+  'City of Naga',
+  'Talisay City',
+  'Toledo City',
+]);
+
+export const CEBU_ALL_CITIES: Set<string> = new Set([
+  ...CEBU_HUCS,
+  ...CEBU_COMPONENT_CITIES,
+]);
+
+export const CEBU_METRO_LGUS: Set<string> = new Set([
+  'Cebu City',
+  'Mandaue City',
+  'Lapu-Lapu City',
+  'Danao City',
+  'Talisay City',
+  'City of Naga',
+  'Naga City',
+  'Carcar City',
+  'Compostela',
+  'Liloan',
+  'Consolacion',
+  'Cordova',
+  'Minglanilla',
+  'San Fernando',
+]);
+
+interface LguClassificationEntry {
+  type: LguType;
+  zone: CebuRegionZone;
+  islandGroup?: 'Mainland' | 'Bantayan' | 'Camotes' | 'Mactan' | 'Olango';
+  district?: number;
+}
+
+const LGU_DATABASE: Record<string, LguClassificationEntry> = {
+  // Highly Urbanized Cities (HUCs)
+  'cebu city': { type: 'HUC', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'mandaue city': { type: 'HUC', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'lapu-lapu city': { type: 'HUC', zone: 'METRO_CEBU', islandGroup: 'Mactan' },
+  'lapu-lapu': { type: 'HUC', zone: 'METRO_CEBU', islandGroup: 'Mactan' },
+
+  // Component Cities
+  'bogo city': { type: 'COMPONENT_CITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'city of bogo': { type: 'COMPONENT_CITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'carcar city': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'city of carcar': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'danao city': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'city of naga': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'naga city': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'naga': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'talisay city': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'city of talisay': { type: 'COMPONENT_CITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'toledo city': { type: 'COMPONENT_CITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+
+  // Island Groups - Bantayan
+  'bantayan': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Bantayan' },
+  'madridejos': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Bantayan' },
+  'santa fe': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Bantayan' },
+
+  // Island Groups - Camotes
+  'san francisco': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Camotes' },
+  'poro': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Camotes' },
+  'tudela': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Camotes' },
+  'pilar': { type: 'MUNICIPALITY', zone: 'ISLAND_GROUPS', islandGroup: 'Camotes' },
+
+  // Metro Cebu Municipalities
+  'compostela': { type: 'MUNICIPALITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'consolacion': { type: 'MUNICIPALITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'cordova': { type: 'MUNICIPALITY', zone: 'METRO_CEBU', islandGroup: 'Mactan' },
+  'liloan': { type: 'MUNICIPALITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'minglanilla': { type: 'MUNICIPALITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+  'san fernando': { type: 'MUNICIPALITY', zone: 'METRO_CEBU', islandGroup: 'Mainland' },
+
+  // North Cebu Municipalities
+  'borbon': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'carmen': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'catmon': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'daanbantayan': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'medellin': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'san remigio': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'sogod': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+  'tabogon': { type: 'MUNICIPALITY', zone: 'NORTH_CEBU', islandGroup: 'Mainland' },
+
+  // Midwest Cebu Municipalities
+  'aloguinsan': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+  'asturias': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+  'balamban': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+  'pinamungajan': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+  'pinamungahan': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+  'tabuelan': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+  'tuburan': { type: 'MUNICIPALITY', zone: 'MIDWEST_CEBU', islandGroup: 'Mainland' },
+
+  // South Cebu Municipalities
+  'alcantara': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'alcoy': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'alegria': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'argao': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'badian': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'barili': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'boljoon': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'dalaguete': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'dumanjug': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'ginatilan': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'malabuyoc': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'moalboal': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'oslob': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'ronda': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'samboan': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'santander': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+  'sibonga': { type: 'MUNICIPALITY', zone: 'SOUTH_CEBU', islandGroup: 'Mainland' },
+};
+
+/**
+ * Returns administrative classification, zone, and island metadata for an LGU.
+ */
+export function getLguClassification(name: string): LguMeta {
+  const raw = name || '';
+  const normalized = normalizeLguName(raw);
+  const key = normalized.toLowerCase().trim();
+  const rawKey = raw.toLowerCase().trim();
+
+  const entry = LGU_DATABASE[key] || LGU_DATABASE[rawKey];
+
+  if (entry) {
+    return {
+      name: raw,
+      normalizedName: normalized,
+      type: entry.type,
+      zone: entry.zone,
+      islandGroup: entry.islandGroup || 'Mainland',
+      district: entry.district,
+    };
+  }
+
+  // Fallback heuristic if not explicitly cataloged
+  const isHuc = CEBU_HUCS.has(normalized) || CEBU_HUCS.has(raw);
+  const isCompCity =
+    CEBU_COMPONENT_CITIES.has(normalized) ||
+    CEBU_COMPONENT_CITIES.has(raw) ||
+    /city$/i.test(normalized);
+
+  const type: LguType = isHuc
+    ? 'HUC'
+    : isCompCity
+    ? 'COMPONENT_CITY'
+    : 'MUNICIPALITY';
+
+  return {
+    name: raw,
+    normalizedName: normalized,
+    type,
+    zone: 'METRO_CEBU',
+    islandGroup: 'Mainland',
+  };
+}
+
+/**
+ * Checks if an LGU belongs to a specific administrative hierarchy filter tier.
+ */
+export function isLguInHierarchyTier(
+  lguName: string,
+  tier: HierarchyFilterTier,
+): boolean {
+  if (tier === 'ALL') return true;
+  const meta = getLguClassification(lguName);
+
+  if (tier === 'CITIES') {
+    return meta.type === 'HUC' || meta.type === 'COMPONENT_CITY';
+  }
+  if (tier === 'MUNICIPALITIES') {
+    return meta.type === 'MUNICIPALITY';
+  }
+  if (tier === 'METRO_CEBU') {
+    return (
+      CEBU_METRO_LGUS.has(meta.normalizedName) ||
+      CEBU_METRO_LGUS.has(meta.name) ||
+      CEBU_METRO_LGUS.has(lguName)
+    );
+  }
+  return true;
 }

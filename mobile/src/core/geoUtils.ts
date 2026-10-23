@@ -306,7 +306,6 @@ export const CEBU_COMPONENT_CITIES = new Set<string>([
   'Carcar City',
   'Danao City',
   'Naga City',
-  'City of Naga',
   'Talisay City',
   'Toledo City',
 ]);

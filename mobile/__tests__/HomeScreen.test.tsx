@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import HomeScreen from '../src/ui/screens/HomeScreen';
 
 describe('HomeScreen Component (Mobile Redesign)', () => {
@@ -220,8 +220,16 @@ describe('HomeScreen Component (Mobile Redesign)', () => {
       />,
     );
 
-    const refreshControl = getByTestId('home-refresh-control');
+    // The RefreshControl is attached to the ScrollView via its `refreshControl`
+    // prop, so assert it there (RN's test renderer does not surface the control
+    // as a standalone queryable node) and invoke its onRefresh.
+    const scroll = getByTestId('home-scroll');
+    const refreshControl = scroll.props.refreshControl;
+    expect(refreshControl).toBeTruthy();
     expect(refreshControl.props.refreshing).toBe(false);
-    fireEvent(refreshControl, 'refresh');
+    expect(typeof refreshControl.props.onRefresh).toBe('function');
+    await act(async () => {
+      refreshControl.props.onRefresh();
+    });
   });
 });

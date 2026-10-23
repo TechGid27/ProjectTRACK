@@ -318,6 +318,7 @@ export default function HomeScreen({
 
       {/* Main Landing Page ScrollView with Pull-to-Refresh */}
       <ScrollView
+        testID="home-scroll"
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

@@ -8,6 +8,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapHeader from '../components/MapHeader';
 import UnifiedCebuMap, { UnifiedCebuMapRef } from '../components/UnifiedCebuMap';
 import LocationIntelSheet, { SheetDisplayState } from '../components/LocationIntelSheet';
@@ -17,7 +18,6 @@ import AboutMapModal from '../components/AboutMapModal';
 import ChatBotModal from '../components/ChatBotModal';
 import MapFilterBar, { MapFilterOption } from '../components/MapFilterBar';
 import FieldAuditorModal from '../components/FieldAuditorModal';
-import CebuMapHierarchyBar from '../components/CebuMapHierarchyBar';
 import CebuRegionQuickJump from '../components/CebuRegionQuickJump';
 import { api } from '../../services/api';
 import {
@@ -56,6 +56,7 @@ export default function MapScreen({
   initialSheetState = 'hidden',
 }: MapScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<UnifiedCebuMapRef>(null);
 
   const [selectedLgu, setSelectedLgu] = useState<string | null>(initialLgu);
@@ -458,7 +459,7 @@ export default function MapScreen({
   const mapWidth = Math.max(320, windowWidth || 360);
 
   return (
-    <View style={styles.container} testID="map-screen">
+    <View style={[styles.container, { paddingTop: insets.top }]} testID="map-screen">
       {/* 1. Top App Header with Navigation */}
       <MapHeader
         totalLgus={53}
@@ -472,16 +473,7 @@ export default function MapScreen({
         onResetSelection={handleResetSelection}
       />
 
-      {/* 2. Cebu Administrative Hierarchy Bar (Province > Cities > Municipalities) */}
-      <CebuMapHierarchyBar
-        selectedTier={hierarchyTier}
-        onSelectTier={setHierarchyTier}
-        selectedLgu={selectedLgu}
-        onResetLgu={handleResetSelection}
-        onSelectMunicipality={handleSelectMunicipality}
-      />
-
-      {/* 3. Floating Status & Budget Map Filter Pills */}
+      {/* 2. Floating Status & Budget Map Filter Pills */}
       <MapFilterBar
         activeFilter={activeFilter}
         onSelectFilter={setActiveFilter}
@@ -647,7 +639,10 @@ export default function MapScreen({
         visible={isReportModalOpen}
         project={selectedProject}
         availableProjects={currentLguProjects}
-        onClose={() => setIsReportModalOpen(false)}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setIsAuditorModalOpen(false);
+        }}
         onSubmit={handleSubmitReport}
       />
 
@@ -716,7 +711,7 @@ const styles = StyleSheet.create({
   },
   floatingRefreshBtn: {
     position: 'absolute',
-    top: 175,
+    top: 120,
     right: 16,
     backgroundColor: 'rgba(31, 61, 60, 0.95)',
     flexDirection: 'row',

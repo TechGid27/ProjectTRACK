@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CebuVectorMap from '../components/CebuVectorMap';
 import ProjectDetailModal from '../components/ProjectDetailModal';
 import ReportAnomalyModal from '../components/ReportAnomalyModal';
@@ -60,6 +61,7 @@ export default function HomeScreen({
   onSignOut,
 }: HomeScreenProps) {
   const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [selectedLgu, setSelectedLgu] = useState<string | null>(null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
@@ -79,6 +81,7 @@ export default function HomeScreen({
   const [livePins, setLivePins] = useState<Pin[]>([]);
 
   const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
+
   const [backendStats, setBackendStats] = useState({
     total_projects: 0,
     total_budget: 0,
@@ -270,7 +273,10 @@ export default function HomeScreen({
   return (
     <View style={styles.container} testID="home-screen">
       {/* 1. Mobile App Bar Header */}
-      <View style={styles.headerBar} testID="mobile-app-header">
+      <View
+        style={[styles.headerBar, { paddingTop: Math.max(12, insets.top) }]}
+        testID="mobile-app-header"
+      >
         <View style={styles.headerTop}>
           <View style={styles.brandGroup}>
             <Logo size={34} variant="light" testID="home-header-logo" />
@@ -970,6 +976,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#cbe3df',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  teaserTapBadge: {
+    position: 'absolute',
+    bottom: 12,
+    backgroundColor: 'rgba(31, 61, 60, 0.92)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 211, 153, 0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  teaserTapBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   lguSection: {
     marginBottom: 20,

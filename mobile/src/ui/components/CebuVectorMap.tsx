@@ -87,7 +87,7 @@ function isPointInRing(x: number, y: number, ring: { x: number; y: number }[]): 
 }
 
 // ============================================================================
-// MEMOIZED LAYER 1: 53 Cebu LGUs (HUCs, Component Cities, Municipalities)
+// MEMOIZED LAYER 1: 53 Cebu LGUs (Consistent Harmonious Colors)
 // ============================================================================
 interface MunicipalitiesLayerProps {
   pathsData: PathDataItem[];
@@ -119,26 +119,10 @@ const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
 
         const matchesTier = isLguInHierarchyTier(item.rawName, hierarchyTier);
 
-        // Classification-based coloring
-        let baseFill = '#dceae8';
-        let baseStroke = '#b2d4cf';
-        let strokeMultiplier = 1.0;
-
-        if (item.meta.type === 'HUC') {
-          // Highly Urbanized Cities (Cebu City, Mandaue City, Lapu-Lapu City)
-          baseFill = '#194a44';
-          baseStroke = '#f59e0b'; // Royal amber accent
-          strokeMultiplier = 1.8;
-        } else if (item.meta.type === 'COMPONENT_CITY') {
-          // Component Cities (Bogo, Carcar, Danao, Naga, Talisay, Toledo)
-          baseFill = '#245952';
-          baseStroke = '#38bdf8'; // Bright civic cyan
-          strokeMultiplier = 1.4;
-        } else {
-          // 44 Municipalities
-          baseFill = '#dceae8';
-          baseStroke = '#b2d4cf';
-        }
+        // Consistent base styling across all 53 Cebu LGUs (clean & harmonious)
+        const baseFill = '#dceae8';
+        const baseStroke = '#b2d4cf';
+        const strokeMultiplier = 1.0;
 
         // Selected state takes absolute visual priority (keeps exact '#1f3d3c' for tests)
         const fillColor = isSelected ? '#1f3d3c' : baseFill;
@@ -199,13 +183,7 @@ const PlaceLabelsLayer = memo(function PlaceLabelsLayer({
             return null;
           }
 
-          const labelColor = isCity ? '#064e3b' : '#132c2a';
-          const prefix =
-            item.meta.type === 'HUC'
-              ? '👑 '
-              : item.meta.type === 'COMPONENT_CITY'
-              ? '🏢 '
-              : '';
+          const labelColor = '#132c2a';
 
           return (
             <SvgText
@@ -218,7 +196,7 @@ const PlaceLabelsLayer = memo(function PlaceLabelsLayer({
               fontWeight={isCity ? '900' : '700'}
               textAnchor="middle"
             >
-              {`${prefix}${item.normalizedName}`}
+              {item.normalizedName}
             </SvgText>
           );
         })}
@@ -434,6 +412,8 @@ function CebuVectorMapImpl(
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const touchStartRef = useRef<{ time: number; x: number; y: number } | null>(null);
   const wasDoubleTapRef = useRef<boolean>(false);
+  const containerRef = useRef<View>(null);
+  const containerPagePos = useRef({ x: 0, y: 0 });
 
   const bounds = useMemo(() => computeBoundingBox(cebuData?.features || []), []);
 
@@ -667,6 +647,10 @@ function CebuVectorMapImpl(
     return basePins.find((p) => p.id === selectedPinId) || null;
   }, [selectedPinId, basePins]);
 
+  const pinLguMeta = useMemo(() => {
+    return activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
+  }, [activeSelectedPin]);
+
   const calloutPosition = useMemo(() => {
     if (!activeSelectedPin) return null;
     const screenX = width / 2 + (activeSelectedPin.x - width / 2) * scale + offset.x;
@@ -707,10 +691,21 @@ function CebuVectorMapImpl(
         onMoveShouldSetPanResponderCapture: () => false,
         onPanResponderGrant: (evt) => {
           startOffset.current = { ...offsetRef.current };
+          const pageX = evt.nativeEvent.pageX;
+          const pageY = evt.nativeEvent.pageY;
+          const touchX =
+            typeof pageX === 'number' && containerPagePos.current.x > 0
+              ? pageX - containerPagePos.current.x
+              : evt.nativeEvent.locationX;
+          const touchY =
+            typeof pageY === 'number' && containerPagePos.current.y > 0
+              ? pageY - containerPagePos.current.y
+              : evt.nativeEvent.locationY;
+
           touchStartRef.current = {
             time: Date.now(),
-            x: evt.nativeEvent.locationX,
-            y: evt.nativeEvent.locationY,
+            x: touchX,
+            y: touchY,
           };
           const now = Date.now();
           if (evt.nativeEvent.touches && evt.nativeEvent.touches.length === 2) {
@@ -722,22 +717,21 @@ function CebuVectorMapImpl(
             initialScale.current = scaleRef.current;
           } else {
             initialDistance.current = null;
-            const touch = evt.nativeEvent;
             if (
               lastTapRef.current &&
               now - lastTapRef.current.time < 320 &&
               Math.hypot(
-                touch.locationX - lastTapRef.current.x,
-                touch.locationY - lastTapRef.current.y,
-              ) < 36
+                touchX - lastTapRef.current.x,
+                touchY - lastTapRef.current.y,
+              ) < 40
             ) {
               haptics.triggerLightImpact();
               const targetScale = Math.min(
                 MAX_SCALE,
                 Number((scaleRef.current * 1.8).toFixed(2)),
               );
-              const targetX = (width / 2 - touch.locationX) * (targetScale / scaleRef.current);
-              const targetY = (height / 2 - touch.locationY) * (targetScale / scaleRef.current);
+              const targetX = (width / 2 - touchX) * (targetScale / scaleRef.current);
+              const targetY = (height / 2 - touchY) * (targetScale / scaleRef.current);
 
               scaleRef.current = targetScale;
               offsetRef.current = { x: targetX, y: targetY };
@@ -765,8 +759,8 @@ function CebuVectorMapImpl(
             wasDoubleTapRef.current = false;
             lastTapRef.current = {
               time: now,
-              x: touch.locationX,
-              y: touch.locationY,
+              x: touchX,
+              y: touchY,
             };
           }
         },
@@ -825,8 +819,17 @@ function CebuVectorMapImpl(
 
           if (!isTap) return;
 
-          const touchX = evt.nativeEvent.locationX;
-          const touchY = evt.nativeEvent.locationY;
+          // Compute robust touch coordinates across Android/iOS/Web
+          const pageX = evt.nativeEvent.pageX;
+          const pageY = evt.nativeEvent.pageY;
+          const touchX =
+            typeof pageX === 'number' && containerPagePos.current.x > 0
+              ? pageX - containerPagePos.current.x
+              : evt.nativeEvent.locationX;
+          const touchY =
+            typeof pageY === 'number' && containerPagePos.current.y > 0
+              ? pageY - containerPagePos.current.y
+              : evt.nativeEvent.locationY;
 
           // Convert screen touch coordinates to map SVG space
           const svgX = (touchX - offsetRef.current.x - width / 2) / scaleRef.current + width / 2;
@@ -843,8 +846,8 @@ function CebuVectorMapImpl(
             }
           }
 
-          // If tapped within 32px of a pin on mobile screen
-          if (closestPin && minPinDist <= 32) {
+          // If tapped within 36px of a pin on mobile screen (finger-friendly touch target)
+          if (closestPin && minPinDist <= 36) {
             haptics.triggerSelection();
             const fullPin = pins.find((p) => p.id === closestPin!.id) || closestPin;
             onSelectPin?.(fullPin);
@@ -941,10 +944,19 @@ function CebuVectorMapImpl(
   const strokeScale = Math.round(Math.sqrt(Math.max(1, scale)) * 2) / 2;
   const strokeWidthBase = 0.75 / strokeScale;
 
-  const pinLguMeta = activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
-
   return (
-    <View style={[styles.container, { width, height }]} testID={testID}>
+    <View
+      ref={containerRef}
+      onLayout={() => {
+        containerRef.current?.measure((_x, _y, _w, _h, pageX, pageY) => {
+          if (typeof pageX === 'number' && typeof pageY === 'number') {
+            containerPagePos.current = { x: pageX, y: pageY };
+          }
+        });
+      }}
+      style={[styles.container, { width, height }]}
+      testID={testID}
+    >
       {/* Map touch surface for gestures & direct hit-testing */}
       <View
         style={StyleSheet.absoluteFill}
@@ -965,7 +977,7 @@ function CebuVectorMapImpl(
                 onSelectMunicipality={onSelectMunicipality}
               />
 
-              {/* Place Navigation Labels with City Accents */}
+              {/* Place Navigation Labels (Clean & Uniform) */}
               <PlaceLabelsLayer
                 pathsData={pathsData}
                 scale={scale}

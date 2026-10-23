@@ -715,7 +715,7 @@ export default function ReportAnomalyModal({
                   })}
                 </View>
 
-                {/* 4. Description Field */}
+                {/* 5. Observed Evidence & Site Notes */}
                 <Text style={styles.fieldLabel}>OBSERVED EVIDENCE & SITE NOTES</Text>
                 <TextInput
                   style={styles.textArea}
@@ -731,7 +731,7 @@ export default function ReportAnomalyModal({
                   textAlignVertical="top"
                 />
 
-                {/* 5. Whistleblower Privacy Toggle */}
+                {/* 6. Whistleblower Privacy Toggle */}
                 <TouchableOpacity
                   style={styles.anonToggle}
                   onPress={() => setIsAnonymous(!isAnonymous)}
@@ -875,17 +875,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f1f5f9',
     paddingBottom: 10,
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  radarDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#10b981',
-  },
   title: {
     fontSize: 16,
     fontWeight: '800',
@@ -923,14 +912,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
     marginTop: 6,
-  },
-  photoRequiredTag: {
-    color: '#b91c1c',
-    fontWeight: '800',
-  },
-  photoCapturedTag: {
-    color: '#059669',
-    fontWeight: '800',
   },
   projectSelectSection: {
     marginBottom: 10,
@@ -1003,31 +984,6 @@ const styles = StyleSheet.create({
   },
   projectChipTitleSelected: {
     color: '#ffffff',
-  },
-  projectInfoBox: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  projectBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0d9488',
-    marginBottom: 2,
-  },
-  projectTitleText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1e293b',
-    lineHeight: 16,
-  },
-  projectMetaText: {
-    fontSize: 10,
-    color: '#64748b',
-    marginTop: 2,
   },
   radarBanner: {
     flexDirection: 'row',
@@ -1184,6 +1140,14 @@ const styles = StyleSheet.create({
   shutterButtonText: {
     color: '#ffffff',
     fontSize: 12,
+    fontWeight: '800',
+  },
+  photoCapturedTag: {
+    color: '#10b981',
+    fontWeight: '800',
+  },
+  photoRequiredTag: {
+    color: '#ef4444',
     fontWeight: '800',
   },
   categoryGrid: {

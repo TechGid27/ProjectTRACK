@@ -8,7 +8,7 @@ function rankStyle(rank) {
   if (rank === 1) return 'bg-amber-400/15 text-amber-600 border-amber-400/40'
   if (rank === 2) return 'bg-gray-300/30 text-gray-600 border-gray-400/40'
   if (rank === 3) return 'bg-orange-400/10 text-orange-600 border-orange-400/40'
-  return 'bg-[#1f3d3c]/8 text-[#1f3d3c] border-[#1f3d3c]/20'
+  return 'bg-gray-a3 text-gray-a12 border-gray-a6'
 }
 
 function ContractorRankingPage() {
@@ -42,7 +42,10 @@ function ContractorRankingPage() {
   return (
     <Layout>
       <section className="mx-auto max-w-4xl px-6 py-12">
-        <p className="text-[10px] font-semibold tracking-widest text-[#1f3d3c]/60">
+        <p
+          className="text-[10px] font-semibold tracking-widest"
+          style={{ color: 'var(--brand-accent-text)', opacity: 0.75 }}
+        >
           DPWH CEBU
         </p>
         <h1 className="mt-1 font-serif text-3xl text-gray-a12">
@@ -75,7 +78,8 @@ function ContractorRankingPage() {
                 return (
                   <li
                     key={`${contractor.code}-${contractor.contractor}`}
-                    className="overflow-hidden rounded-2xl border border-gray-a5 bg-white transition hover:border-[#1f3d3c]/30 hover:shadow-sm"
+                    style={{ backgroundColor: 'var(--app-surface)' }}
+                    className="overflow-hidden rounded-2xl border border-gray-a5 transition hover:border-[#1f3d3c]/30 hover:shadow-sm"
                   >
                     <div className="flex items-start gap-4 px-5 py-4">
                       <span
@@ -96,7 +100,10 @@ function ContractorRankingPage() {
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-a11">
                           <span>
-                            <strong className="font-bold text-[#1f3d3c]">
+                            <strong
+                              className="font-bold"
+                              style={{ color: 'var(--brand-accent-text)' }}
+                            >
                               {contractor.total_budget_formatted}
                             </strong>{' '}
                             total awarded
@@ -108,8 +115,8 @@ function ContractorRankingPage() {
                         </div>
                         <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-a3">
                           <div
-                            className="h-full rounded-full bg-[#1f3d3c] transition-all"
-                            style={{ width: `${pctWidth}%` }}
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pctWidth}%`, backgroundColor: 'var(--brand-accent)' }}
                           />
                         </div>
                       </div>

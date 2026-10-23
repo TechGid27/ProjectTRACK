@@ -45,7 +45,8 @@ function AboutMapModal({ onClose }) {
         aria-modal="true"
         aria-label="About the map"
         onClick={(event) => event.stopPropagation()}
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        style={{ backgroundColor: 'var(--app-surface)' }}
+        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl p-6 shadow-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <h3 className="font-serif text-xl font-bold text-gray-a12">

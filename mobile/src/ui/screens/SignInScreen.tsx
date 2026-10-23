@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { api } from '../../services/api';
+import { api, resolveOAuthRedirect, NATIVE_OAUTH_REDIRECT } from '../../services/api';
+import Logo from '../components/Logo';
 
 // Safely import expo-web-browser for in-app pop-up auth session
 let WebBrowser: any = null;
@@ -109,7 +110,11 @@ export default function SignInScreen({
     setStatusMessage('Opening Google Sign-In…');
 
     try {
-      const redirectUri = 'projecttrack://auth/callback';
+      // Keep Google OAuth isolated to THIS app: always redirect back to the
+      // mobile app's own callback (its web origin on web, its custom scheme on
+      // native) — never the deployed website. resolveOAuthRedirect() returns
+      // that app-local target.
+      const redirectUri = resolveOAuthRedirect();
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {
@@ -119,9 +124,13 @@ export default function SignInScreen({
         return;
       }
 
-      // Check if in-app WebBrowser is available for smooth modal popup
+      // Prefer an in-app auth session (popup on web, SFSafari/Custom Tab on
+      // native). It returns control to THIS app with the callback URL, so the
+      // session is completed in-app via processOAuthUrl instead of navigating
+      // the whole app away (which is what bounced users to the website).
+      const callbackScheme = redirectUri || NATIVE_OAUTH_REDIRECT;
       if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
-        const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+        const result = await WebBrowser.openAuthSessionAsync(url, callbackScheme);
         if (result.type === 'success' && result.url) {
           await processOAuthUrl(result.url);
         } else if (result.type === 'cancel' || result.type === 'dismiss') {
@@ -129,7 +138,7 @@ export default function SignInScreen({
           setStatusMessage(null);
         }
       } else {
-        // Fallback to Linking
+        // Last resort when no in-app browser is available.
         await Linking.openURL(url);
       }
     } catch (err: any) {
@@ -188,7 +197,7 @@ export default function SignInScreen({
           {/* Branding Header */}
           <View style={styles.brandHeader}>
             <View style={styles.logoBadge}>
-              <Text style={styles.logoBadgeText}>PT</Text>
+              <Logo size={40} variant="light" testID="signin-logo" />
             </View>
             <Text style={styles.brandTitle}>Sign in</Text>
             <Text style={styles.brandSubtitle}>

@@ -1,4 +1,5 @@
-import { api } from '../src/services/api';
+import { api, resolveOAuthRedirect, NATIVE_OAUTH_REDIRECT } from '../src/services/api';
+import { Platform } from 'react-native';
 
 describe('ApiService (FastAPI integration & offline fallback)', () => {
   const originalFetch = global.fetch;
@@ -22,6 +23,25 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     api.setBaseUrl('https://api.projecttrack.ph/api');
     expect(api.getBaseUrl()).toBe('https://api.projecttrack.ph/api');
   });
+
+  test('resolveOAuthRedirect returns an http(s) web origin on web, scheme on native', () => {
+    // The backend rejects non-http(s) redirects, so web must use its origin.
+    if (Platform.OS === 'web') {
+      const redirect = resolveOAuthRedirect();
+      // Either a resolved web origin ending in /auth/callback, or undefined when
+      // no origin is available (caller then omits the param).
+      if (redirect !== undefined) {
+        expect(redirect).toMatch(/^https?:\/\/.+\/auth\/callback$/);
+      }
+    } else {
+      expect(resolveOAuthRedirect()).toBe(NATIVE_OAUTH_REDIRECT);
+      expect(NATIVE_OAUTH_REDIRECT).toBe('projecttrack://auth/callback');
+    }
+  });
+
+  // Note: EXPO_PUBLIC_OAUTH_REDIRECT override is inlined by Expo/Babel at build
+  // time, so it can't be exercised by mutating process.env at runtime in Jest.
+  // Its default (app-local) behavior is covered by the test above.
 
   test('fetchSummary returns data on successful HTTP response', async () => {
     global.fetch = jest.fn().mockResolvedValue({

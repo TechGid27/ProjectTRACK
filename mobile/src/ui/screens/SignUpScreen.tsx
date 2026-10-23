@@ -12,7 +12,8 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { api } from '../../services/api';
+import { api, resolveOAuthRedirect, NATIVE_OAUTH_REDIRECT } from '../../services/api';
+import Logo from '../components/Logo';
 
 // Safely import expo-web-browser for in-app pop-up auth session
 let WebBrowser: any = null;
@@ -110,7 +111,9 @@ export default function SignUpScreen({
     setStatusMessage('Opening Google Sign-Up…');
 
     try {
-      const redirectUri = 'projecttrack://auth/callback';
+      // Keep Google OAuth isolated to THIS app: redirect back to the mobile
+      // app's own callback, never the deployed website.
+      const redirectUri = resolveOAuthRedirect();
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {
@@ -120,8 +123,9 @@ export default function SignUpScreen({
         return;
       }
 
+      const callbackScheme = redirectUri || NATIVE_OAUTH_REDIRECT;
       if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
-        const result = await WebBrowser.openAuthSessionAsync(url, redirectUri);
+        const result = await WebBrowser.openAuthSessionAsync(url, callbackScheme);
         if (result.type === 'success' && result.url) {
           await processOAuthUrl(result.url);
         } else if (result.type === 'cancel' || result.type === 'dismiss') {
@@ -204,7 +208,7 @@ export default function SignUpScreen({
           {/* Header */}
           <View style={styles.brandHeader}>
             <View style={styles.logoBadge}>
-              <Text style={styles.logoBadgeText}>PT</Text>
+              <Logo size={40} variant="light" testID="signup-logo" />
             </View>
             <Text style={styles.brandTitle}>Create account</Text>
             <Text style={styles.brandSubtitle}>

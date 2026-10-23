@@ -35,21 +35,29 @@ const getInitialBaseUrl = (): string => {
 const DEFAULT_API_BASE = getInitialBaseUrl();
 
 /**
- * Resolve the OAuth redirect target the backend will accept.
+ * Resolve the OAuth redirect target — always the MOBILE APP's own callback, so
+ * Google sign-in returns to this app rather than bouncing to the deployed
+ * website.
  *
- * The backend rejects any redirect that is not an absolute http(s) URL within
- * its allow-list (FRONTEND_URL + CORS origins), so a custom "projecttrack://"
- * scheme fails on web with "Invalid 'redirect': expected an absolute http(s)
- * URL". We therefore:
- *   • Web   -> use the current web origin (`<origin>/auth/callback`), which
- *              matches FRONTEND_URL / the CORS allow-list.
- *   • Native-> use the app's custom scheme for deep-link return.
- * Returns `undefined` when no origin can be resolved on web, letting the caller
- * omit the param so the backend falls back to its configured FRONTEND_URL.
+ *   • Native -> the app's custom scheme ("projecttrack://auth/callback"); the
+ *               in-app auth session deep-links back here.
+ *   • Web    -> this app's own origin ("<origin>/auth/callback"), NOT the
+ *               deployed website origin.
+ *
+ * An explicit `EXPO_PUBLIC_OAUTH_REDIRECT` env var overrides both (useful to
+ * pin the exact URL that is allow-listed in the backend + Supabase redirect
+ * list, which is required for the provider to redirect back here instead of
+ * falling back to the Supabase Site URL / deployed website).
+ *
+ * Returns `undefined` only when no web origin can be resolved, letting the
+ * caller omit the param.
  */
 export const NATIVE_OAUTH_REDIRECT = 'projecttrack://auth/callback';
 
 export function resolveOAuthRedirect(): string | undefined {
+  if (process.env.EXPO_PUBLIC_OAUTH_REDIRECT) {
+    return process.env.EXPO_PUBLIC_OAUTH_REDIRECT;
+  }
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location?.origin) {
       return `${window.location.origin}/auth/callback`;

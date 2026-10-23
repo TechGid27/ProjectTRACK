@@ -111,8 +111,9 @@ export default function SignUpScreen({
     setStatusMessage('Opening Google Sign-Up…');
 
     try {
+      // Keep Google OAuth isolated to THIS app: redirect back to the mobile
+      // app's own callback, never the deployed website.
       const redirectUri = resolveOAuthRedirect();
-      const isNativeRedirect = redirectUri === NATIVE_OAUTH_REDIRECT;
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {
@@ -122,12 +123,9 @@ export default function SignUpScreen({
         return;
       }
 
-      if (
-        isNativeRedirect &&
-        WebBrowser &&
-        typeof WebBrowser.openAuthSessionAsync === 'function'
-      ) {
-        const result = await WebBrowser.openAuthSessionAsync(url, NATIVE_OAUTH_REDIRECT);
+      const callbackScheme = redirectUri || NATIVE_OAUTH_REDIRECT;
+      if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
+        const result = await WebBrowser.openAuthSessionAsync(url, callbackScheme);
         if (result.type === 'success' && result.url) {
           await processOAuthUrl(result.url);
         } else if (result.type === 'cancel' || result.type === 'dismiss') {

@@ -39,6 +39,10 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     }
   });
 
+  // Note: EXPO_PUBLIC_OAUTH_REDIRECT override is inlined by Expo/Babel at build
+  // time, so it can't be exercised by mutating process.env at runtime in Jest.
+  // Its default (app-local) behavior is covered by the test above.
+
   test('fetchSummary returns data on successful HTTP response', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

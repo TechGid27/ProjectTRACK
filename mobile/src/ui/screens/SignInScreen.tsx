@@ -110,11 +110,11 @@ export default function SignInScreen({
     setStatusMessage('Opening Google Sign-In…');
 
     try {
-      // The backend only accepts an absolute http(s) redirect whose origin is in
-      // its allow-list. resolveOAuthRedirect() returns the web origin on web and
-      // the app scheme on native (see api.ts).
+      // Keep Google OAuth isolated to THIS app: always redirect back to the
+      // mobile app's own callback (its web origin on web, its custom scheme on
+      // native) — never the deployed website. resolveOAuthRedirect() returns
+      // that app-local target.
       const redirectUri = resolveOAuthRedirect();
-      const isNativeRedirect = redirectUri === NATIVE_OAUTH_REDIRECT;
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {
@@ -124,15 +124,13 @@ export default function SignInScreen({
         return;
       }
 
-      // Native: open an in-app auth session that deep-links back via the app
-      // scheme. Web: hand off to the browser (the provider redirects back to the
-      // web origin, handled by the deep-link/URL listener).
-      if (
-        isNativeRedirect &&
-        WebBrowser &&
-        typeof WebBrowser.openAuthSessionAsync === 'function'
-      ) {
-        const result = await WebBrowser.openAuthSessionAsync(url, NATIVE_OAUTH_REDIRECT);
+      // Prefer an in-app auth session (popup on web, SFSafari/Custom Tab on
+      // native). It returns control to THIS app with the callback URL, so the
+      // session is completed in-app via processOAuthUrl instead of navigating
+      // the whole app away (which is what bounced users to the website).
+      const callbackScheme = redirectUri || NATIVE_OAUTH_REDIRECT;
+      if (WebBrowser && typeof WebBrowser.openAuthSessionAsync === 'function') {
+        const result = await WebBrowser.openAuthSessionAsync(url, callbackScheme);
         if (result.type === 'success' && result.url) {
           await processOAuthUrl(result.url);
         } else if (result.type === 'cancel' || result.type === 'dismiss') {
@@ -140,6 +138,7 @@ export default function SignInScreen({
           setStatusMessage(null);
         }
       } else {
+        // Last resort when no in-app browser is available.
         await Linking.openURL(url);
       }
     } catch (err: any) {

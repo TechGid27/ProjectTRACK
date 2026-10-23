@@ -2274,7 +2274,9 @@ function CebuMap() {
     activeVerificationFilter === 'verified' ||
     activeVerificationFilter === 'flagged'
       ? activeVerificationFilter
-      : null
+      : activeVerificationFilter === 'anomalies'
+        ? 'unverified' // white/grey pin, matching the "All Anomalies" legend swatch
+        : null
 
   const filteredSpatialDots = useMemo(() => {
     if (!projectDots || projectDots.length === 0) return []

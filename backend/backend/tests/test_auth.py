@@ -76,6 +76,21 @@ class TestAuthEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         mock_url.assert_called_once_with("google", "http://localhost:5173/signin")
 
+    def test_oauth_url_accepts_native_app_scheme_redirect(self):
+        # Native mobile (Expo Go) deep-links back via the app's custom scheme,
+        # which is allow-listed in settings.MOBILE_APP_SCHEMES.
+        with patch.object(auth_module.supabase_auth, "oauth_authorize_url",
+                          return_value="https://proj.supabase.co/auth/v1/authorize?provider=google") as mock_url:
+            resp = self.client.get(
+                "/api/auth/oauth/google?redirect=projecttrack://auth/callback")
+        self.assertEqual(resp.status_code, 200)
+        mock_url.assert_called_once_with("google", "projecttrack://auth/callback")
+
+    def test_oauth_url_rejects_unregistered_scheme(self):
+        # A scheme NOT in MOBILE_APP_SCHEMES (and not http/https) must still 400.
+        resp = self.client.get("/api/auth/oauth/google?redirect=evilapp://steal")
+        self.assertEqual(resp.status_code, 400)
+
     # -- Sign in -------------------------------------------------------------
     def test_signin_sets_cookie_and_returns_user(self):
         with patch.object(auth_module.supabase_auth, "sign_in_password",

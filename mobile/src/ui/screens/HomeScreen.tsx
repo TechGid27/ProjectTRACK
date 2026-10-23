@@ -279,7 +279,7 @@ export default function HomeScreen({
       >
         <View style={styles.headerTop}>
           <View style={styles.brandGroup}>
-            <Logo size={34} testID="home-header-logo" />
+            <Logo size={34} variant="light" testID="home-header-logo" />
             <View>
               <Text style={styles.brandTitle}>ProjectTRACK</Text>
               <Text style={styles.brandSubtitle}>Cebu Civic Intelligence</Text>

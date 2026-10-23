@@ -621,11 +621,11 @@ function LocationIntelPanel({
         )}
         <div className="mt-2.5 flex items-center gap-3 text-[10px] text-white/50">
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-teal-600" />
+            <span className="h-2 w-2 rotate-45 rounded-[1px] bg-amber-500 shadow-[0_0_6px_#f59e0b]" />
             Ongoing
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-sky-600" />
+            <span className="h-2 w-2 rotate-45 rounded-[1px] bg-emerald-500 shadow-[0_0_6px_#10b981]" />
             Completed
           </span>
         </div>
@@ -648,8 +648,8 @@ function LocationIntelPanel({
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
                         site.status === 'Completed'
-                          ? 'bg-sky-500'
-                          : 'bg-teal-600'
+                          ? 'bg-emerald-500'
+                          : 'bg-amber-500'
                       }`}
                     />
                     {site.name}

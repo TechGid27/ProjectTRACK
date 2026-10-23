@@ -15,6 +15,8 @@ jest.mock('../src/services/api', () => ({
     getOAuthUrl: jest.fn(),
     exchangeOAuthCallback: jest.fn(),
   },
+  NATIVE_OAUTH_REDIRECT: 'projecttrack://auth/callback',
+  resolveOAuthRedirect: jest.fn(() => 'projecttrack://auth/callback'),
 }));
 
 describe('SignUpScreen Component', () => {

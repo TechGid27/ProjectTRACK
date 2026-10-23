@@ -64,6 +64,19 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
+    # Custom URL schemes the NATIVE mobile app uses for OAuth deep-link return
+    # (e.g. "projecttrack://auth/callback"). Native apps cannot use an http(s)
+    # redirect, so these schemes are accepted by the /api/auth/oauth redirect
+    # validator IN ADDITION to the http(s) origin allow-list. "exp" covers the
+    # Expo Go dev client (exp://...). Keep this list tight — only app-owned
+    # schemes — since it relaxes redirect validation. The same scheme must also
+    # be added to the Supabase Auth redirect allow-list for the round-trip to
+    # complete. Override via the MOBILE_APP_SCHEMES env var (comma-separated).
+    MOBILE_APP_SCHEMES: Annotated[List[str], NoDecode] = Field(
+        default=["projecttrack", "exp"],
+        description="Allowed native app URL schemes for OAuth deep-link redirects",
+    )
+
     # Session cookie behavior (the backend stores Supabase tokens in an HTTP-only cookie)
     AUTH_COOKIE_NAME: str = Field(default="pt_session", description="Name of the HTTP-only session cookie")
     AUTH_COOKIE_SECURE: bool = Field(default=False, description="Set True in production (HTTPS) so the cookie is Secure")
@@ -125,6 +138,30 @@ class Settings(BaseSettings):
         if not isinstance(v, list):
             raise ValueError("CORS_ORIGINS must be a list of origins")
         return [cls._normalize_origin(str(o)) for o in v if str(o).strip()]
+
+    @field_validator("MOBILE_APP_SCHEMES", mode="before")
+    @classmethod
+    def parse_mobile_app_schemes(cls, v):
+        """
+        Accept a JSON list or a comma-separated string of URL schemes, e.g.
+            MOBILE_APP_SCHEMES="projecttrack,exp"
+        Each entry is lower-cased and stripped of any trailing "://" so both
+        "projecttrack" and "projecttrack://" resolve to the scheme name.
+        """
+        if v is None or v == "":
+            return ["projecttrack", "exp"]
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith("["):
+                try:
+                    v = json.loads(s)
+                except json.JSONDecodeError:
+                    raise ValueError("MOBILE_APP_SCHEMES must be a JSON list or comma-separated schemes")
+            else:
+                v = [part for part in (p.strip() for p in s.split(",")) if part]
+        if not isinstance(v, list):
+            raise ValueError("MOBILE_APP_SCHEMES must be a list of schemes")
+        return [str(o).strip().lower().rstrip(":/").strip() for o in v if str(o).strip()]
 
     @property
     def allowed_origins(self) -> List[str]:

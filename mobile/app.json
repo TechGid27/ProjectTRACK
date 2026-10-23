@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.projecttrack.mobile",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/logo.png",
         "backgroundColor": "#1f3d3c"
@@ -41,7 +41,10 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -63,7 +66,21 @@
           "cameraPermission": "ProjectTRACK uses the camera for live on-site photo capture. Gallery uploads are disabled to preserve ground-truth integrity."
         }
       ],
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "07cbb5ba-82bd-4cd5-811b-e40e2a5b788b"
+      }
+    },
+    "owner": "thirdtempest"
   }
 }

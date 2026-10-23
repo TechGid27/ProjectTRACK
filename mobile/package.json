@@ -12,12 +12,17 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "audit": "node scripts/audit-check.js"
+    "audit": "node scripts/audit-check.js",
+    "setup:assets": "node scripts/setup-assets.js",
+    "build:apk": "node scripts/build-apk.js",
+    "build:apk:cloud": "node scripts/build-apk.js --cloud",
+    "build:apk:local": "node scripts/build-apk.js --local",
+    "install:apk": "node -e \"process.platform === 'win32' ? require('child_process').spawn('cmd.exe', ['/c', 'scripts\\\\install-apk.bat'], {stdio: 'inherit'}) : require('child_process').spawn('bash', ['scripts/install-apk.sh'], {stdio: 'inherit'})\""
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
     "@expo/metro-runtime": "~4.0.1",
-    "@maplibre/maplibre-react-native": "^11.5.0",
+    "@maplibre/maplibre-react-native": "^10.4.2",
     "expo": "~52.0.0",
     "expo-asset": "~11.0.5",
     "expo-camera": "~16.0.0",

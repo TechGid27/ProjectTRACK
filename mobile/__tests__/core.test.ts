@@ -4,14 +4,8 @@ import {
   geoToSvgCoordinates,
   formatCurrencyPHP,
   normalizeLguName,
+  computeMapViewBox,
 } from '../src/core/geoUtils';
-import { pins, getPinsByLgu, getPinById } from '../src/data/pins';
-import {
-  mockProjects,
-  getProjectsByLocation,
-  getProjectById,
-  computeLguSummary,
-} from '../src/data/mockApi';
 import { AnomalyReport } from '../src/core/types';
 
 describe('Core Geo Utilities', () => {
@@ -86,71 +80,39 @@ describe('Core Geo Utilities', () => {
     expect(normalizeLguName('Tuburan')).toBe('Tuburan');
     expect(normalizeLguName('  Carcar City  ')).toBe('Carcar City');
   });
-});
 
-describe('Pins Data Store', () => {
-  test('pins dataset contains valid entries with required fields', () => {
-    expect(pins.length).toBeGreaterThan(0);
-    pins.forEach((pin) => {
-      expect(pin.id).toBeDefined();
-      expect(pin.name).toBeDefined();
-      expect(typeof pin.lat).toBe('number');
-      expect(typeof pin.lng).toBe('number');
-      expect(pin.lgu).toBeDefined();
-    });
-  });
+  test('computeMapViewBox drives crisp zoom via viewBox (not raster scaling)', () => {
+    const W = 360;
+    const H = 480;
 
-  test('getPinsByLgu retrieves pins matching specific LGU name', () => {
-    const cebuPins = getPinsByLgu('Cebu City');
-    expect(Array.isArray(cebuPins)).toBe(true);
-    cebuPins.forEach((p) => {
-      expect(normalizeLguName(p.lgu)).toBe('Cebu City');
-    });
-  });
+    // At scale 1.0 with no offset, the viewBox spans the full canvas.
+    const [x0, y0, w0, h0] = computeMapViewBox(1.0, 0, 0, W, H)
+      .split(/\s+/)
+      .map(Number);
+    expect(x0).toBeCloseTo(0, 1);
+    expect(y0).toBeCloseTo(0, 1);
+    expect(w0).toBeCloseTo(W, 1);
+    expect(h0).toBeCloseTo(H, 1);
 
-  test('getPinById returns pin when found and undefined when not', () => {
-    const firstPin = pins[0];
-    const found = getPinById(firstPin.id);
-    expect(found).toEqual(firstPin);
+    // Zooming in SHRINKS the visible span (so vectors re-rasterize larger & crisp).
+    const [, , w2, h2] = computeMapViewBox(2.0, 0, 0, W, H)
+      .split(/\s+/)
+      .map(Number);
+    expect(w2).toBeCloseTo(W / 2, 1);
+    expect(h2).toBeCloseTo(H / 2, 1);
 
-    const notFound = getPinById('non-existent-id-999');
-    expect(notFound).toBeUndefined();
-  });
-});
-
-describe('Projects & Mock API Data Store', () => {
-  test('mockProjects contains properly formed civil works contracts', () => {
-    expect(mockProjects.length).toBeGreaterThan(0);
-    mockProjects.forEach((proj) => {
-      expect(proj.id).toMatch(/^[0-9]{2}[A-Z]{1,2}[0-9]{4,5}$/);
-      expect(proj.budget).toBeGreaterThan(0);
-      expect(['Ongoing', 'Completed', 'Delayed']).toContain(proj.status);
-    });
-  });
-
-  test('getProjectsByLocation filters projects by municipality or district', () => {
-    const bogoProjects = getProjectsByLocation('Bogo');
-    expect(bogoProjects.length).toBeGreaterThan(0);
-    bogoProjects.forEach((p) => {
-      expect(p.lgu.toLowerCase()).toContain('bogo');
-    });
-
-    const empty = getProjectsByLocation('UnknownNonExistentCity');
-    expect(empty).toEqual([]);
-  });
-
-  test('getProjectById retrieves exact contract or returns undefined', () => {
-    const existing = mockProjects[0];
-    expect(getProjectById(existing.id)).toEqual(existing);
-    expect(getProjectById('INVALID_ID')).toBeUndefined();
-  });
-
-  test('computeLguSummary aggregates project count and budget for an LGU', () => {
-    const summary = computeLguSummary('Bogo City');
-    expect(summary.name).toBe('Bogo City');
-    expect(summary.totalProjects).toBeGreaterThanOrEqual(1);
-    expect(summary.totalBudget).toBeGreaterThan(0);
-    expect(summary.activeProjects).toBeLessThanOrEqual(summary.totalProjects);
+    // The mapping matches screenX = W/2 + (svgX - W/2)*scale + offsetX.
+    // For a point at the canvas center (svgX=W/2, svgY=H/2) with scale 2 and an
+    // x-offset of 40, its screen position must equal (W/2 + offsetX).
+    const scale = 2;
+    const offsetX = 40;
+    const [vbMinX, , vbW] = computeMapViewBox(scale, offsetX, 0, W, H)
+      .split(/\s+/)
+      .map(Number);
+    const svgCenterX = W / 2;
+    const screenXViaViewBox = ((svgCenterX - vbMinX) / vbW) * W;
+    const screenXExpected = W / 2 + (svgCenterX - W / 2) * scale + offsetX;
+    expect(screenXViaViewBox).toBeCloseTo(screenXExpected, 1);
   });
 });
 

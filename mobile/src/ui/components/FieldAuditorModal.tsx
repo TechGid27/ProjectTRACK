@@ -1,11 +1,12 @@
 import React from 'react';
-import ReportAnomalyModal, { ReportAnomalyModalProps } from './ReportAnomalyModal';
+import ReportAnomalyModal from './ReportAnomalyModal';
 import { ProjectDetail } from '../../core/types';
 import { QueuedAudit } from '../../services/outbox';
 
 export interface FieldAuditorModalProps {
   visible: boolean;
   project: ProjectDetail | null;
+  availableProjects?: ProjectDetail[];
   onClose: () => void;
   onAuditSubmitted?: (receipt: QueuedAudit) => void;
 }
@@ -18,6 +19,7 @@ export interface FieldAuditorModalProps {
 export default function FieldAuditorModal({
   visible,
   project,
+  availableProjects,
   onClose,
   onAuditSubmitted,
 }: FieldAuditorModalProps) {
@@ -25,6 +27,7 @@ export default function FieldAuditorModal({
     <ReportAnomalyModal
       visible={visible}
       project={project}
+      availableProjects={availableProjects}
       onClose={onClose}
       onAuditSubmitted={onAuditSubmitted}
     />

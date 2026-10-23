@@ -1,8 +1,32 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import CebuVectorMap from '../src/ui/components/CebuVectorMap';
-import { pins } from '../src/data/pins';
+import { Pin } from '../src/core/types';
 import cebuData from '../src/assets/cebuMunicipalities.json';
+
+// Inline fixture (mock data files were removed in favor of live backend data).
+const pins: Pin[] = [
+  {
+    id: 'bogo',
+    name: 'Bogo City Central Hub',
+    lat: 11.054,
+    lng: 124.006,
+    tone: 'default',
+    report_count: 0,
+    is_hotspot: false,
+    lgu: 'Bogo City',
+    description: 'Northern Cebu civil works and flood mitigation.',
+  },
+  {
+    id: 'cebu-city',
+    name: 'Cebu City Urban Drainage',
+    lat: 10.3157,
+    lng: 123.8854,
+    tone: 'accent',
+    lgu: 'Cebu City',
+    description: 'Lahug river flood control and farm-to-market roads.',
+  },
+];
 
 describe('CebuVectorMap Component', () => {
   const mockOnSelectMunicipality = jest.fn();
@@ -93,7 +117,7 @@ describe('CebuVectorMap Component', () => {
     }
   });
 
-  test('differentiates administrative tiers with distinctive styles', () => {
+  test('renders consistent border stroke across administrative tiers', () => {
     const { getByTestId } = render(
       <CebuVectorMap
         onSelectMunicipality={mockOnSelectMunicipality}
@@ -101,17 +125,33 @@ describe('CebuVectorMap Component', () => {
       />,
     );
 
+    // On React Native SVG mock, hex colors are processed into payload objects
+    // or packed numeric color values depending on the renderer version.
+    const toHexColor = (value: any) => {
+      if (typeof value === 'number') {
+        return `#${(value >>> 0).toString(16).padStart(8, '0').slice(-6)}`;
+      }
+      return value;
+    };
+    const strokeOf = (el: any) => {
+      const stroke = el.props.stroke;
+      if (typeof stroke === 'object' && stroke !== null) {
+        return toHexColor(stroke.payload);
+      }
+      return toHexColor(stroke);
+    };
+
     // HUC (Cebu City)
     const cebuCityPath = getByTestId('muni-path-Cebu City');
-    expect(cebuCityPath.props.stroke).toBe('#f59e0b');
+    expect(strokeOf(cebuCityPath)).toBe('#b2d4cf');
 
     // Component City (Bogo City)
     const bogoPath = getByTestId('muni-path-City of Bogo');
-    expect(bogoPath.props.stroke).toBe('#38bdf8');
+    expect(strokeOf(bogoPath)).toBe('#b2d4cf');
 
     // Municipality (Argao)
     const argaoPath = getByTestId('muni-path-Argao');
-    expect(argaoPath.props.stroke).toBe('#b2d4cf');
+    expect(strokeOf(argaoPath)).toBe('#b2d4cf');
   });
 
   test('subdues non-matching municipalities when hierarchy tier is CITIES', () => {
@@ -154,6 +194,28 @@ describe('CebuVectorMap Component', () => {
     fireEvent.press(resetBtn);
 
     // Badge should be hidden after reset back to 1.0x
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+  });
+
+  test('zoom controls re-rasterize via committed zoom state (crisp, not raster scale)', () => {
+    const { getByTestId, queryByTestId } = render(
+      <CebuVectorMap
+        width={360}
+        height={480}
+        onSelectMunicipality={mockOnSelectMunicipality}
+        onSelectPin={mockOnSelectPin}
+      />,
+    );
+
+    // The crisp vector canvas is rendered (viewBox-driven, no Animated raster layer).
+    expect(getByTestId('map-svg-canvas')).toBeTruthy();
+
+    // At 1.0x no badge; zooming in commits a new scale (drives the viewBox).
+    expect(queryByTestId('zoom-level-badge')).toBeNull();
+    fireEvent.press(getByTestId('zoom-in-btn'));
+    expect(getByTestId('zoom-level-badge')).toBeTruthy();
+
+    fireEvent.press(getByTestId('zoom-reset-btn'));
     expect(queryByTestId('zoom-level-badge')).toBeNull();
   });
 

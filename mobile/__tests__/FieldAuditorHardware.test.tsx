@@ -2,12 +2,13 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 
 // --- Mock hardware + network before importing the component ----------------
+// GPS fix sits ~40m from Bogo City's GeoJSON centroid (the mock project's LGU)
 jest.mock('expo-location', () => ({
   Accuracy: { High: 4 },
   requestForegroundPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
   getCurrentPositionAsync: jest
     .fn()
-    .mockResolvedValue({ coords: { latitude: 11.0509, longitude: 124.0055, accuracy: 5 } }),
+    .mockResolvedValue({ coords: { latitude: 11.0169, longitude: 123.9873, accuracy: 5 } }),
 }));
 jest.mock('expo-camera', () => ({
   Camera: {
@@ -19,6 +20,9 @@ import FieldAuditorModal from '../src/ui/components/FieldAuditorModal';
 import { ProjectDetail } from '../src/core/types';
 import { outbox } from '../src/services/outbox';
 import { api } from '../src/services/api';
+
+// Hardware-flavored suite can be slow under parallel jest workers.
+jest.setTimeout(15000);
 
 const mockProject: ProjectDetail = {
   id: '24HD0012',
@@ -57,11 +61,12 @@ describe('FieldAuditorModal hardware capture + verdict (Pillars 1 & 5)', () => {
       <FieldAuditorModal visible project={mockProject} onClose={jest.fn()} />,
     );
 
-    // Hardware fix (mocked ~44m) keeps the shutter unlocked.
+    // Wait for the async hardware GPS fix (~40m) to classify as on-site.
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     fireEvent.press(getByTestId('auditor-shutter-btn'));
 
-    // Receipt is enqueued immediately (offline-first).
-    expect(outbox.getAllAudits().length).toBe(1);
+    // Receipt is enqueued once the capture settles (offline-first).
+    await waitFor(() => expect(outbox.getAllAudits().length).toBe(1));
 
     // Live submission resolves and the verdict badges render.
     await waitFor(() => expect(getByTestId('report-verdict')).toBeTruthy());
@@ -74,10 +79,12 @@ describe('FieldAuditorModal hardware capture + verdict (Pillars 1 & 5)', () => {
   test('failed live submission keeps the audit queued for later sync', async () => {
     jest.spyOn(api, 'submitReport').mockRejectedValue(new Error('offline'));
 
-    const { getByTestId } = render(
+    const { getByTestId, getByText } = render(
       <FieldAuditorModal visible project={mockProject} onClose={jest.fn()} />,
     );
 
+    // Wait for the hardware GPS fix before capturing (on-site classification)
+    await waitFor(() => expect(getByText(/On-site \(/)).toBeTruthy());
     fireEvent.press(getByTestId('auditor-shutter-btn'));
     // Receipt still shown; item stays pending because the POST failed.
     await waitFor(() => expect(getByTestId('receipt-code-badge')).toBeTruthy());

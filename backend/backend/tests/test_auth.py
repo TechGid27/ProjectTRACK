@@ -50,6 +50,32 @@ class TestAuthEndpoints(unittest.TestCase):
         resp = self.client.get("/api/auth/oauth/myspace")
         self.assertEqual(resp.status_code, 400)
 
+    def test_oauth_url_rejects_disallowed_redirect_origin(self):
+        # Supabase would silently bounce users to the Site URL for this; fail loudly instead.
+        resp = self.client.get("/api/auth/oauth/google?redirect=https://evil.example.com")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not allowed", resp.json()["detail"])
+
+    def test_oauth_url_rejects_non_http_redirect(self):
+        resp = self.client.get("/api/auth/oauth/google?redirect=javascript:alert(1)")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_oauth_url_defaults_redirect_to_frontend_url(self):
+        from backend.config import settings
+        with patch.object(auth_module.supabase_auth, "oauth_authorize_url",
+                          return_value="https://proj.supabase.co/auth/v1/authorize?provider=google") as mock_url:
+            resp = self.client.get("/api/auth/oauth/google")
+        self.assertEqual(resp.status_code, 200)
+        mock_url.assert_called_once_with("google", settings.FRONTEND_URL)
+
+    def test_oauth_url_forwards_allowed_redirect(self):
+        with patch.object(auth_module.supabase_auth, "oauth_authorize_url",
+                          return_value="https://proj.supabase.co/auth/v1/authorize?provider=google") as mock_url:
+            resp = self.client.get(
+                "/api/auth/oauth/google?redirect=http://localhost:5173/signin")
+        self.assertEqual(resp.status_code, 200)
+        mock_url.assert_called_once_with("google", "http://localhost:5173/signin")
+
     # -- Sign in -------------------------------------------------------------
     def test_signin_sets_cookie_and_returns_user(self):
         with patch.object(auth_module.supabase_auth, "sign_in_password",
@@ -83,7 +109,10 @@ class TestAuthEndpoints(unittest.TestCase):
             resp = self.client.post("/api/auth/signup",
                                     json={"email": "new@example.com", "password": "correct-horse"})
         self.assertEqual(resp.status_code, 200)
-        self.assertTrue(resp.json()["email_confirmation_required"])
+        body = resp.json()
+        self.assertTrue(body["email_confirmation_required"])
+        # The user must be told which mailbox the link went to.
+        self.assertIn("new@example.com", body["message"])
 
     def test_signup_autoconfirmed_sets_cookie(self):
         with patch.object(auth_module.supabase_auth, "sign_up",
@@ -93,6 +122,110 @@ class TestAuthEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.json()["email_confirmation_required"])
         self.assertIn("pt_session", resp.cookies)
+
+    def test_signup_forwards_redirect_to_confirmation_email(self):
+        with patch.object(auth_module.supabase_auth, "sign_up",
+                          new=AsyncMock(return_value={"id": FAKE_USER["id"], "email": FAKE_USER["email"]})) as mock_signup:
+            resp = self.client.post("/api/auth/signup",
+                                    json={"email": "new@example.com", "password": "correct-horse",
+                                          "redirect": "http://localhost:5173/signin"})
+        self.assertEqual(resp.status_code, 200)
+        mock_signup.assert_awaited_once_with(
+            "new@example.com", "correct-horse", redirect_to="http://localhost:5173/signin")
+
+    def test_signup_defaults_redirect_to_frontend_url(self):
+        from backend.config import settings
+        with patch.object(auth_module.supabase_auth, "sign_up",
+                          new=AsyncMock(return_value={"id": FAKE_USER["id"], "email": FAKE_USER["email"]})) as mock_signup:
+            resp = self.client.post("/api/auth/signup",
+                                    json={"email": "new@example.com", "password": "correct-horse"})
+        self.assertEqual(resp.status_code, 200)
+        mock_signup.assert_awaited_once_with(
+            "new@example.com", "correct-horse", redirect_to=settings.FRONTEND_URL)
+
+    def test_signup_rejects_disallowed_redirect_origin(self):
+        with patch.object(auth_module.supabase_auth, "sign_up",
+                          new=AsyncMock(return_value=FAKE_USER)) as mock_signup:
+            resp = self.client.post("/api/auth/signup",
+                                    json={"email": "new@example.com", "password": "correct-horse",
+                                          "redirect": "https://evil.example.com"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not allowed", resp.json()["detail"])
+        mock_signup.assert_not_awaited()
+
+    def test_sign_up_sends_redirect_to_in_query_string(self):
+        # GoTrue has no redirect_to field on the signup body: it reads the
+        # parameter off the request URL when building the confirmation link.
+        import asyncio
+        from backend.services.supabase_auth import supabase_auth
+
+        with patch.object(supabase_auth, "_post",
+                          new=AsyncMock(return_value={})) as mock_post:
+            asyncio.run(supabase_auth.sign_up(
+                "new@example.com", "correct-horse",
+                redirect_to="http://localhost:5173/signin"))
+
+        path, payload = mock_post.await_args.args
+        self.assertEqual(path, "/signup?redirect_to=http%3A%2F%2Flocalhost%3A5173%2Fsignin")
+        self.assertEqual(payload, {"email": "new@example.com", "password": "correct-horse"})
+        self.assertNotIn("redirect_to", payload)
+
+    def test_sign_up_omits_redirect_query_by_default(self):
+        import asyncio
+        from backend.services.supabase_auth import supabase_auth
+
+        with patch.object(supabase_auth, "_post",
+                          new=AsyncMock(return_value={})) as mock_post:
+            asyncio.run(supabase_auth.sign_up("new@example.com", "correct-horse"))
+        self.assertEqual(mock_post.await_args.args[0], "/signup")
+
+    # -- Resend confirmation -------------------------------------------------
+    def test_resend_returns_confirmation_message(self):
+        with patch.object(auth_module.supabase_auth, "resend_confirmation",
+                          new=AsyncMock(return_value={})):
+            resp = self.client.post("/api/auth/resend",
+                                    json={"email": "new@example.com"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("new@example.com", resp.json()["message"])
+
+    def test_resend_surfaces_supabase_delivery_error(self):
+        from backend.services.supabase_auth import SupabaseAuthError
+        with patch.object(auth_module.supabase_auth, "resend_confirmation",
+                          new=AsyncMock(side_effect=SupabaseAuthError(
+                              400, 'Email address "a@b.com" cannot be used as it is not authorized'))):
+            resp = self.client.post("/api/auth/resend", json={"email": "a@b.com"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not authorized", resp.json()["detail"])
+
+    def test_resend_maps_rate_limit_to_429(self):
+        from backend.services.supabase_auth import SupabaseAuthError
+        with patch.object(auth_module.supabase_auth, "resend_confirmation",
+                          new=AsyncMock(side_effect=SupabaseAuthError(
+                              429, "Email rate limit exceeded"))):
+            resp = self.client.post("/api/auth/resend", json={"email": "a@b.com"})
+        self.assertEqual(resp.status_code, 429)
+
+    def test_resend_rejects_disallowed_redirect_origin(self):
+        with patch.object(auth_module.supabase_auth, "resend_confirmation",
+                          new=AsyncMock(return_value={})) as mock_resend:
+            resp = self.client.post("/api/auth/resend",
+                                    json={"email": "a@b.com",
+                                          "redirect": "https://evil.example.com"})
+        self.assertEqual(resp.status_code, 400)
+        mock_resend.assert_not_awaited()
+
+    def test_resend_service_puts_redirect_in_query_string(self):
+        import asyncio
+        from backend.services.supabase_auth import supabase_auth
+
+        with patch.object(supabase_auth, "_post",
+                          new=AsyncMock(return_value={})) as mock_post:
+            asyncio.run(supabase_auth.resend_confirmation(
+                "new@example.com", redirect_to="http://localhost:5173"))
+
+        path, payload = mock_post.await_args.args
+        self.assertEqual(path, "/resend?redirect_to=http%3A%2F%2Flocalhost%3A5173")
+        self.assertEqual(payload, {"type": "signup", "email": "new@example.com"})
 
     # -- Session + signout ---------------------------------------------------
     def test_session_without_cookie_is_null(self):

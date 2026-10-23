@@ -6,6 +6,7 @@ import { QueuedAudit } from '../../services/outbox';
 export interface FieldAuditorModalProps {
   visible: boolean;
   project: ProjectDetail | null;
+  availableProjects?: ProjectDetail[];
   onClose: () => void;
   onAuditSubmitted?: (receipt: QueuedAudit) => void;
 }
@@ -18,6 +19,7 @@ export interface FieldAuditorModalProps {
 export default function FieldAuditorModal({
   visible,
   project,
+  availableProjects,
   onClose,
   onAuditSubmitted,
 }: FieldAuditorModalProps) {
@@ -25,6 +27,7 @@ export default function FieldAuditorModal({
     <ReportAnomalyModal
       visible={visible}
       project={project}
+      availableProjects={availableProjects}
       onClose={onClose}
       onAuditSubmitted={onAuditSubmitted}
     />

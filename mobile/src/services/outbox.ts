@@ -8,6 +8,8 @@ export interface QueuedAudit {
   status: 'pending' | 'synced' | 'failed';
   notes?: string;
   timestamp: number;
+  /** On-site = captured within the geofence; photo flag = off-site evidence. */
+  verification?: 'onsite' | 'photo_flag';
 }
 
 class OutboxService {

@@ -10,7 +10,8 @@ the browser never handles raw tokens. This matches the contract the web client
     POST /api/auth/callback   { access_token, refresh_token }  -> { user }
     GET  /api/auth/session    -> { user }
     POST /api/auth/signin     { email, password }  -> { user }
-    POST /api/auth/signup     { email, password }  -> { user, message, ... }
+    POST /api/auth/signup     { email, password, redirect? }  -> { user, message, ... }
+    POST /api/auth/resend     { email, redirect? }  -> { message }
     POST /api/auth/signout    -> { message }
 
 Teammates can protect any route by adding the `get_current_user` dependency:
@@ -25,6 +26,7 @@ Teammates can protect any route by adding the `get_current_user` dependency:
 import json
 import logging
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
@@ -33,6 +35,7 @@ from backend.models.auth import (
     SignInRequest,
     SignUpRequest,
     OAuthCallbackRequest,
+    ResendConfirmationRequest,
     AuthUser,
     UserResponse,
     OAuthUrlResponse,
@@ -105,6 +108,35 @@ def _handle_auth_error(exc: SupabaseAuthError) -> HTTPException:
     return HTTPException(status_code=code, detail=exc.message)
 
 
+def _validate_redirect_target(redirect: Optional[str], *, param: str = "redirect") -> str:
+    """
+    Validate a client-supplied redirect target against the backend allow-list.
+
+    Supabase silently falls back to the project Site URL for any ``redirect_to``
+    it does not recognise, which bounces users to the wrong origin (typically the
+    deployed site) where the session cookie can never be set. Rejecting it here
+    turns that silent failure into an actionable error.
+    """
+    target = (redirect or "").strip() or settings.FRONTEND_URL
+    parsed = urlparse(target)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid '{param}': expected an absolute http(s) URL such as {settings.FRONTEND_URL}.",
+        )
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if origin not in settings.allowed_origins:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Redirect origin '{origin}' is not allowed. Set FRONTEND_URL (and "
+                "CORS_ORIGINS) in the backend environment and add the same URL to "
+                "the Supabase Auth redirect allow-list."
+            ),
+        )
+    return target
+
+
 # --- reusable dependency ----------------------------------------------------
 async def get_current_user(request: Request) -> AuthUser:
     """
@@ -144,7 +176,8 @@ async def oauth_url(
     prov = provider.strip().lower()
     if prov not in _ALLOWED_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Unsupported OAuth provider '{provider}'.")
-    redirect_to = redirect or settings.FRONTEND_URL
+    redirect_to = _validate_redirect_target(redirect, param="redirect")
+    logger.info("OAuth %s authorize redirect_to=%s", prov, redirect_to)
     try:
         url = supabase_auth.oauth_authorize_url(prov, redirect_to)
     except SupabaseAuthError as exc:
@@ -216,9 +249,15 @@ async def signup(body: SignUpRequest, response: Response):
     Register a new email/password account. If the Supabase project auto-confirms
     users, a session cookie is opened immediately; otherwise the client is told
     to check their email for a confirmation link.
+
+    The optional ``redirect`` field decides which origin the confirmation link
+    sends the user back to (validated against the backend allow-list, defaulting
+    to FRONTEND_URL) so confirming from a local dev server does not bounce the
+    user to the deployed site.
     """
+    redirect_to = _validate_redirect_target(body.redirect, param="redirect")
     try:
-        data = await supabase_auth.sign_up(body.email, body.password)
+        data = await supabase_auth.sign_up(body.email, body.password, redirect_to=redirect_to)
     except SupabaseAuthError as exc:
         raise _handle_auth_error(exc)
 
@@ -232,8 +271,33 @@ async def signup(body: SignUpRequest, response: Response):
         )
     return SignUpResponse(
         user=_to_auth_user(data) if data.get("id") or data.get("user") else None,
-        message="Account created. Please check your email to confirm your address before signing in.",
+        message=(
+            f"Account created. A confirmation link was sent to {body.email} — "
+            "check the inbox and the spam folder before signing in."
+        ),
         email_confirmation_required=True,
+    )
+
+
+@router.post("/resend", response_model=MessageResponse, summary="Resend Confirmation Email")
+async def resend_confirmation(body: ResendConfirmationRequest):
+    """
+    Re-send the confirmation e-mail for an unconfirmed signup.
+
+    GoTrue reports every delivery problem on this call (address not authorized,
+    rate limit, SMTP failure), so the client can show the real reason instead of
+    an unexplained "no email arrived".
+    """
+    redirect_to = _validate_redirect_target(body.redirect, param="redirect")
+    try:
+        await supabase_auth.resend_confirmation(body.email, redirect_to=redirect_to)
+    except SupabaseAuthError as exc:
+        raise _handle_auth_error(exc)
+    return MessageResponse(
+        message=(
+            f"Confirmation email sent again to {body.email}. "
+            "If it is still missing, look in the spam folder or wait a minute before retrying."
+        )
     )
 
 

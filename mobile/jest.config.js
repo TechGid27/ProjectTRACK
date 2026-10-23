@@ -6,7 +6,11 @@ module.exports = {
   ],
   setupFilesAfterEnv: [
     '@testing-library/react-native/extend-expect',
+<<<<<<< HEAD
     '<rootDir>/jest.setup.js',
+=======
+    './jest.setup.js',
+>>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',

@@ -101,17 +101,33 @@ describe('CebuVectorMap Component', () => {
       />,
     );
 
+    // On React Native SVG mock, hex colors are processed into payload objects
+    // or packed numeric color values depending on the renderer version.
+    const toHexColor = (value: any) => {
+      if (typeof value === 'number') {
+        return `#${(value >>> 0).toString(16).padStart(8, '0').slice(-6)}`;
+      }
+      return value;
+    };
+    const strokeOf = (el: any) => {
+      const stroke = el.props.stroke;
+      if (typeof stroke === 'object' && stroke !== null) {
+        return toHexColor(stroke.payload);
+      }
+      return toHexColor(stroke);
+    };
+
     // HUC (Cebu City)
     const cebuCityPath = getByTestId('muni-path-Cebu City');
-    expect(cebuCityPath.props.stroke).toBe('#f59e0b');
+    expect(strokeOf(cebuCityPath)).toBe('#f59e0b');
 
     // Component City (Bogo City)
     const bogoPath = getByTestId('muni-path-City of Bogo');
-    expect(bogoPath.props.stroke).toBe('#38bdf8');
+    expect(strokeOf(bogoPath)).toBe('#38bdf8');
 
     // Municipality (Argao)
     const argaoPath = getByTestId('muni-path-Argao');
-    expect(argaoPath.props.stroke).toBe('#b2d4cf');
+    expect(strokeOf(argaoPath)).toBe('#b2d4cf');
   });
 
   test('subdues non-matching municipalities when hierarchy tier is CITIES', () => {

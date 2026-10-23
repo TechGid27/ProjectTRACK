@@ -5,19 +5,25 @@ import {
   TouchableOpacity,
   StyleSheet,
   useWindowDimensions,
+  NativeModules,
 } from 'react-native';
-import { Pin } from '../../core/types';
-import { normalizeCoordinates, normalizeLguName, CEBU_GEO_BOUNDS } from '../../core/geoUtils';
+import { Pin, HierarchyFilterTier } from '../../core/types';
+import { normalizeCoordinates, normalizeLguName, CEBU_GEO_BOUNDS, svgScaleToMapZoom } from '../../core/geoUtils';
 import { ALL_BARANGAY_FEATURES } from '../../core/barangayData';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
 import { haptics } from '../../services/haptics';
 
-// Safe require for MapLibre so app never crashes if native module is not linked
+// Safe require for MapLibre so app never crashes if native module is not linked.
+// The JS package still loads when the native side is missing, and MapView then
+// crashes at render with "Cannot read property 'EventTypes' of null" — so we
+// must verify NativeModules.MLRNModule exists before using the package.
 let MapLibreGL: any = null;
 try {
-  MapLibreGL = require('@maplibre/maplibre-react-native');
-  if (MapLibreGL && MapLibreGL.setAccessToken) {
-    MapLibreGL.setAccessToken(null); // Open-source tiles require no proprietary token
+  if (NativeModules?.MLRNModule) {
+    MapLibreGL = require('@maplibre/maplibre-react-native');
+    if (MapLibreGL && MapLibreGL.setAccessToken) {
+      MapLibreGL.setAccessToken(null); // Open-source tiles require no proprietary token
+    }
   }
 } catch {
   MapLibreGL = null;
@@ -26,6 +32,7 @@ try {
 export interface MapLibreCebuMapProps {
   selectedMunicipality?: string | null;
   selectedPinId?: string | null;
+  hierarchyTier?: HierarchyFilterTier;
   pins?: Pin[];
   onSelectMunicipality?: (name: string) => void;
   onSelectPin?: (pin: Pin) => void;
@@ -62,15 +69,18 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
 
     const [currentZoom, setCurrentZoom] = useState<number>(9);
 
-    // Imperative ref methods for AI Chatbot and parent screens
+    // Imperative ref methods for AI Chatbot and parent screens.
+    // The `zoom` argument uses SVG vector-map scale semantics (1 = province …
+    // 12 = street level) and is converted to a MapLibre zoom level here.
     useImperativeHandle(ref, () => ({
-      animateToCoordinates: (lat: number, lng: number, zoom = 14) => {
+      animateToCoordinates: (lat: number, lng: number, zoom = 3.5) => {
+        const zoomLevel = svgScaleToMapZoom(zoom);
         cameraRef.current?.setCamera({
           centerCoordinate: [lng, lat],
-          zoomLevel: zoom,
+          zoomLevel,
           animationDuration: 600,
         });
-        setCurrentZoom(zoom);
+        setCurrentZoom(zoomLevel);
       },
       recenter: () => {
         cameraRef.current?.setCamera({

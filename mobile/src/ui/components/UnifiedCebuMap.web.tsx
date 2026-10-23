@@ -1,10 +1,11 @@
 import React, { forwardRef } from 'react';
 import CebuVectorMap from './CebuVectorMap';
-import { Pin } from '../../core/types';
+import { Pin, HierarchyFilterTier } from '../../core/types';
 
 export interface UnifiedCebuMapProps {
   selectedMunicipality?: string | null;
   selectedPinId?: string | null;
+  hierarchyTier?: HierarchyFilterTier;
   pins?: Pin[];
   onSelectMunicipality?: (name: string) => void;
   onSelectPin?: (pin: Pin) => void;

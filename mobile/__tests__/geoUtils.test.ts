@@ -11,6 +11,8 @@ import {
   CEBU_ALL_CITIES,
   CEBU_REGION_PRESETS,
   isLguInHierarchyTier,
+  CEBU_GEO_BOUNDS,
+  svgScaleToMapZoom,
 } from '../src/core/geoUtils';
 
 describe('geoUtils suite', () => {
@@ -189,6 +191,40 @@ describe('geoUtils suite', () => {
       expect(presetIds).toContain('SOUTH_CEBU');
       expect(presetIds).toContain('BANTAYAN');
       expect(presetIds).toContain('CAMOTES');
+    });
+  });
+
+  describe('CEBU_GEO_BOUNDS & svgScaleToMapZoom', () => {
+    test('geo bounds cover the full GeoJSON extent including Camotes and northern Cebu', () => {
+      // Measured extent of cebuMunicipalities.json (Pilar, Camotes reaches 124.57°E)
+      expect(CEBU_GEO_BOUNDS.e).toBeGreaterThanOrEqual(124.58);
+      expect(CEBU_GEO_BOUNDS.w).toBeLessThanOrEqual(123.29);
+      expect(CEBU_GEO_BOUNDS.n).toBeGreaterThanOrEqual(11.53);
+      expect(CEBU_GEO_BOUNDS.s).toBeLessThanOrEqual(9.41);
+    });
+
+    test('region presets all fall inside the geo bounds', () => {
+      for (const preset of CEBU_REGION_PRESETS) {
+        expect(preset.lat).toBeGreaterThanOrEqual(CEBU_GEO_BOUNDS.s);
+        expect(preset.lat).toBeLessThanOrEqual(CEBU_GEO_BOUNDS.n);
+        expect(preset.lng).toBeGreaterThanOrEqual(CEBU_GEO_BOUNDS.w);
+        expect(preset.lng).toBeLessThanOrEqual(CEBU_GEO_BOUNDS.e);
+      }
+    });
+
+    test('svgScaleToMapZoom maps province scale 1.0 to MapLibre zoom 9', () => {
+      expect(svgScaleToMapZoom(1.0)).toBeCloseTo(9.0, 5);
+    });
+
+    test('svgScaleToMapZoom produces municipality-level zoom for scale ~3.5', () => {
+      const zoom = svgScaleToMapZoom(3.5);
+      expect(zoom).toBeGreaterThan(11);
+      expect(zoom).toBeLessThan(14);
+    });
+
+    test('svgScaleToMapZoom clamps out-of-range scales into MapLibre limits', () => {
+      expect(svgScaleToMapZoom(0.1)).toBeGreaterThanOrEqual(7.5);
+      expect(svgScaleToMapZoom(100)).toBeLessThanOrEqual(18);
     });
   });
 });

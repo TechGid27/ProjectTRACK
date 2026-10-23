@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 import {
   ProjectDetail,
   Contractor,
@@ -36,21 +37,22 @@ const DEFAULT_API_BASE = getInitialBaseUrl();
 
 /**
  * Resolve the OAuth redirect target — always the MOBILE APP's own callback, so
- * Google sign-in returns to this app rather than bouncing to the deployed
+ * Google sign-in returns to THIS app rather than bouncing to the deployed
  * website.
  *
- *   • Native -> the app's custom scheme ("projecttrack://auth/callback"); the
- *               in-app auth session deep-links back here.
- *   • Web    -> this app's own origin ("<origin>/auth/callback"), NOT the
- *               deployed website origin.
+ *   • Native (standalone/dev build) -> the app scheme, e.g.
+ *       "projecttrack://auth/callback"
+ *   • Native (Expo Go)              -> an "exp://<host>/--/auth/callback" URL
+ *       that Expo Go can route back into the running app. A hardcoded custom
+ *       scheme does NOT work in Expo Go, which is why login previously only
+ *       completed on the website.
+ *   • Web                            -> this app's own origin
+ *       "<origin>/auth/callback" (NOT the deployed website origin).
  *
- * An explicit `EXPO_PUBLIC_OAUTH_REDIRECT` env var overrides both (useful to
- * pin the exact URL that is allow-listed in the backend + Supabase redirect
- * list, which is required for the provider to redirect back here instead of
- * falling back to the Supabase Site URL / deployed website).
- *
- * Returns `undefined` only when no web origin can be resolved, letting the
- * caller omit the param.
+ * `expo-linking`'s createURL() produces the correct form for the current
+ * runtime automatically. An explicit EXPO_PUBLIC_OAUTH_REDIRECT env var
+ * overrides everything (pin an exact URL that is allow-listed in the backend +
+ * Supabase redirect list).
  */
 export const NATIVE_OAUTH_REDIRECT = 'projecttrack://auth/callback';
 
@@ -63,6 +65,14 @@ export function resolveOAuthRedirect(): string | undefined {
       return `${window.location.origin}/auth/callback`;
     }
     return undefined;
+  }
+  // Native: build a runtime-correct deep link. In Expo Go this yields an
+  // exp:// URL; in a standalone/dev build it yields projecttrack://auth/callback.
+  try {
+    const url = Linking.createURL('auth/callback');
+    if (url) return url;
+  } catch {
+    // Fall through to the static scheme if the linking helper is unavailable.
   }
   return NATIVE_OAUTH_REDIRECT;
 }

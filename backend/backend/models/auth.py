@@ -51,9 +51,19 @@ class AuthUser(BaseModel):
     app_metadata: Dict[str, Any] = Field(default_factory=dict, description="Supabase app metadata (provider, etc.)")
 
 
+class SessionTokens(BaseModel):
+    """Access/refresh tokens surfaced to native clients that can't use cookies."""
+    access_token: str = Field(..., description="Supabase access token")
+    refresh_token: Optional[str] = Field(default=None, description="Supabase refresh token")
+
+
 class UserResponse(BaseModel):
     """Standard wrapper returned by session/sign-in endpoints."""
     user: Optional[AuthUser] = Field(default=None, description="Authenticated user or null when signed out")
+    tokens: Optional[SessionTokens] = Field(
+        default=None,
+        description="Supabase tokens for NATIVE clients to persist (web uses the HTTP-only cookie instead)",
+    )
 
 
 class OAuthUrlResponse(BaseModel):

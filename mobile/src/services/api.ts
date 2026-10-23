@@ -11,6 +11,7 @@ import {
   SpatialContext,
 } from '../core/types';
 import { outbox } from './outbox';
+import { tokenStore } from './tokenStore';
 import {
   sanitizeSearchQuery,
   sanitizeChatMessage,
@@ -422,6 +423,10 @@ class ApiService {
       if (!res.ok) {
         return { user: null, error: data?.detail || 'Sign-in failed.' };
       }
+      // Native clients persist the returned tokens (web relies on the cookie).
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
+      }
       return { user: data.user || data };
     } catch {
       return { user: null, error: 'Network error: Unable to reach authentication server.' };
@@ -453,6 +458,9 @@ class ApiService {
       const data = await res.json();
       if (!res.ok) {
         return { user: null, error: data?.detail || 'Sign-up failed.' };
+      }
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
       }
       return { user: data.user || data, message: data.message };
     } catch {
@@ -503,6 +511,12 @@ class ApiService {
       if (!res.ok) {
         return { user: null, error: data?.detail || 'OAuth callback verification failed.' };
       }
+      // Persist tokens on native so the OAuth session survives app restarts.
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
+      } else {
+        await tokenStore.save({ access_token: accessToken, refresh_token: refreshToken ?? null });
+      }
       return { user: data.user || data };
     } catch {
       return { user: null, error: 'Network error: Unable to verify OAuth callback.' };
@@ -511,23 +525,34 @@ class ApiService {
 
   async signOut(): Promise<void> {
     try {
+      const authHeaders = await tokenStore.authHeaders();
       await fetch(`${this.baseUrl}/auth/signout`, {
         method: 'POST',
         credentials: 'include',
+        headers: authHeaders,
       });
     } catch {
       // offline noop
+    } finally {
+      // Always clear local tokens so the device is signed out even if the
+      // network call failed.
+      await tokenStore.clear();
     }
   }
 
   async getSession(): Promise<any | null> {
     try {
+      const authHeaders = await tokenStore.authHeaders();
       const res = await fetch(`${this.baseUrl}/auth/session`, {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', ...authHeaders },
         credentials: 'include',
       });
       if (!res.ok) return null;
       const data = await res.json();
+      // If the backend refreshed the session, persist the new tokens (native).
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
+      }
       return data?.user ?? null;
     } catch {
       return null;
@@ -586,9 +611,11 @@ class ApiService {
       }
     }
 
+    const authHeaders = await tokenStore.authHeaders();
     const res = await fetch(`${this.baseUrl}/reports`, {
       method: 'POST',
       credentials: 'include',
+      headers: authHeaders,
       body: form,
     });
     if (!res.ok) {
@@ -609,8 +636,9 @@ class ApiService {
   /** Fetch a project's reports with verification badges (Pillar 5). */
   async fetchProjectReports(projectId: string): Promise<ReportRecord[]> {
     const cleanId = sanitizeSearchQuery(projectId, 50);
+    const authHeaders = await tokenStore.authHeaders();
     const res = await fetch(`${this.baseUrl}/reports/${encodeURIComponent(cleanId)}`, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...authHeaders },
       credentials: 'include',
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

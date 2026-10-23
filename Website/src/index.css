@@ -34,6 +34,12 @@
   --app-bg: #ffffff;
   --app-surface: #ffffff;
   --app-surface-alpha: rgba(255, 255, 255, 0.85);
+
+  /* Brand accent (deep teal). In dark mode it brightens so text/bars stay
+     legible on dark surfaces. */
+  --brand-accent: #1f3d3c;
+  --brand-accent-strong: #16302f;
+  --brand-accent-text: #1f3d3c;
 }
 
 /* Dark theme — Radix Themes' dark gray alpha ramp (white-based alphas layered
@@ -70,6 +76,11 @@
   --app-bg: #0c1418;
   --app-surface: #111c21;
   --app-surface-alpha: rgba(17, 28, 33, 0.85);
+
+  /* Brighter teal/emerald so brand text and bars stay legible on dark cards. */
+  --brand-accent: #2dd4a7;
+  --brand-accent-strong: #34d399;
+  --brand-accent-text: #5eead4;
 
   color-scheme: dark;
 }

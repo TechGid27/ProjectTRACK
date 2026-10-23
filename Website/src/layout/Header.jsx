@@ -176,7 +176,7 @@ function Header({ name, links }) {
           className="flex shrink-0 items-center gap-2.5 text-inherit no-underline"
         >
           <img
-            src="/image/reyalopake.png"
+            src={theme === 'dark' ? '/image/BlackP.png' : '/image/reyalopake.png'}
             alt={`${name} logo`}
             className="h-10 w-10 object-contain"
           />

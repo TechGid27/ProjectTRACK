@@ -105,14 +105,20 @@ function SignUpPage() {
               type="button"
               disabled={busy !== null}
               onClick={() => signIn('google')}
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-a6 bg-white px-6 py-3 text-sm font-semibold text-gray-a12 transition hover:bg-gray-a2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] disabled:opacity-60"
+              style={{ backgroundColor: '#ffffff', color: '#1f2937' }}
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-a6 px-6 py-3 text-sm font-semibold transition hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] disabled:opacity-60"
             >
               <GoogleIcon />
               Continue with Google
             </button>
 
             <div className="relative py-2 text-center text-xs text-gray-a10">
-              <span className="relative z-10 bg-white px-3">or with email</span>
+              <span
+                className="relative z-10 px-3"
+                style={{ backgroundColor: 'var(--app-surface)' }}
+              >
+                or with email
+              </span>
               <span className="absolute inset-x-0 top-1/2 h-px bg-gray-a6" />
             </div>
 
@@ -126,7 +132,8 @@ function SignUpPage() {
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-gray-a6 bg-white px-4 py-2.5 text-sm text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
+                  className="mt-1 w-full rounded-xl border border-gray-a6 px-4 py-2.5 text-sm text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
+                  style={{ backgroundColor: 'var(--app-surface)' }}
                   placeholder="you@example.com"
                 />
               </label>
@@ -140,7 +147,8 @@ function SignUpPage() {
                   minLength={6}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-gray-a6 bg-white px-4 py-2.5 text-sm text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
+                  className="mt-1 w-full rounded-xl border border-gray-a6 px-4 py-2.5 text-sm text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
+                  style={{ backgroundColor: 'var(--app-surface)' }}
                   placeholder="••••••••"
                 />
               </label>
@@ -154,7 +162,8 @@ function SignUpPage() {
                   minLength={6}
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-gray-a6 bg-white px-4 py-2.5 text-sm text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
+                  className="mt-1 w-full rounded-xl border border-gray-a6 px-4 py-2.5 text-sm text-gray-a12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
+                  style={{ backgroundColor: 'var(--app-surface)' }}
                   placeholder="••••••••"
                 />
               </label>
@@ -189,7 +198,8 @@ function SignUpPage() {
               type="button"
               disabled={busy !== null}
               onClick={handleResend}
-              className="mt-3 w-full rounded-xl border border-gray-a6 bg-white px-6 py-3 text-sm font-semibold text-gray-a12 transition hover:bg-gray-a2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] disabled:opacity-60"
+              style={{ backgroundColor: 'var(--app-surface)' }}
+              className="mt-3 w-full rounded-xl border border-gray-a6 px-6 py-3 text-sm font-semibold text-gray-a12 transition hover:bg-gray-a2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] disabled:opacity-60"
             >
               Resend confirmation email
             </button>

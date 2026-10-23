@@ -114,6 +114,9 @@ export default function SignUpScreen({
       // Keep Google OAuth isolated to THIS app: redirect back to the mobile
       // app's own callback, never the deployed website.
       const redirectUri = resolveOAuthRedirect();
+      if (__DEV__ && redirectUri) {
+        console.log('[OAuth] redirect_to =', redirectUri, '— add this (or exp://* / projecttrack://*) to Supabase Redirect URLs');
+      }
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {

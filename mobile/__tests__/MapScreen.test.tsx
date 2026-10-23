@@ -1,6 +1,34 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import MapScreen from '../src/ui/screens/MapScreen';
+import { api } from '../src/services/api';
+import { Pin, ProjectDetail } from '../src/core/types';
+
+const MOCK_PINS: Pin[] = [
+  {
+    id: '24HD0012',
+    name: 'Flood Mitigation Structure along Bogo River',
+    lat: 11.054,
+    lng: 124.006,
+    tone: 'default',
+    lgu: 'Bogo City',
+    description: 'Bogo River flood control.',
+    budget: 49000000,
+    status: 'Ongoing',
+    contractor: 'QM BUILDERS',
+  },
+];
+
+const MOCK_PROJECT: ProjectDetail = {
+  id: '24HD0012',
+  title: 'Flood Mitigation Structure along Bogo River',
+  contractor: 'QM BUILDERS',
+  budget: 49000000,
+  status: 'Ongoing',
+  lgu: 'Bogo City',
+  latitude: 11.054,
+  longitude: 124.006,
+};
 
 describe('MapScreen Component', () => {
   const mockOnNavigateToSignIn = jest.fn();
@@ -9,6 +37,13 @@ describe('MapScreen Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(api, 'fetchMapPins').mockResolvedValue(MOCK_PINS);
+    jest.spyOn(api, 'fetchProjectsByLocation').mockResolvedValue([MOCK_PROJECT]);
+    jest.spyOn(api, 'fetchProjectById').mockResolvedValue(MOCK_PROJECT);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   test('renders MapHeader, Map View, and Show Details pill when sheet is initially closed', () => {
@@ -141,7 +176,7 @@ describe('MapScreen Component', () => {
     expect(getAllByText(/Bogo/i).length).toBeGreaterThan(0);
   });
 
-  test('passing initialProjectId selects project and opens detail modal', () => {
+  test('passing initialProjectId selects project and opens detail modal', async () => {
     const { getByTestId } = render(
       <MapScreen
         initialProjectId="24HD0012"
@@ -151,7 +186,7 @@ describe('MapScreen Component', () => {
       />,
     );
 
-    expect(getByTestId('project-detail-modal')).toBeTruthy();
+    await waitFor(() => expect(getByTestId('project-detail-modal')).toBeTruthy());
   });
 
   test('typing a place name live matches location and selects municipality', () => {

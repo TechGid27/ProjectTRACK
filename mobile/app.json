@@ -6,7 +6,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./src/assets/logo.png",
     "splash": {
+      "image": "./src/assets/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#1f3d3c"
     },
@@ -16,6 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./src/assets/logo.png",
         "backgroundColor": "#1f3d3c"
       },
       "package": "com.projecttrack.mobile"

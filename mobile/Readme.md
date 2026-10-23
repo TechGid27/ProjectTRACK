@@ -1,203 +1,190 @@
-# ProjectTrack Mobile Client
+# ProjectTRACK Mobile Client
 
-> **Autonomous Civic Intelligence & Geofenced Field Auditor for DPWH Infrastructure Verification Across Cebu Province**
+> Geofenced Field Auditor for DPWH Infrastructure Verification across Cebu Province
 
 [![Expo SDK](https://img.shields.io/badge/Expo-SDK%2052-000020.svg?logo=expo)](https://expo.dev)
 [![React Native](https://img.shields.io/badge/React%20Native-0.76-61DAFB.svg?logo=react)](https://reactnative.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6.svg?logo=typescript)](https://typescriptlang.org)
-[![Android APK](https://img.shields.io/badge/Android-Downloadable%20APK-3DDC84.svg?logo=android)](scripts/build-apk.bat)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
 
 ---
 
-## ⚡ 1-Click App Download (Google Drive & Zero-Setup Install)
+## Overview
 
-The mobile client is the companion app for on-the-ground infrastructure monitoring. It enables field auditors and citizen volunteers to verify DPWH project progress with GPS-locked photo evidence, live backend data, and a conversational assistant — all synced to the ProjectTrack backend. All data is live (no mock data); the UI renders loading, empty, and error states when the backend is unreachable.
+The mobile client is the companion app for on-the-ground infrastructure monitoring. It enables field auditors and citizen volunteers to verify DPWH project progress with GPS-locked photo evidence, live backend data, and a conversational assistant — all synced to the ProjectTRACK backend.
 
-### 📥 Option A: 1-Click Direct Download (From Google Drive)
+All data is live (no mock data). The UI renders explicit loading, empty, and error states when the backend is unreachable.
+
+---
+
+## Android APK Download
+
+The latest stable APK is attached to the GitHub Release:
+
+**[Download ProjectTRACK.apk from GitHub Releases](https://github.com/ThirdTempest/ProjectTRACK/releases/latest)**
+
+### Installation
+
+1. Open the release page on your Android device and tap **ProjectTRACK.apk** to download.
+2. Open the downloaded file from your notification bar or Downloads folder.
+3. Tap **Install**. If prompted, enable "Install from unknown sources" for your browser under Settings > Security.
+4. The app connects to the deployed backend automatically.
+
+**Minimum Android version:** Android 8.0 (API 26)
+
+---
+
+## Capabilities
 
 | Feature | Description |
 | :--- | :--- |
-| **GPS-Aware Field Audits** | Geofenced photo capture using `expo-location` and `expo-camera`, requiring physical proximity (≤150 m) to project coordinates before evidence can be submitted. The shutter stays locked until a live hardware GPS fix is inside the geofence. |
+| **GPS-Aware Field Audits** | Geofenced photo capture using `expo-location` and `expo-camera`, requiring physical proximity (150 m) to project coordinates before evidence can be submitted. The shutter stays locked until a live hardware GPS fix is inside the geofence. |
 | **Server-Authoritative Verification** | Submissions are re-validated server-side: the backend recomputes the Haversine distance against the project's DPWH coordinates and runs ELA + perceptual-hash image forensics before trusting a report. |
 | **Verification Badging** | Each submitted report surfaces its verdict — status, distance from site, forensics result, and reporter reputation — using the same schema as the web client. |
 | **Offline-First Architecture** | An in-memory outbox queues audits captured offline; `api.syncPendingAudits()` POSTs them to the backend when connectivity returns, marking each synced on success. |
 | **Conversational Field Assistant** | On-device access to the GraphRAG chat via SSE streaming for contextual project queries. |
-| **Interactive Map** | SVG vector map of Cebu's 53 LGUs with project markers and contractor overlays. Zoom and pan are driven by the SVG `viewBox`, so boundaries, labels, and pins re-rasterize crisply at every zoom level (no blur from raster magnification). |
-| **Live Backend Data (No Mock Data)** | All project, pin, contractor, summary, and chat data is fetched live from the backend. There is no bundled mock dataset — screens render explicit loading, empty, and error (retry) states when the backend is unreachable. |
-| **Brand Logo** | The ProjectTRACK logo is bundled as the app icon, splash image, and in-app header mark (`src/ui/components/Logo.tsx`). The `Logo` component is color-scheme aware — it swaps to a light mark (`logo-light.png`) on dark surfaces / in system dark mode so it stays visible, and headers render it with `variant="light"` against their dark backgrounds. |
-| **Client-Side Input Sanitizer** | Strict client-side hardening in `sanitizer.ts` strips Cypher/SQL injection vectors, script tags, control codes, and null bytes before user inputs reach the network. |
-| **Dynamic Backend Integration** | Live REST & GraphRAG queries for map pins (`/api/projects/map`), municipality civil works (`/api/projects/by-location`), contractor leaderboards (`/api/analytics/top-contractors`), and top projects (`/api/analytics/top-projects`). Data is live-only: when a request fails the service returns empty results and the UI shows loading/empty/error states (no mock fallback). |
-| **Citizen Anomaly Hotspots** | Concentric red beacon markers highlight sites with multiple citizen-submitted field reports and anomalies, visible on the map and detailed in the project modal. |
-| **Contractor Project Drilldown** | Tapping any contractor displays their full civil works portfolio with one-touch `View on Map` navigation to zoom into the project site. |
-| **Maximized Viewport & Auto-Zoom** | Clean 3-item header (App Name, Search, Sign In) maximizes map viewport with automatic camera centering and zoom when an LGU is selected or queried. |
-
-> **📱 How to Install on Android in 3 Steps:**
-> 1. Tap the **Download Button** above on your Android phone's browser *(downloads `ProjectTRACK.apk` directly)*.
-> 2. Open the downloaded file from your notification bar or Downloads folder.
-> 3. Tap **Install** *(if prompted, allow "Install unknown apps" for your browser)*. The app connects to the live backend automatically!
+| **Interactive Cebu Map** | SVG vector map of all 53 Cebu LGUs with project markers and contractor overlays. Zoom and pan are driven by the SVG `viewBox` so boundaries, labels, and pins re-rasterize crisply at every zoom level without blur. |
+| **Live Backend Data** | All project, pin, contractor, summary, and chat data is fetched live from the backend. No bundled mock dataset. Loading, empty, and error (retry) states are shown when the backend is unreachable. |
+| **Brand Logo with Dark-Mode Support** | The ProjectTRACK logo is bundled as the app icon, splash screen, and in-app header mark. The `Logo` component swaps to a white variant on dark surfaces so it remains visible in both light and dark contexts. |
+| **Native Session Persistence** | Session tokens are stored in the OS keystore via `expo-secure-store` and sent as `Authorization: Bearer` headers on every authenticated request. A React Native APK cannot rely on browser HTTP-only cookies, so token-based auth is used on native while the web client continues to use the cookie. |
+| **Google OAuth via Deep Link** | Sign-in via Google returns to the app through the `projecttrack://` deep link scheme. `expo-linking` resolves the correct callback URL for each runtime: `exp://` in Expo Go, `projecttrack://` in standalone builds. |
+| **44-Point Touch Targets** | All interactive controls meet the 44 pt minimum touch-target standard (iOS HIG / Material Design). |
+| **Client-Side Input Sanitization** | `sanitizer.ts` strips Cypher/SQL injection vectors, script tags, control codes, and null bytes before user inputs reach the network. |
+| **Spatial Coordinate Normalization** | `geoUtils.ts` enforces geographic bounding constraints across Cebu Province (mainland, Bantayan, Camotes) and rejects cross-strait coordinate anomalies (Bohol and Negros). |
+| **Hardware-Accelerated MapLibre GIS** | Interactive vector GIS layer featuring selected municipality boundary fills, golden pin selection rings, red anomaly hotspot beacons, and cold-start retry resilience. |
+| **Build Alignment via Build Properties** | Configured via `expo-build-properties` to lock Kotlin 1.9.25, ensuring seamless Gradle compilation with Jetpack Compose Compiler 1.5.15 and Expo SDK 52. |
 
 ---
 
-### 📦 Step-by-Step: How to Extract & Upload the APK to Your Google Drive
+## Prerequisites
 
-If you are the developer or project owner hosting the `.apk` on your own Google Drive for your users, follow these steps to extract the exact files:
-
-```mermaid
-flowchart LR
-    Step1["1. Build / Locate\nProjectTRACK.apk"] --> Step2["2. Drag & Drop\nto Google Drive"]
-    Step2 --> Step3["3. Share Settings:\n'Anyone with the link'"]
-    Step3 --> Step4["4. Convert to 1-Click\nDirect Download Link"]
-    Step4 --> Step5["5. Paste into\nREADME.md"]
-```
-
-#### Step 1: Extract the Specific File from Your Project
-You only need **ONE** primary file for end-users to install on their phones:
-
-| File Name | Location in Project | Purpose |
+| Tool | Version | Verification |
 | :--- | :--- | :--- |
-| **`ProjectTRACK.apk`** | `mobile/dist/ProjectTRACK.apk` *(Cloud EAS)*<br>OR `mobile/android/app/build/outputs/apk/release/app-release.apk` *(Local Gradle)* | The standalone Android application binary (~45–65 MB). |
-
-* **If you build using Cloud EAS (Recommended — No Android Studio / Java needed):**
-  1. Double-click [`scripts/build-apk.bat`](scripts/build-apk.bat) *(or run `npm run build:apk:cloud`)*.
-  2. When the build finishes, EAS generates a download link. Download the `.apk` and place it in `mobile/dist/ProjectTRACK.apk`.
-* **If you build locally with Gradle:**
-  1. Run `npm run build:apk:local`.
-  2. Navigate to `mobile/android/app/build/outputs/apk/release/`.
-  3. Copy `app-release.apk` and rename it to `ProjectTRACK.apk`.
-
-#### Step 2: Upload to Google Drive
-1. Open your browser and go to [Google Drive](https://drive.google.com).
-2. Click **+ New** → **File upload** *(or drag and drop `ProjectTRACK.apk` into your Drive)*.
-3. Wait for the upload to complete.
-
-#### Step 3: Enable Public Sharing
-1. Right-click the uploaded `ProjectTRACK.apk` file in Google Drive.
-2. Select **Share** → **Share**.
-3. Under **General access**, change from **"Restricted"** to **"Anyone with the link"** *(Role: Viewer)*.
-4. Click **Copy link**.
-   - Your link will look like this:
-     ```text
-     https://drive.google.com/file/d/1a2b3c4d5e6f7g8h9_ExampleID/view?usp=sharing
-     ```
-
-#### Step 4: Convert to a 1-Click Instant Download Link
-By default, Google Drive opens an in-browser preview page. To make it download the `.apk` **immediately in 1 click**:
-1. Copy the **FILE_ID** from your link *(the part between `/d/` and `/view`)*:
-   - In `https://drive.google.com/file/d/1a2b3c4d5e6f7g8h9_ExampleID/view`, the ID is:
-     `1a2b3c4d5e6f7g8h9_ExampleID`
-2. Construct the direct 1-click download URL using this format:
-   ```text
-   https://drive.google.com/uc?export=download&id=1a2b3c4d5e6f7g8h9_ExampleID
-   ```
-3. In [`mobile/README.md`](README.md), replace `YOUR_GDRIVE_FILE_ID` with your actual ID!
+| Node.js | 18+ (LTS recommended) | `node -v` |
+| npm | 9+ | `npm -v` |
+| Expo CLI | Latest | `npx expo --version` |
+| EAS CLI | 12+ (for APK builds) | `eas --version` |
+| Android Studio or Xcode | For emulator / simulator | — |
 
 ---
 
-### 💻 Option B: 1-Click USB ADB Installer (For PC Users)
-If you want to provide a 1-click installation folder for evaluators or users who have their phone plugged into a computer:
+## Quick Start
 
-1. Create a zip file named `ProjectTRACK-USB-Installer.zip` containing these 3 files:
-   - `ProjectTRACK.apk` *(the compiled binary)*
-   - [`install-apk.bat`](scripts/install-apk.bat) *(Windows 1-click USB installer)*
-   - [`install-apk.sh`](scripts/install-apk.sh) *(macOS/Linux 1-click USB installer)*
-2. Upload `ProjectTRACK-USB-Installer.zip` to Google Drive.
-3. When users extract the zip on their PC and double-click `install-apk.bat`, ADB automatically detects their connected Android phone and installs `ProjectTRACK.apk` in seconds.
+```bash
+# Install dependencies
+cd mobile
+npm install
 
----
-
-## 📱 Complete Mobile Features Documentation
-
-The ProjectTRACK mobile client is designed specifically for on-the-ground civic engineering verification, contractor auditing, and open data visualization across the **53 Local Government Units (LGUs)** of Cebu.
-
-```mermaid
-flowchart TD
-    subgraph UI_Architecture["Mobile Client Experience"]
-        Home["Landing Dashboard\n(HomeScreen)"] --> Map["Interactive Cebu GIS Map\n(MapScreen)"]
-        Home --> Contractors["Contractor Leaderboard\n(ContractorRankingScreen)"]
-        Home --> Auth["Supabase Authentication\n(SignIn / SignUp)"]
-        
-        Map --> Sheet["Location Intel Drawer\n(LocationIntelSheet)"]
-        Map --> AI["GraphRAG Civic Assistant\n(ChatBotModal)"]
-        Map --> Audit["Geofenced Field Auditor\n(ReportAnomalyModal)"]
-        
-        Audit --> Outbox["Offline-First Outbox\n(outbox.ts)"]
-        Outbox --> Backend[("Deployed Backend API\n(/api/reports)")]
-        AI --> Backend
-    end
+# Start the Expo development server
+npm run dev
 ```
 
 ---
 
-### 1. Interactive Cebu GIS Vector Map (`UnifiedCebuMap`)
-* **53 LGU Cartography**: Full vector cartography covering all 44 municipalities, 6 component cities, and 3 Highly Urbanized Cities (Cebu City, Mandaue, Lapu-Lapu) rendered with zero dependency on proprietary tile servers.
-* **3-Tier Administrative Hierarchy Bar**: Filter the view seamlessly across **All Cebu**, **Component Cities**, **HUCs**, or **Municipalities**.
-* **Regional Quick-Jump Presets**: One-touch camera focal jumps to:
-  - 🏙️ **Metro Cebu** (Cebu City, Mandaue, Lapu-Lapu, Talisay, Minglanilla, Consolacion, Liloan, Cordova)
-  - ⚓ **Northern Cebu** (Bogo, Daanbantayan, Medellin, San Remigio, Borbon, Sogod)
-  - 🌊 **Southern Cebu** (Carcar, Argao, Dalaguete, Oslob, Santander, Samboan)
-  - 🏝️ **Camotes & Bantayan Islands**
-* **Dynamic Density Clustering & Status Color-Coding**:
-  - 🟢 **Teal Diamonds**: Ongoing civil works with progress percentages.
-  - 🔵 **Blue Diamonds**: Completed civil works verified on record.
-  - 🟡 **Amber Diamonds**: Delayed or stalled infrastructure.
-  - 🔴 **Concentric Radar Beacons**: Red anomaly hotspots indicating projects with active citizen complaints.
-* **Touchscreen-Optimized Hit-Testing**: Touch coordinates are projected through container page layout coordinates, ensuring instant and accurate municipality/pin selection without touch offset bugs.
+## Environment Configuration
 
----
+Copy the environment template and adjust as needed:
+
+```bash
+cp .env.example .env
+```
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `EXPO_PUBLIC_API_URL` | `http://10.0.2.2:8000/api` | Backend gateway read by the app. Auto-defaults per platform (Android emulator `10.0.2.2`, web `<host>`, iOS `localhost`). Set explicitly to reach the backend **cross-origin** from a physical LAN device (`http://<LAN_IP>:8000/api`) or a deployed server. Only `EXPO_PUBLIC_`-prefixed vars reach the client bundle. |
-| `GEOFENCE_RADIUS_METERS` | `150` | Required proximity to project coordinates for photo capture |
-| `MAX_OFFLINE_QUEUE_ITEMS` | `500` | Maximum queued observations before forced sync |
-| `ENABLE_MOCK_GPS` | `false` | Set `true` only for emulator testing |
+| `EXPO_PUBLIC_API_URL` | `http://10.0.2.2:8000/api` | Backend gateway. Auto-selects per platform (Android emulator `10.0.2.2`, web current host, iOS `localhost`). Override with a LAN IP or deployed HTTPS URL for physical-device or production use. |
+| `EXPO_PUBLIC_OAUTH_REDIRECT` | (auto) | Optional: pin the exact OAuth callback URL if your Supabase redirect allow-list requires an exact match rather than a wildcard. |
+| `GEOFENCE_RADIUS_METERS` | `150` | Required proximity to project coordinates for photo capture. The backend re-validates this server-side. |
+| `MAX_OFFLINE_QUEUE_ITEMS` | `500` | Maximum queued observations before forced sync. |
+| `ENABLE_MOCK_GPS` | `false` | Set `true` only for emulator testing. |
 
-> **Cross-origin:** the backend CORS policy already allows local/LAN origins
-> (`localhost`, `127.0.0.1`, `192.168.x.x`, `10.x.x.x`) plus `FRONTEND_URL`, so
-> pointing `EXPO_PUBLIC_API_URL` at your machine's LAN IP works without backend
-> changes for on-device testing.
+> The backend CORS policy allows local and LAN origins (localhost, 127.0.0.1, 192.168.x.x, 10.x.x.x) plus `FRONTEND_URL`, so pointing `EXPO_PUBLIC_API_URL` at your machine's LAN IP works for on-device testing without backend changes.
 
----
+After editing `.env`, restart Expo with a clean cache:
 
-### 3. Geofenced Field Auditing & Anti-Fraud Engine (`ReportAnomalyModal`)
-* **Mandatory Physical Proximity Gate (Pillar 1)**: The camera shutter remains **strictly locked** until the device's live hardware GPS (`expo-location`) is verified within **≤150 meters** of the official DPWH project centroid.
-* **Live Camera Lens Enforcement**: Photo evidence must be captured directly through the live camera shutter (`expo-camera`). Gallery photo picking is disabled to eliminate the submission of stock photos, pre-recorded media, or internet screenshots.
-* **Client-Side Payload Hardening**: User notes and descriptions are scrubbed by `sanitizer.ts`, stripping script tags, DOM event handlers, Cypher delimiters, and SQL injection patterns before reaching the network.
-* **Server-Side Forensic Verification**: Reports submitted to the backend undergo dual-layer automated image forensics:
-  - **Error Level Analysis (ELA)**: Detects digital manipulation, Photoshop artifacts, and spliced signage.
-  - **Perceptual Hashing (pHash)**: Screens against duplicate or recycled historical photo submissions across the province.
+```bash
+npx expo start -c
+```
 
 ---
 
-### 4. Community Verification Badges (`VerificationBadges`)
-Every field report displays a cryptographic and proximity verification badge:
-* 🛡️ **On-Site Verified**: Device confirmed within ≤150m of project coordinates with pristine image forensic integrity.
-* ⚠️ **Unverified / Off-Site**: Report submitted outside the 150m boundary or without valid GPS hardware lock.
-* 🚨 **Photo Flagged**: Image forensics detected digital alteration, compression anomalies, or duplicate photo recycling.
-* 📏 **Proximity Distance & Auditor Reputation**: Shows exact physical distance from site (e.g., `42m away`) and reporter civic reputation tier.
+## Cross-Origin Networking (Physical Device)
+
+When testing on a physical phone via Expo Go, the app must reach the backend over your LAN. The default emulator address (`10.0.2.2`) does not work on a real device.
+
+1. Find your development machine's LAN IP:
+   ```powershell
+   Get-NetIPAddress -AddressFamily IPv4
+   ```
+2. Start the backend bound to all interfaces:
+   ```bash
+   python -m uvicorn backend.app:create_app --factory --reload --host 0.0.0.0 --port 8000
+   ```
+3. Set in `mobile/.env`:
+   ```env
+   EXPO_PUBLIC_API_URL=http://192.168.x.x:8000/api
+   ```
+4. Restart Expo: `npx expo start -c`
 
 ---
 
-### 5. Offline-First Resilient Outbox Queue (`outbox.ts`)
-* **Zero-Signal Durability**: Field verifiers frequently inspect rural bridges, mountain access roads, and coastal floodwalls with no cellular reception.
-* **Local Storage Queue**: Audits captured offline are immediately serialized into an encrypted local outbox with hardware GPS coordinates, photo payload, and timestamps.
-* **Background Auto-Sync**: When internet connectivity is restored, `api.syncPendingAudits()` synchronizes queued observations to the backend automatically.
+## Available Scripts
+
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Start Expo development server |
+| `npm run android` | Launch on Android emulator |
+| `npm run ios` | Launch on iOS simulator |
+| `npm run web` | Launch in browser (Expo web) |
+| `npm run lint` | Run ESLint |
+| `npm run typecheck` | Run TypeScript type checking (`tsc --noEmit`) |
+| `npm run test` | Run Jest test suite (29 suites, 199 tests) |
+| `npm run test:coverage` | Run tests with coverage report |
+| `npm run audit` | Allowlist-aware `npm audit` gate |
+| `npm run build:apk:cloud` | Build standalone APK via EAS cloud |
+
+---
+
+## Building the APK (EAS Cloud — Recommended)
+
+No Android Studio or Java JDK required. EAS builds in the cloud.
+
+```bash
+# One-time setup
+eas login
+eas project:init   # links the project and writes projectId to app.json
+
+# Build the APK
+eas build --platform android --profile preview
+```
+
+The build targets `https://projecttrack-28nb.onrender.com/api` (set in `eas.json`). When the build finishes, EAS prints a download URL. Attach the APK to the GitHub Release so the website's "Get an App" button can download it directly.
+
+**Latest build:** EAS build `5eb9d9cf-cd6d-40d0-895a-3f60e11e1677`, version 1.0.0 (versionCode 4).
+
+---
+
+## Project Structure
 
 ```text
 mobile/
-├── App.tsx                  # Root component
+├── App.tsx                  # Root component and navigation
 ├── src/
-│   ├── core/                # Shared types and geo utilities (Haversine, coordinate math, viewBox zoom)
+│   ├── core/                # Types, geo utilities (Haversine, coordinate math, viewBox zoom)
 │   ├── data/                # Static UI content only (FAQ entries) — no mock data
-│   ├── services/            # API client, haptics service, offline outbox queue
+│   ├── services/
+│   │   ├── api.ts           # Live backend REST client
+│   │   ├── tokenStore.ts    # Native session persistence via expo-secure-store
+│   │   ├── outbox.ts        # Offline-first audit queue
+│   │   ├── location.ts      # GPS utilities
+│   │   └── haptics.ts       # Haptic feedback
 │   ├── ui/
-│   │   ├── components/      # Reusable UI components (BottomTabBar, MapHeader, Logo, etc.)
-│   │   ├── screens/         # App screens (Home, Map, Contractors, Auth)
-│   │   └── theme.ts         # Shared sizing tokens (MIN_TOUCH = 44px touch targets)
-│   └── assets/              # GeoJSON boundaries, logo, and static assets
-├── __tests__/               # Jest test suite (28 test files)
-├── app.json                 # Expo configuration
+│   │   ├── components/      # Reusable UI (BottomTabBar, MapHeader, Logo, CebuVectorMap, etc.)
+│   │   ├── screens/         # HomeScreen, MapScreen, ContractorRankingScreen, Auth
+│   │   └── theme.ts         # Shared sizing tokens (MIN_TOUCH = 44)
+│   └── assets/              # GeoJSON boundaries, logo variants
+├── __tests__/               # Jest test suite (29 suites, 199 tests)
+├── app.json                 # Expo SDK 52 configuration
+├── eas.json                 # EAS Build profiles (preview APK, production AAB)
 ├── tsconfig.json            # TypeScript configuration
 ├── babel.config.js          # Babel configuration
 ├── eslint.config.js         # ESLint flat config
@@ -206,96 +193,67 @@ mobile/
 
 ---
 
-### 7. Contractor Transparency & Leaderboard (`ContractorRankingScreen`)
-* **Provincial Leaderboard**: Ranked listings of all civil works contractors operating in Cebu by cumulative awarded public funds.
-* **Detailed Project Portfolios**: Drill down into any contractor to view their complete portfolio, ongoing projects, completion ratios, and PhilGEPS bidding history.
-* **"View on Map" Spatial Navigation**: Tap any contract in the contractor's portfolio to jump straight to its location on the Cebu vector map.
+## Backend Integration
+
+The mobile client communicates with the ProjectTRACK FastAPI backend. All authenticated requests send an `Authorization: Bearer <access_token>` header alongside `credentials: 'include'` so both web-cookie and native-token auth paths work.
+
+| Endpoint | Usage |
+| :--- | :--- |
+| `GET /api/projects/map` | Geocoded pins for map visualization |
+| `GET /api/projects/by-location` | Projects for a selected municipality |
+| `GET /api/projects/search` | Full-text project search |
+| `GET /api/analytics/summary` | Province-wide statistics |
+| `GET /api/analytics/top-contractors` | Contractor leaderboard |
+| `GET /api/analytics/top-projects` | Highest-budget projects |
+| `POST /api/auth/signin` | Email/password sign-in |
+| `POST /api/auth/signup` | Account registration |
+| `GET /api/auth/session` | Session restoration (returns refreshed tokens if needed) |
+| `GET /api/auth/oauth/{provider}` | OAuth authorize URL |
+| `POST /api/auth/callback` | Complete OAuth login |
+| `POST /api/auth/signout` | Sign out |
+| `POST /api/reports` | Submit geofenced field report (multipart) |
+| `GET /api/reports/{id}` | Fetch a project's reports with verification badges |
+| `POST /api/chat` | GraphRAG assistant |
+| `GET /api/health` | Backend connectivity check |
 
 ---
 
-### 8. Supabase Citizen & Auditor Authentication (`SignInScreen`, `SignUpScreen`)
-* **Unified Identity**: Email/password authentication and citizen registration backed by Supabase Auth (GoTrue).
-* **Role-Based Badging**: Supports regular citizen watchdogs, accredited civic engineers, and verified civil society monitors.
-* **OAuth Deep-Linking**: Native Android deep linking (`projecttrack://auth/callback`) for seamless third-party login flows.
-* **Persistent Session Recovery**: Stored session state automatically re-authenticates users upon opening the app.
+## Supabase Configuration (Required for OAuth)
+
+For Google sign-in to return to the app rather than the deployed website, the following redirect URLs must be registered in Supabase > Authentication > URL Configuration > Redirect URLs:
+
+```
+projecttrack://**
+exp://**
+```
+
+`projecttrack://**` covers standalone APK builds. `exp://**` covers Expo Go development.
 
 ---
 
-### 9. Landing Dashboard (`HomeScreen`)
-* **Provincial Vital Statistics (KPIs)**: Real-time summary cards tracking Total Projects, Total Budget Allocation, Active LGUs, and Stalled Works.
-* **Decoupled Map Teaser**: Preview card of Cebu Province with a prominent tap overlay (`"🗺️ Tap to open interactive map"`), eliminating thumb trapping and preserving 60 FPS vertical page scrolling.
-* **Municipality Directory Modal**: Alphabetized search and jump list covering all 53 Cebu LGUs.
-* **Frequently Asked Questions (FAQ)**: Accordion guide detailing DPWH procurement standards, civic auditing rules, and geofencing tolerances.
+## Testing
 
----
-
-### 10. In-App Backend Connection Switcher (`AboutMapModal`)
-* **Dynamic Network Switching**: Tap **ℹ️ Info** on the map to access the live connection manager.
-* **Real-Time Latency Test**: Verify connection response times to the deployed production gateway with instant status indicators.
-
----
-
-## 🛠️ Architecture & Directory Layout
-
-```text
-mobile/
-├── App.tsx                        # Root entry, error boundary, safe-area layout
-├── app.json                       # Expo SDK 52 manifest, permissions, plugins, branding
-├── eas.json                       # EAS Build profile (standalone .apk preview & .aab production)
-├── assets/                        # Branded 512×512 icons, adaptive icons, and splash screen
-│   ├── icon.png
-│   ├── adaptive-icon.png
-│   └── splash.png
-├── src/
-│   ├── core/                      # Core domain types, sanitizer.ts, geoUtils.ts (Haversine)
-│   ├── data/                      # Local fallbacks, pins.ts, mockApi.ts, faqs.ts
-│   ├── services/                  # api.ts (REST gateway), outbox.ts (offline sync), location.ts
-│   ├── ui/
-│   │   ├── components/            # CebuVectorMap, LocationIntelSheet, ChatBotModal, Modals
-│   │   └── screens/               # HomeScreen, MapScreen, ContractorRankingScreen, Auth
-│   └── assets/                    # cebuMunicipalities.json (53 LGU GeoJSON vector polygons)
-├── scripts/
-│   ├── build-apk.bat              # Windows 1-click double-clickable APK builder
-│   ├── build-apk.sh               # macOS/Linux 1-click APK builder
-│   ├── build-apk.js               # Cross-platform build orchestrator
-│   ├── install-apk.bat            # Windows 1-click ADB phone installer
-│   ├── install-apk.sh             # macOS/Linux 1-click ADB phone installer
-│   ├── setup-assets.js            # Asset synchronization utility
-│   └── audit-check.js             # Security audit vulnerability allowlist gate
-├── docs/
-│   └── DEPLOYMENT_AND_APK_GUIDE.md # In-depth production deployment & Google Play manual
-├── __tests__/                     # Complete Jest unit & integration test suite (18 test files)
-└── package.json                   # Dependencies, build scripts, and linting rules
+```bash
+npm run test            # Run all 29 suites (199 tests)
+npm run test:coverage   # Coverage report (80% branch/line/function threshold)
 ```
 
 ---
 
-## 💻 Available Scripts
+## Security and Dependency Audit
 
-| Script | Command | Purpose |
-| :--- | :--- | :--- |
-| **1-Click Cloud APK** | `npm run build:apk:cloud` | Builds standalone `.apk` in Expo Cloud; prints QR code to download |
-| **1-Click Local APK** | `npm run build:apk:local` | Builds standalone `.apk` locally using Android SDK / Gradle |
-| **1-Click ADB Install**| `npm run install:apk` | Installs and launches compiled APK on connected Android phone |
-| **Development Server** | `npm run dev` | Starts interactive Expo local dev server |
-| **Android Emulator** | `npm run android` | Launches app in Android Studio emulator |
-| **Web Browser** | `npm run web` | Launches app in desktop browser |
-| **Typecheck** | `npm run typecheck` | Validates TypeScript with zero errors (`tsc --noEmit`) |
-| **Unit Tests** | `npm run test` | Executes Jest test suite |
-| **Code Coverage** | `npm run test:coverage` | Generates line/branch/function coverage report |
-| **Security Audit** | `npm run audit` | Runs allowlist-aware dependency security audit |
+The CI Security Audit workflow runs `npm run audit` for this package. The Expo SDK 52 / React Native 0.76 build toolchain introduces transitive advisories whose only npm remediation is a breaking SDK downgrade. Known toolchain advisory IDs are documented in `mobile/.npm-audit-allow.json`. The gate still fails on any new high/critical advisory outside that allowlist.
 
 ---
 
-## 🔒 Security & Privacy Directives
+## Deployment Guide
 
-1. **Location Privacy**: GPS fixes are only queried when filing a field audit or calculating proximity to an LGU. Background tracking is never initiated.
-2. **Camera Integrity**: Only live photos captured through the verified camera shutter are accepted for forensic field reports.
-3. **Payload Sanitization**: All user inputs undergo client-side sanitization in `sanitizer.ts` and server-side validation via Pydantic before entering the database.
+For production keystore signing, Google Play Store publishing, and the full EAS build pipeline, see:
+
+[Deployment and APK Guide](docs/DEPLOYMENT_AND_APK_GUIDE.md)
 
 ---
 
-## 📖 In-Depth Manual
+## Contributing
 
-For custom keystore signing (`keytool`), Google Play Store publishing (`.aab`), and production release pipelines, consult:
-👉 [**Deployment & Standalone APK Guide**](docs/DEPLOYMENT_AND_APK_GUIDE.md)
+See the root [CONTRIBUTING.md](../CONTRIBUTING.md) for branching strategy, commit conventions, and pull request guidelines.

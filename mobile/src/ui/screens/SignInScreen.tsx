@@ -115,6 +115,14 @@ export default function SignInScreen({
       // native) — never the deployed website. resolveOAuthRedirect() returns
       // that app-local target.
       const redirectUri = resolveOAuthRedirect();
+
+      // Dev aid: the redirect URL below MUST be in the Supabase Auth "Redirect
+      // URLs" allow-list, or Supabase falls back to its Site URL (the deployed
+      // website). Logged so it can be copied into the Supabase dashboard.
+      if (__DEV__ && redirectUri) {
+        console.log('[OAuth] redirect_to =', redirectUri, '— add this (or exp://* / projecttrack://*) to Supabase Redirect URLs');
+      }
+
       const { url, error } = await api.getOAuthUrl('google', redirectUri);
 
       if (error || !url) {

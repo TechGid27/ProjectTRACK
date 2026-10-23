@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Layout from '../layout/Layout'
 import { fetchTopContractors } from '../services/api'
 
 const PAGE_SIZE = 20
@@ -40,8 +39,7 @@ function ContractorRankingPage() {
   const maxBudget = list[0]?.total_budget ?? 1
 
   return (
-    <Layout>
-      <section className="mx-auto max-w-4xl px-6 py-12">
+    <section className="mx-auto max-w-4xl px-6 py-12">
         <p
           className="text-[10px] font-semibold tracking-widest"
           style={{ color: 'var(--brand-accent-text)', opacity: 0.75 }}
@@ -152,7 +150,6 @@ function ContractorRankingPage() {
           </>
         )}
       </section>
-    </Layout>
   )
 }
 

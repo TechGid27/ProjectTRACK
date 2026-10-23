@@ -15,13 +15,13 @@ Transform the DPWH Cebu Knowledge Graph AI into an **Interactive Spatial Copilot
 
 > [!NOTE]
 > **User Choices Locked In**:
-> 1. **Chatbot Interface Style**: **Floating Copilot Card** (sleek, glassmorphic widget floating in the bottom-right corner over the map, collapsible to an `Ask AI ✦` button).
+> 1. **Chatbot Interface Style**: **Floating Copilot Card** (sleek, glassmorphic widget floating in the bottom-right corner over the map, collapsible to an `Ask AI` button).
 > 2. **Project Dot Density Option**: Default to top 50 projects for instant 60fps rendering, with a prominent **"Show All (X) Projects"** toggle option on the map.
 > 3. **Status-Coded Glowing Pins & Legend**:
->    - 🟢 **Emerald Green (`#10b981`)**: Completed (100%)
->    - 🟡 **Pulsing Amber (`#f59e0b`)**: Ongoing (in construction)
->    - 🔵 **Electric Cyan (`#06b6d4`)**: Bidding / Procurement / Planning
->    - ⚪ **Muted Slate (`#94a3b8`)**: Other / Unspecified
+>    - **Emerald Green (`#10b981`)**: Completed (100%)
+>    - **Pulsing Amber (`#f59e0b`)**: Ongoing (in construction)
+>    - **Electric Cyan (`#06b6d4`)**: Bidding / Procurement / Planning
+>    - **Muted Slate (`#94a3b8`)**: Other / Unspecified
 >    - **On-Map Legend**: Elegant translucent glass badge (bottom-left) explaining each status tone, with click-to-filter capability.
 
 ---
@@ -113,9 +113,9 @@ flowchart TD
 
 #### [NEW] [`MapLegend.jsx`](file:///C:/Users/User/VSCode_Programming/track/ProjectTRACK/Website/src/features/map/MapLegend.jsx)
 - Glassmorphic legend overlay anchored in the bottom-left corner of the map:
-  - 🟢 **Completed**: `#10b981` (Solid emerald dot)
-  - 🟡 **Ongoing**: `#f59e0b` (Pulsing amber dot)
-  - 🔵 **Bidding / Planning**: `#06b6d4` (Cyan dot)
+  - **Completed**: `#10b981` (Solid emerald dot)
+  - **Ongoing**: `#f59e0b` (Pulsing amber dot)
+  - **Bidding / Planning**: `#06b6d4` (Cyan dot)
   - Displays dynamic project count badge:
     `Showing 50 of 195 projects in Toledo` + interactive toggle button: `[Show All 195]` / `[Show Top 50]`.
   - Clickable status items to filter visible dots on the map (e.g. click "Ongoing" to isolate active construction sites).
@@ -169,7 +169,7 @@ flowchart TD
 
 ### Manual Verification
 1. **Camera Zoom & Dot Display**:
-   - In `ChatCopilot`, click the `"📍 Projects in Cordova"` quick chip or type `"What are the projects in cordova"`.
+   - In `ChatCopilot`, click the `"Projects in Cordova"` quick chip or type `"What are the projects in cordova"`.
    - Verify the map immediately flies smoothly to Cordova.
    - Verify Cordova's boundary is highlighted and project dots appear.
    - Verify the AI streams the engineering summary in the Copilot card.

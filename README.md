@@ -16,7 +16,7 @@
 
 ---
 
-## Executive Summary (2-Minute Read)
+## Executive Summary
 
 Every fiscal year, billions of Philippine Pesos are allocated for Department of Public Works and Highways (DPWH) civil works projects across the country. Citizens, watchdog organizations, journalists, and local governments routinely encounter structural transparency barriers:
 
@@ -31,17 +31,23 @@ Every fiscal year, billions of Philippine Pesos are allocated for Department of 
 ## System Features
 
 ### Web Platform (`Website`)
-* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers. Overlapping projects are grouped by zoom-aware proximity clustering, and the map stays synchronized with the chat - flying to a selected LGU or zooming to and highlighting a single project for superlative/locating questions (e.g. the most expensive, the latest, or the **most reported** project — province-wide or within a named LGU). A Report Verification legend filters the map by citizen-report tone — On-Site Verified, Photo Flagged, or **All Anomalies** (every project carrying any citizen report) — and the whole interface supports a persisted **light/dark theme** toggle (defaulting to the visitor's system preference).
+* **Interactive Cebu Geospatial Map**: Renders vector boundaries for all 53 LGUs down to barangay levels without relying on heavy satellite tile streaming, displaying status-coded markers. Overlapping projects are grouped by zoom-aware proximity clustering, and the map stays synchronized with the chat - flying to a selected LGU or zooming to and highlighting a single project for superlative/locating questions (e.g. the most expensive, the latest, or the **most reported** project — province-wide or within a named LGU). A Report Verification legend filters the map by citizen-report tone — On-Site Verified, Photo Flagged, or **All Anomalies** (every project carrying any citizen report, rendered with white/grey pins) — and the whole interface supports a persisted **light/dark theme** toggle with theme-aware navigation.
 * **GraphRAG-Powered AI Assistant ("ProjectTrack Watchdog")**: Contextual natural language query engine grounded in the Neo4j knowledge graph, with domain guardrails and a configurable, server-side LLM provider (vendor identifiers are never surfaced in the UI). Answers are structured around the WHAT / WHERE / WHO / WHEN / WHY / HOW of a project using only grounded facts, and "most reported" rankings are computed from the citizen field-report store so the chat always agrees with the map legend. Supports conversational memory for follow-ups ("tell me more about it", "what about in Cordova?") via a sandboxed, whitelist-validated reference resolver that stays strictly database-locked and injection-safe. User input and conversation history are sanitized and screened for prompt-injection before reaching the model.
+* **Two-Stage Browser Geolocation with Diagnostics**: High-accuracy GPS capture with a coarse cache-tolerant Wi-Fi/IP fallback and explicit failure reason reporting, enabling reliable on-site geofence validation with in-place retry controls.
 * **Image Forensics Verification**: Citizen-submitted photo evidence is screened server-side with Error Level Analysis (ELA) and perceptual hashing (pHash) to detect digital manipulation or image recycling; flagged reports surface a "Photo Flagged" badge in the UI.
 * **Citizen Anomaly Reports with Verification Badging**: The report modal captures browser GPS at submission time; the backend runs a Haversine geofence check against official project coordinates and the UI renders a "On-Site Verified" / "Unverified" / "Photo Flagged" badge with distance and timestamp for every community report.
+* **Turnkey APK Distribution**: Centered "Get an App" header button serving direct standalone Android APK downloads with fallback to official GitHub Releases.
 * **Budget and Expenditure Transparency**: Real-time auditing of allocated funds, expenditure disbursements, variance indicators, and source funding across municipalities.
 * **Automated Data Aggregation**: Continuous extraction and normalization of DPWH civil works registries and PhilGEPS procurement bulletins into a unified data store, with an optional passive scheduler that automatically re-scrapes and re-syncs on a recurring interval (default every ~3 months) so a deployed instance stays current without manual intervention.
 
 ### Mobile Field Auditor (`mobile` — React Native with Expo)
 * **Geofenced On-Site Photo Capture**: Uses React Native and Expo (`expo-location`, `expo-camera`) to confirm the device is within ≤150m of the project's DPWH coordinates before the live camera shutter unlocks (gallery uploads disabled for ground-truth integrity).
+* **Dual Vector & MapLibre GIS Mapping**: High-performance SVG vector cartography and hardware-accelerated MapLibre GIS with selected LGU boundary highlights, golden ring selection accents, red anomaly hotspots, and cold-start retry resilience.
+* **Spatial Coordinate Normalization**: Bounding-box sanitization for Cebu Province with automatic rejection of off-island coordinates across the Bohol and Tañon straits.
 * **Server-Verified Submission & Badging**: Captured audits are submitted to `/api/reports`, re-validated server-side (geofence + image forensics), and the returned verdict — status, distance, forensics result, reputation — is shown on-device.
+* **Native Session Persistence**: OS keystore storage via `expo-secure-store` sending Bearer headers on all authenticated calls, with deep-link OAuth callback support (`projecttrack://auth/callback`).
 * **Offline-First Background Sync**: Audits captured offline are queued in a local outbox and synced to the backend when connectivity returns.
+* **Automated Standalone APK Builds**: EAS cloud build workflow with Kotlin 1.9.25 / Jetpack Compose 1.5.15 alignment generating standalone Android binaries.
 
 ### Core Backend and Services (`backend`)
 * **Personnel and Entity Graph Mapping**: Models relationships between contractors, authorized managing officers, district engineers, and procurement awards into a traversable graph.
@@ -140,7 +146,7 @@ Comprehensive architectural, technical, and operational documentation is maintai
 
 ```text
 ProjectTrack/
-├── README.md                            <-- Landing Page & Pitch (Current Document)
+├── README.md                            <-- Project overview and system architecture
 ├── CONTRIBUTING.md                      <-- Contribution workflow and coding standards
 ├── CODE_OF_CONDUCT.md                   <-- Contributor Covenant community standards
 ├── SECURITY.md                          <-- Vulnerability reporting and threat policy

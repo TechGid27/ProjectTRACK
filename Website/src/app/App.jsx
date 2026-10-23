@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import HomePage from '../pages/HomePage'
 import SignInPage from '../pages/Auth/SignInPage'
 import SignUpPage from '../pages/Auth/SignUpPage'
+import Layout from '../layout/Layout'
+import { navLinks, site } from '../data/site'
 import { completeOAuthCallback } from '../services/auth'
 import { navigate, useRoute } from './router'
 
@@ -107,7 +109,13 @@ function App() {
     page = <HomePage />
   }
 
-  if (!authError) return page
+  const content = (
+    <Layout name={site.name} links={navLinks}>
+      {page}
+    </Layout>
+  )
+
+  if (!authError) return content
   return (
     <>
       <p
@@ -123,7 +131,7 @@ function App() {
           Dismiss
         </button>
       </p>
-      {page}
+      {content}
     </>
   )
 }

@@ -13,6 +13,7 @@ import {
   isLguInHierarchyTier,
   CEBU_GEO_BOUNDS,
   svgScaleToMapZoom,
+  normalizeCoordinates,
 } from '../src/core/geoUtils';
 
 describe('geoUtils suite', () => {
@@ -191,6 +192,44 @@ describe('geoUtils suite', () => {
       expect(presetIds).toContain('SOUTH_CEBU');
       expect(presetIds).toContain('BANTAYAN');
       expect(presetIds).toContain('CAMOTES');
+    });
+  });
+
+  describe('normalizeCoordinates', () => {
+    test('accepts valid Cebu mainland and island coordinates', () => {
+      // Cebu City
+      const cebuCity = normalizeCoordinates(10.3157, 123.8854);
+      expect(cebuCity.status).toBe('ok');
+      expect(cebuCity.lat).toBeCloseTo(10.3157);
+      expect(cebuCity.lng).toBeCloseTo(123.8854);
+
+      // Santander (South Cebu)
+      const santander = normalizeCoordinates(9.4387, 123.3273);
+      expect(santander.status).toBe('ok');
+
+      // Bantayan (North Island)
+      const bantayan = normalizeCoordinates(11.16, 123.72);
+      expect(bantayan.status).toBe('ok');
+
+      // Camotes (East Island)
+      const camotes = normalizeCoordinates(10.66, 124.37);
+      expect(camotes.status).toBe('ok');
+    });
+
+    test('rejects Bohol coordinates (e.g. project 24H00014 at lat 9.74612, lng 123.930535)', () => {
+      const boholPin = normalizeCoordinates(9.74612, 123.930535);
+      expect(boholPin.status).toBe('rejected');
+    });
+
+    test('rejects Negros coordinates (west of Tañon Strait)', () => {
+      const negrosPin = normalizeCoordinates(10.25, 123.15);
+      expect(negrosPin.status).toBe('rejected');
+    });
+
+    test('rejects coordinates far outside Cebu bounds', () => {
+      expect(normalizeCoordinates(14.5995, 120.9842).status).toBe('rejected'); // Manila
+      expect(normalizeCoordinates(8.4542, 124.6319).status).toBe('rejected'); // Cagayan de Oro
+      expect(normalizeCoordinates(NaN, 123.8854).status).toBe('rejected');
     });
   });
 

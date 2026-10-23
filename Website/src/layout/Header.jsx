@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSession, signOut } from '../services/auth'
 import { useRoute, navigate } from '../app/router'
-import { applyTheme, getInitialTheme, toggleTheme } from '../services/theme'
+import { getInitialTheme, toggleTheme } from '../services/theme'
 
 function normalize(href) {
   const path = href.replace(/^#/, '')
@@ -16,6 +16,36 @@ function Wordmark() {
       <span className="text-gray-a12">Project</span>
       <span className="text-emerald-500">Track</span>
     </span>
+  )
+}
+
+// GitHub Releases page for the repo — used as the fallback when no direct APK
+// URL is configured (never 404s; lands users on the release with the asset).
+const GITHUB_RELEASES_URL =
+  'https://github.com/ThirdTempest/ProjectTRACK/releases/latest'
+
+// "Get an App" APK download. When VITE_APK_URL points at a .apk it downloads
+// directly; otherwise it redirects to the GitHub Releases page.
+function GetAppButton({ className = '' }) {
+  const apkUrl = import.meta.env.VITE_APK_URL || ''
+  const isDirectApk = /\.apk($|\?)/i.test(apkUrl)
+  const href = apkUrl || GITHUB_RELEASES_URL
+  return (
+    <a
+      href={href}
+      {...(isDirectApk
+        ? { download: '' }
+        : { target: '_blank', rel: 'noopener noreferrer' })}
+      aria-label="Get the ProjectTRACK Android app (APK)"
+      title="Download the ProjectTRACK Android app"
+      data-testid="get-app-btn"
+      className={`inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-white no-underline transition hover:bg-emerald-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${className}`}
+    >
+      <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M4 15.5h12" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Get an App
+    </a>
   )
 }
 
@@ -58,13 +88,18 @@ function NavLink({ link, active, isSignIn, onNavigate }) {
           ? `block rounded-xl px-4 py-2 text-center text-sm font-semibold no-underline transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] ${
               active
                 ? 'bg-[#1f3d3c] text-white'
-                : 'bg-[#1f3d3c]/10 text-[#1f3d3c] hover:bg-[#1f3d3c]/15'
+                : 'bg-gray-a3 hover:bg-gray-a4'
             }`
           : `block rounded-lg px-3 py-2 text-center text-sm no-underline transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c] ${
               active
                 ? 'font-semibold text-gray-a12'
                 : 'text-gray-a11 hover:text-gray-a12'
             }`
+      }
+      style={
+        isSignIn && !active
+          ? { color: 'var(--brand-accent-text)' }
+          : undefined
       }
     >
       {link.label}
@@ -86,24 +121,31 @@ function Header({ name, links }) {
     setTheme((current) => toggleTheme(current))
   }
 
-  // Keep the attribute in sync if the component mounts after a route change.
-  useEffect(() => {
-    applyTheme(theme)
-  }, [theme])
-
+  // Keep the avatar/sign-in state in sync; Header now stays mounted across
+  // route changes (Layout is hoisted into App), so this only revalidates.
   useEffect(() => {
     let cancelled = false
-    getSession()
-      .then((u) => {
-        if (!cancelled) setUser(u)
-      })
-      .catch(() => {
-        if (!cancelled) setUser(null)
-      })
+
+    async function syncUser() {
+      try {
+        const sessionUser = await getSession()
+
+        if (!cancelled) {
+          setUser(sessionUser ?? null)
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null)
+        }
+      }
+    }
+
+    syncUser()
+
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [route])
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -170,7 +212,7 @@ function Header({ name, links }) {
       className="sticky top-0 z-[5000] border-b border-gray-a5 backdrop-blur-md"
       style={{ backgroundColor: 'var(--app-surface-alpha)' }}
     >
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+      <div className="relative mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <a
           href="/"
           className="flex shrink-0 items-center gap-2.5 text-inherit no-underline"
@@ -183,25 +225,52 @@ function Header({ name, links }) {
           <Wordmark />
         </a>
 
+        {/* Centered APK download — absolutely centered so nav width can't shift it. */}
+        {/* <GetAppButton className="absolute left-1/2 hidden -translate-x-1/2 md:inline-flex" /> */}
+
         <nav aria-label="Main" className="hidden md:block">
           <ul className="flex items-center gap-1.5">
-            {visibleLinks.map((link) => {
-              const active = normalize(link.href) === route
-              const isSignIn = normalize(link.href) === '/signin'
-              return (
-                <li key={link.href}>
-                  <NavLink
-                    link={link}
-                    active={active}
-                    isSignIn={isSignIn}
-                  />
-                </li>
-              )
-            })}
+            {visibleLinks
+              .filter((link) => normalize(link.href) !== '/signin')
+              .map((link) => {
+                const active = normalize(link.href) === route
+
+                return (
+                  <li key={link.href}>
+                    <NavLink
+                      link={link}
+                      active={active}
+                      isSignIn={false}
+                    />
+                  </li>
+                )
+              })}
+
             <li>
-              <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+              <GetAppButton />
             </li>
-            {user && (
+
+            <li>
+              <ThemeToggle
+                theme={theme}
+                onToggle={handleToggleTheme}
+              />
+            </li>
+
+            {!user &&
+              visibleLinks
+                .filter((link) => normalize(link.href) === '/signin')
+                .map((link) => (
+                  <li key={link.href}>
+                    <NavLink
+                      link={link}
+                      active={normalize(link.href) === route}
+                      isSignIn={true}
+                    />
+                  </li>
+                ))}
+
+             {user && (
               <li className="relative" ref={menuRef}>
                 <button
                   type="button"
@@ -285,6 +354,10 @@ function Header({ name, links }) {
               )
             })}
           </ul>
+          
+          <div className="mt-2">
+            <GetAppButton className="w-full justify-center" />
+          </div>
           {user && (
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-a5 pt-3">
               <div className="flex min-w-0 items-center gap-2.5">

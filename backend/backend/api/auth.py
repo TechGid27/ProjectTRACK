@@ -38,6 +38,7 @@ from backend.models.auth import (
     ResendConfirmationRequest,
     AuthUser,
     UserResponse,
+    SessionTokens,
     OAuthUrlResponse,
     SignUpResponse,
     MessageResponse,
@@ -76,8 +77,18 @@ def _clear_session_cookie(response: Response) -> None:
 
 
 def _read_session_cookie(request: Request) -> Dict[str, Optional[str]]:
+    # Native clients (React Native / APK) cannot rely on the browser cookie jar,
+    # so they send the Supabase access token as a Bearer Authorization header
+    # and the refresh token as X-Refresh-Token. Prefer the cookie (web), then
+    # fall back to these headers (mobile).
     raw = request.cookies.get(settings.AUTH_COOKIE_NAME)
     if not raw:
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            access = auth_header[7:].strip()
+            if access:
+                refresh = request.headers.get("x-refresh-token") or request.headers.get("X-Refresh-Token")
+                return {"access_token": access, "refresh_token": refresh}
         return {}
     try:
         data = json.loads(raw)
@@ -207,7 +218,10 @@ async def oauth_callback(body: OAuthCallbackRequest, response: Response):
     except SupabaseAuthError as exc:
         raise _handle_auth_error(exc)
     _set_session_cookie(response, body.access_token, body.refresh_token)
-    return UserResponse(user=_to_auth_user(raw))
+    return UserResponse(
+        user=_to_auth_user(raw),
+        tokens=SessionTokens(access_token=body.access_token, refresh_token=body.refresh_token or None),
+    )
 
 
 @router.get("/session", response_model=UserResponse, summary="Current Session")
@@ -235,7 +249,10 @@ async def session(request: Request, response: Response):
                 new_refresh = refreshed.get("refresh_token") or refresh_token
                 if new_access:
                     _set_session_cookie(response, new_access, new_refresh)
-                    return UserResponse(user=_to_auth_user(refreshed))
+                    return UserResponse(
+                        user=_to_auth_user(refreshed),
+                        tokens=SessionTokens(access_token=new_access, refresh_token=new_refresh),
+                    )
             except SupabaseAuthError:
                 pass
         _clear_session_cookie(response)
@@ -254,7 +271,10 @@ async def signin(body: SignInRequest, response: Response):
     if not access_token:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     _set_session_cookie(response, access_token, refresh_token)
-    return UserResponse(user=_to_auth_user(data))
+    return UserResponse(
+        user=_to_auth_user(data),
+        tokens=SessionTokens(access_token=access_token, refresh_token=refresh_token),
+    )
 
 
 @router.post("/signup", response_model=SignUpResponse, summary="Email/Password Sign Up")

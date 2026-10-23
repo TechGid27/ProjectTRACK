@@ -12,7 +12,10 @@ import {
   submitAnomalyReport,
 } from '../../services/api'
 import { getSession } from '../../services/auth'
-import { captureGeolocation } from '../../services/geolocation'
+import {
+  captureGeolocationDetailed,
+  geolocationFailureMessage,
+} from '../../services/geolocation'
 import {
   BARANGAY_MIN_ZOOM,
   fetchOsmContextCached,
@@ -1131,6 +1134,7 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
   const [submitting, setSubmitting] = useState(false)
   const [verdict, setVerdict] = useState(null)
   const [gpsStatus, setGpsStatus] = useState('idle')
+  const [gpsReason, setGpsReason] = useState(null)
   const [farFromSite, setFarFromSite] = useState(null)
   const [catOpen, setCatOpen] = useState(false)
   const [picPreview, setPicPreview] = useState(null)
@@ -1195,6 +1199,32 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
     setForm((prev) => ({ ...prev, ...partial }))
   }
 
+  // Acquire (or re-acquire) GPS on demand, independent of submitting — lets a
+  // field user retry a transient timeout and see the real reason on failure.
+  async function retryGps() {
+    setGpsStatus('acquiring')
+    setGpsReason(null)
+    const result = await captureGeolocationDetailed()
+    if (result.ok) {
+      setGpsStatus('acquired')
+      setGpsReason(null)
+      // Re-evaluate distance from the project site with the fresh fix.
+      if (
+        projectCoords?.latitude != null &&
+        projectCoords?.longitude != null
+      ) {
+        const dKm = haversineKm(
+          [result.latitude, result.longitude],
+          [projectCoords.latitude, projectCoords.longitude],
+        )
+        setFarFromSite(dKm * 1000 > 150 ? dKm : null)
+      }
+    } else {
+      setGpsStatus('denied')
+      setGpsReason(result.reason)
+    }
+  }
+
   async function submit(event) {
     event.preventDefault()
     const trimmedDesc = form.desc.trim()
@@ -1213,8 +1243,13 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
 
     const alreadyConfirmedFar = farFromSite != null
     setGpsStatus('acquiring')
-    const gps = await captureGeolocation()
+    setGpsReason(null)
+    const gpsResult = await captureGeolocationDetailed()
+    const gps = gpsResult.ok
+      ? { latitude: gpsResult.latitude, longitude: gpsResult.longitude }
+      : null
     setGpsStatus(gps ? 'acquired' : 'denied')
+    setGpsReason(gps ? null : gpsResult.reason)
 
     if (
       !alreadyConfirmedFar &&
@@ -1516,21 +1551,37 @@ function ReportAnomalyModal({ entity, defaultLocation, projectCoords, onClose, o
               </p>
             </div>
             {gpsStatus !== 'idle' && (
-              <p
-                role="status"
-                data-testid="gps-status"
-                className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${
-                  gpsStatus === 'acquired'
-                    ? 'bg-violet-400/25 text-violet-200'
-                    : gpsStatus === 'denied'
-                      ? 'bg-white/10 text-white/50'
-                      : 'bg-violet-400/10 text-violet-300/70'
-                }`}
-              >
-                {gpsStatus === 'acquiring' && 'Acquiring GPS…'}
-                {gpsStatus === 'acquired' && 'GPS acquired — will verify on-site'}
-                {gpsStatus === 'denied' && 'No GPS — report will be unverified'}
-              </p>
+              <div className="flex flex-col gap-1.5">
+                <p
+                  role="status"
+                  data-testid="gps-status"
+                  className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold ${
+                    gpsStatus === 'acquired'
+                      ? 'bg-violet-400/25 text-violet-200'
+                      : gpsStatus === 'denied'
+                        ? 'bg-amber-400/15 text-amber-200'
+                        : 'bg-violet-400/10 text-violet-300/70'
+                  }`}
+                >
+                  {gpsStatus === 'acquiring' && 'Acquiring GPS…'}
+                  {gpsStatus === 'acquired' && 'GPS acquired — will verify on-site'}
+                  {gpsStatus === 'denied' &&
+                    (gpsReason
+                      ? geolocationFailureMessage(gpsReason)
+                      : 'No GPS — report will be submitted as unverified.')}
+                </p>
+                {gpsStatus === 'denied' && gpsReason !== 'insecure_context' && (
+                  <button
+                    type="button"
+                    data-testid="retry-gps-btn"
+                    onClick={retryGps}
+                    disabled={submitting}
+                    className="self-start rounded-lg bg-violet-400/20 px-2.5 py-1 text-[10px] font-semibold text-violet-200 transition hover:bg-violet-400/30 disabled:opacity-50"
+                  >
+                    ↻ Retry GPS
+                  </button>
+                )}
+              </div>
             )}
             {farFromSite != null && (
               <div
@@ -2223,7 +2274,9 @@ function CebuMap() {
     activeVerificationFilter === 'verified' ||
     activeVerificationFilter === 'flagged'
       ? activeVerificationFilter
-      : null
+      : activeVerificationFilter === 'anomalies'
+        ? 'unverified' // white/grey pin, matching the "All Anomalies" legend swatch
+        : null
 
   const filteredSpatialDots = useMemo(() => {
     if (!projectDots || projectDots.length === 0) return []

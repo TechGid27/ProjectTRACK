@@ -37,6 +37,18 @@ describe('Header', () => {
     expect(screen.getByText('Track')).toBeInTheDocument()
   })
 
+  it('shows a "Get an App" button that falls back to the GitHub releases page when no APK URL is set', () => {
+    render(<Header name="ProjectTrack" links={links} />)
+    // Rendered in both the centered bar and the mobile menu; at least one exists.
+    const btns = screen.getAllByTestId('get-app-btn')
+    expect(btns.length).toBeGreaterThan(0)
+    const href = btns[0].getAttribute('href')
+    expect(href).toContain('github.com')
+    expect(href).toContain('/releases')
+    // Fallback opens in a new tab (not a direct download).
+    expect(btns[0]).toHaveAttribute('target', '_blank')
+  })
+
   it('mobile menu closes when the toggle is clicked again', async () => {
     const user = userEvent.setup()
     render(<Header name="ProjectTrack" links={links} />)

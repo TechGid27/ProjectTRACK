@@ -38,6 +38,24 @@ class TestAuthEndpoints(unittest.TestCase):
     def setUpClass(cls):
         cls.client = TestClient(app)
 
+    def setUp(self):
+        # Hermetic cookie settings: a deployment .env may set
+        # AUTH_COOKIE_SECURE=true (for the cross-site HTTPS website), but
+        # Starlette's TestClient talks over http://testserver and will NOT
+        # store a Secure cookie — which would break the cookie-flow tests.
+        # Force non-secure + lax here so these tests don't depend on the
+        # ambient environment.
+        from backend.config import settings
+        self._cookie_secure = settings.AUTH_COOKIE_SECURE
+        self._cookie_samesite = settings.AUTH_COOKIE_SAMESITE
+        settings.AUTH_COOKIE_SECURE = False
+        settings.AUTH_COOKIE_SAMESITE = "lax"
+
+    def tearDown(self):
+        from backend.config import settings
+        settings.AUTH_COOKIE_SECURE = self._cookie_secure
+        settings.AUTH_COOKIE_SAMESITE = self._cookie_samesite
+
     # -- OAuth URL -----------------------------------------------------------
     def test_oauth_url_returns_authorize_link(self):
         with patch.object(auth_module.supabase_auth, "oauth_authorize_url",
@@ -283,6 +301,31 @@ class TestAuthEndpoints(unittest.TestCase):
             resp = client.get("/api/auth/session")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["user"]["email"], FAKE_USER["email"])
+
+    # -- Native token auth ---------------------------------------------------
+    def test_signin_returns_tokens_for_native_clients(self):
+        with patch.object(auth_module.supabase_auth, "sign_in_password",
+                          new=AsyncMock(return_value=FAKE_SESSION)):
+            resp = self.client.post("/api/auth/signin",
+                                    json={"email": "watchdog@example.com", "password": "correct-horse"})
+        self.assertEqual(resp.status_code, 200)
+        tokens = resp.json().get("tokens")
+        self.assertIsNotNone(tokens)
+        self.assertEqual(tokens["access_token"], "fake-access-token")
+        self.assertEqual(tokens["refresh_token"], "fake-refresh-token")
+
+    def test_session_accepts_bearer_authorization_header(self):
+        # Native clients (APK) send the token as a Bearer header instead of a
+        # cookie. A fresh client with NO cookie must still resolve the session.
+        client = TestClient(app)
+        with patch.object(auth_module.supabase_auth, "get_user",
+                          new=AsyncMock(return_value=FAKE_USER)):
+            resp = client.get(
+                "/api/auth/session",
+                headers={"Authorization": "Bearer fake-access-token"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["user"]["id"], FAKE_USER["id"])
 
     # -- OAuth callback ------------------------------------------------------
     def test_oauth_callback_persists_session(self):

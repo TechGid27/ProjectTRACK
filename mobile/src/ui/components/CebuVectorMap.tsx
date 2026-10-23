@@ -86,7 +86,7 @@ function isPointInRing(x: number, y: number, ring: { x: number; y: number }[]): 
 }
 
 // ============================================================================
-// MEMOIZED LAYER 1: 53 Cebu LGUs (HUCs, Component Cities, Municipalities)
+// MEMOIZED LAYER 1: 53 Cebu LGUs (Consistent Harmonious Colors)
 // ============================================================================
 interface MunicipalitiesLayerProps {
   pathsData: PathDataItem[];
@@ -118,26 +118,10 @@ const MunicipalitiesLayer = memo(function MunicipalitiesLayer({
 
         const matchesTier = isLguInHierarchyTier(item.rawName, hierarchyTier);
 
-        // Classification-based coloring
-        let baseFill = '#dceae8';
-        let baseStroke = '#b2d4cf';
-        let strokeMultiplier = 1.0;
-
-        if (item.meta.type === 'HUC') {
-          // Highly Urbanized Cities (Cebu City, Mandaue City, Lapu-Lapu City)
-          baseFill = '#194a44';
-          baseStroke = '#f59e0b'; // Royal amber accent
-          strokeMultiplier = 1.8;
-        } else if (item.meta.type === 'COMPONENT_CITY') {
-          // Component Cities (Bogo, Carcar, Danao, Naga, Talisay, Toledo)
-          baseFill = '#245952';
-          baseStroke = '#38bdf8'; // Bright civic cyan
-          strokeMultiplier = 1.4;
-        } else {
-          // 44 Municipalities
-          baseFill = '#dceae8';
-          baseStroke = '#b2d4cf';
-        }
+        // Consistent base styling across all 53 Cebu LGUs (clean & harmonious)
+        const baseFill = '#dceae8';
+        const baseStroke = '#b2d4cf';
+        const strokeMultiplier = 1.0;
 
         // Selected state takes absolute visual priority (keeps exact '#1f3d3c' for tests)
         const fillColor = isSelected ? '#1f3d3c' : baseFill;
@@ -198,13 +182,7 @@ const PlaceLabelsLayer = memo(function PlaceLabelsLayer({
             return null;
           }
 
-          const labelColor = isCity ? '#064e3b' : '#132c2a';
-          const prefix =
-            item.meta.type === 'HUC'
-              ? '👑 '
-              : item.meta.type === 'COMPONENT_CITY'
-              ? '🏢 '
-              : '';
+          const labelColor = '#132c2a';
 
           return (
             <SvgText
@@ -217,7 +195,7 @@ const PlaceLabelsLayer = memo(function PlaceLabelsLayer({
               fontWeight={isCity ? '900' : '700'}
               textAnchor="middle"
             >
-              {`${prefix}${item.normalizedName}`}
+              {item.normalizedName}
             </SvgText>
           );
         })}
@@ -259,22 +237,14 @@ const PinsLayer = memo(function PinsLayer({
   onSelectPin,
   onClusterPress,
 }: PinsLayerProps) {
-<<<<<<< HEAD
-=======
   const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
   const clusterR = screenClusterR / scale;
   const clusterFontSize = Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale;
 
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
   return (
     <G>
       {clusters.map((item) => {
         if (item.isCluster) {
-<<<<<<< HEAD
-          const screenClusterR = Math.max(9.0, 14.0 / Math.pow(scale, 0.28));
-          const clusterR = screenClusterR / scale;
-=======
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
           return (
             <G
               key={item.id}
@@ -296,11 +266,7 @@ const PinsLayer = memo(function PinsLayer({
                 x={item.x}
                 y={item.y + 3.5 / scale}
                 fill="#ffffff"
-<<<<<<< HEAD
-                fontSize={Math.max(7.0, 11 / Math.pow(scale, 0.28)) / scale}
-=======
                 fontSize={clusterFontSize}
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
                 fontWeight="bold"
                 textAnchor="middle"
               >
@@ -314,35 +280,18 @@ const PinsLayer = memo(function PinsLayer({
         const isSelected = selectedPinId === pin.id;
         const reportCount = typeof pin.report_count === 'number' ? pin.report_count : 0;
         const isHotspot =
-<<<<<<< HEAD
-          reportCount > 0 ||
-          pin.tone === 'hotspot' ||
-          Boolean(pin.is_hotspot);
-
-        // Responsive status color mapping
-=======
           reportCount > 0 || pin.tone === 'hotspot' || Boolean(pin.is_hotspot);
 
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
         const isCompleted = pin.status === 'Completed';
         const isDelayed = pin.status === 'Delayed' || pin.tone === 'warning';
 
         const coreColor = isHotspot
-<<<<<<< HEAD
-          ? '#ef4444' // Red Hotspot
-          : isDelayed
-          ? '#f59e0b' // Amber Delayed
-          : isCompleted
-          ? '#0284c7' // Blue Completed
-          : '#10b981'; // Emerald Ongoing
-=======
           ? '#ef4444'
           : isDelayed
           ? '#f59e0b'
           : isCompleted
           ? '#0284c7'
           : '#10b981';
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
 
         const glowColor = isHotspot
           ? 'rgba(239, 68, 68, 0.45)'
@@ -352,10 +301,6 @@ const PinsLayer = memo(function PinsLayer({
           ? 'rgba(2, 132, 199, 0.45)'
           : 'rgba(16, 185, 129, 0.45)';
 
-<<<<<<< HEAD
-        // Screen size decreases as user zooms in so dots become smaller and pinpoint
-=======
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
         const screenCoreR = Math.max(2.0, (isSelected ? 6.5 : 4.8) / Math.pow(scale, 0.38));
         const screenGlowR = Math.max(3.8, (isSelected ? 12.0 : 8.5) / Math.pow(scale, 0.38));
         const screenRadarR = Math.max(5.5, (isSelected ? 16.0 : 12.0) / Math.pow(scale, 0.38));
@@ -375,15 +320,8 @@ const PinsLayer = memo(function PinsLayer({
               onSelectPin?.(pins.find((p) => p.id === pin.id) || pin);
             }}
           >
-<<<<<<< HEAD
-            {/* Invisible generous touch target */}
             <Circle cx={pin.x} cy={pin.y} r={hitR} fill="transparent" />
 
-            {/* Concentric Hotspot Radar Rings */}
-=======
-            <Circle cx={pin.x} cy={pin.y} r={hitR} fill="transparent" />
-
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
             {isHotspot && (
               <>
                 <Circle
@@ -405,15 +343,8 @@ const PinsLayer = memo(function PinsLayer({
               </>
             )}
 
-<<<<<<< HEAD
-            {/* Outer Glow Halo */}
             <Circle cx={pin.x} cy={pin.y} r={glowR} fill={glowColor} />
 
-            {/* Pin Core */}
-=======
-            <Circle cx={pin.x} cy={pin.y} r={glowR} fill={glowColor} />
-
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
             <Circle
               cx={pin.x}
               cy={pin.y}
@@ -496,11 +427,8 @@ function CebuVectorMapImpl(
 
         scaleRef.current = targetScale;
         offsetRef.current = { x: targetX, y: targetY };
-<<<<<<< HEAD
-=======
         setScale(targetScale);
         setOffset({ x: targetX, y: targetY });
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
 
         Animated.parallel([
           Animated.spring(pan, {
@@ -513,14 +441,7 @@ function CebuVectorMapImpl(
             useNativeDriver: true,
             bounciness: 0,
           }),
-<<<<<<< HEAD
-        ]).start(() => {
-          setScale(targetScale);
-          setOffset({ x: targetX, y: targetY });
-        });
-=======
         ]).start();
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
       },
       recenter: () => {
         handleReset();
@@ -533,11 +454,8 @@ function CebuVectorMapImpl(
 
         scaleRef.current = targetScale;
         offsetRef.current = { x: targetX, y: targetY };
-<<<<<<< HEAD
-=======
         setScale(targetScale);
         setOffset({ x: targetX, y: targetY });
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
 
         Animated.parallel([
           Animated.timing(pan, {
@@ -550,14 +468,7 @@ function CebuVectorMapImpl(
             duration: 250,
             useNativeDriver: true,
           }),
-<<<<<<< HEAD
-        ]).start(() => {
-          setScale(targetScale);
-          setOffset({ x: targetX, y: targetY });
-        });
-=======
         ]).start();
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
       },
       zoomToLgu: (lguName: string) => {
         const normTarget = normalizeLguName(lguName).toLowerCase();
@@ -578,11 +489,8 @@ function CebuVectorMapImpl(
 
             scaleRef.current = zoomScale;
             offsetRef.current = { x: targetX, y: targetY };
-<<<<<<< HEAD
-=======
             setScale(zoomScale);
             setOffset({ x: targetX, y: targetY });
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
 
             Animated.parallel([
               Animated.spring(pan, {
@@ -595,14 +503,7 @@ function CebuVectorMapImpl(
                 useNativeDriver: true,
                 bounciness: 0,
               }),
-<<<<<<< HEAD
-            ]).start(() => {
-              setScale(zoomScale);
-              setOffset({ x: targetX, y: targetY });
-            });
-=======
             ]).start();
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
           }
         }
       },
@@ -1025,9 +926,8 @@ function CebuVectorMapImpl(
     ]).start();
   };
 
-<<<<<<< HEAD
-  // Base stroke width compensation
-  const strokeWidthBase = Math.max(0.35, 0.7 / Math.sqrt(Math.max(1, scale)));
+  const strokeScale = Math.round(Math.sqrt(Math.max(1, scale)) * 2) / 2;
+  const strokeWidthBase = 0.75 / strokeScale;
 
   return (
     <View
@@ -1042,15 +942,6 @@ function CebuVectorMapImpl(
       style={[styles.container, { width, height }]}
       testID={testID}
     >
-=======
-  const strokeScale = Math.round(Math.sqrt(Math.max(1, scale)) * 2) / 2;
-  const strokeWidthBase = 0.75 / strokeScale;
-
-  const pinLguMeta = activeSelectedPin ? getLguClassification(activeSelectedPin.lgu) : null;
-
-  return (
-    <View style={[styles.container, { width, height }]} testID={testID}>
->>>>>>> d72fe692fe0d6f86c2bf8d9eb6108fbd0c0c4afd
       {/* Map touch surface for gestures & direct hit-testing */}
       <View
         style={StyleSheet.absoluteFill}
@@ -1074,7 +965,7 @@ function CebuVectorMapImpl(
         >
           <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
             <G originX={width / 2} originY={height / 2}>
-              {/* 53 Cebu LGUs with Administrative Distinction */}
+              {/* 53 Cebu LGUs (Consistent Base Styling) */}
               <MunicipalitiesLayer
                 pathsData={pathsData}
                 selectedMunicipality={selectedMunicipality}
@@ -1083,7 +974,7 @@ function CebuVectorMapImpl(
                 onSelectMunicipality={onSelectMunicipality}
               />
 
-              {/* Place Navigation Labels with City Accents */}
+              {/* Place Navigation Labels (Clean & Uniform) */}
               <PlaceLabelsLayer
                 pathsData={pathsData}
                 scale={scale}

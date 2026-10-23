@@ -77,10 +77,11 @@ export default function HomeScreen({
   const [lguModalSearch, setLguModalSearch] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
   const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
 
   const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+
   const [backendStats, setBackendStats] = useState({
     total_projects: mockProjects.length,
     total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),

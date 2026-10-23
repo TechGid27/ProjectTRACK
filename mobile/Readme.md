@@ -10,21 +10,85 @@
 
 ---
 
-## ⚡ 1-Click App Download & Install (Zero Setup)
+## ⚡ 1-Click App Download (Google Drive & Zero-Setup Install)
 
-*Assuming the ProjectTRACK cloud backend is live and deployed, you can build, download, and install the mobile app on your Android phone in just 1 click:*
+*Assuming the ProjectTRACK cloud backend is live and deployed, any evaluator, tester, or citizen can download and install the mobile app in just 1 click:*
 
-### Step-by-Step (Only 1 Step Required):
+### 📥 Option A: 1-Click Direct Download (From Google Drive)
 
-1. **Double-click [`scripts/build-apk.bat`](scripts/build-apk.bat)** *(or run `npm run build:apk:cloud` in your terminal)*.
-2. **Scan the QR Code** that appears on your screen with your Android phone's camera *(or tap the generated direct download link)*.
-3. **Tap Download & Install**: The standalone `.apk` installs on your phone and automatically connects to the deployed production backend.
+[![Download ProjectTRACK.apk](https://img.shields.io/badge/⬇️%20Download%20ProjectTRACK.apk-Google%20Drive%20(1--Click%20Download)-0d9488?style=for-the-badge&logo=google-drive&logoColor=white)](https://drive.google.com/uc?export=download&id=YOUR_GDRIVE_FILE_ID)
 
-```text
-Double-click build-apk.bat ──▶ Scan Terminal QR Code on Phone ──▶ Tap Install ──▶ Ready!
+> **📱 How to Install on Android in 3 Steps:**
+> 1. Tap the **Download Button** above on your Android phone's browser *(downloads `ProjectTRACK.apk` directly)*.
+> 2. Open the downloaded file from your notification bar or Downloads folder.
+> 3. Tap **Install** *(if prompted, allow "Install unknown apps" for your browser)*. The app connects to the live backend automatically!
+
+---
+
+### 📦 Step-by-Step: How to Extract & Upload the APK to Your Google Drive
+
+If you are the developer or project owner hosting the `.apk` on your own Google Drive for your users, follow these steps to extract the exact files:
+
+```mermaid
+flowchart LR
+    Step1["1. Build / Locate\nProjectTRACK.apk"] --> Step2["2. Drag & Drop\nto Google Drive"]
+    Step2 --> Step3["3. Share Settings:\n'Anyone with the link'"]
+    Step3 --> Step4["4. Convert to 1-Click\nDirect Download Link"]
+    Step4 --> Step5["5. Paste into\nREADME.md"]
 ```
 
-> **Direct USB Option (Optional)**: If your phone is plugged into your PC via USB with USB Debugging enabled, double-click [`scripts/install-apk.bat`](scripts/install-apk.bat) to push and launch the app on your phone instantly.
+#### Step 1: Extract the Specific File from Your Project
+You only need **ONE** primary file for end-users to install on their phones:
+
+| File Name | Location in Project | Purpose |
+| :--- | :--- | :--- |
+| **`ProjectTRACK.apk`** | `mobile/dist/ProjectTRACK.apk` *(Cloud EAS)*<br>OR `mobile/android/app/build/outputs/apk/release/app-release.apk` *(Local Gradle)* | The standalone Android application binary (~45–65 MB). |
+
+* **If you build using Cloud EAS (Recommended — No Android Studio / Java needed):**
+  1. Double-click [`scripts/build-apk.bat`](scripts/build-apk.bat) *(or run `npm run build:apk:cloud`)*.
+  2. When the build finishes, EAS generates a download link. Download the `.apk` and place it in `mobile/dist/ProjectTRACK.apk`.
+* **If you build locally with Gradle:**
+  1. Run `npm run build:apk:local`.
+  2. Navigate to `mobile/android/app/build/outputs/apk/release/`.
+  3. Copy `app-release.apk` and rename it to `ProjectTRACK.apk`.
+
+#### Step 2: Upload to Google Drive
+1. Open your browser and go to [Google Drive](https://drive.google.com).
+2. Click **+ New** → **File upload** *(or drag and drop `ProjectTRACK.apk` into your Drive)*.
+3. Wait for the upload to complete.
+
+#### Step 3: Enable Public Sharing
+1. Right-click the uploaded `ProjectTRACK.apk` file in Google Drive.
+2. Select **Share** → **Share**.
+3. Under **General access**, change from **"Restricted"** to **"Anyone with the link"** *(Role: Viewer)*.
+4. Click **Copy link**.
+   - Your link will look like this:
+     ```text
+     https://drive.google.com/file/d/1a2b3c4d5e6f7g8h9_ExampleID/view?usp=sharing
+     ```
+
+#### Step 4: Convert to a 1-Click Instant Download Link
+By default, Google Drive opens an in-browser preview page. To make it download the `.apk` **immediately in 1 click**:
+1. Copy the **FILE_ID** from your link *(the part between `/d/` and `/view`)*:
+   - In `https://drive.google.com/file/d/1a2b3c4d5e6f7g8h9_ExampleID/view`, the ID is:
+     `1a2b3c4d5e6f7g8h9_ExampleID`
+2. Construct the direct 1-click download URL using this format:
+   ```text
+   https://drive.google.com/uc?export=download&id=1a2b3c4d5e6f7g8h9_ExampleID
+   ```
+3. In [`mobile/README.md`](README.md), replace `YOUR_GDRIVE_FILE_ID` with your actual ID!
+
+---
+
+### 💻 Option B: 1-Click USB ADB Installer (For PC Users)
+If you want to provide a 1-click installation folder for evaluators or users who have their phone plugged into a computer:
+
+1. Create a zip file named `ProjectTRACK-USB-Installer.zip` containing these 3 files:
+   - `ProjectTRACK.apk` *(the compiled binary)*
+   - [`install-apk.bat`](scripts/install-apk.bat) *(Windows 1-click USB installer)*
+   - [`install-apk.sh`](scripts/install-apk.sh) *(macOS/Linux 1-click USB installer)*
+2. Upload `ProjectTRACK-USB-Installer.zip` to Google Drive.
+3. When users extract the zip on their PC and double-click `install-apk.bat`, ADB automatically detects their connected Android phone and installs `ProjectTRACK.apk` in seconds.
 
 ---
 

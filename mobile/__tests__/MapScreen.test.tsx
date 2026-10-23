@@ -30,7 +30,7 @@ describe('MapScreen Component', () => {
     expect(getByTestId('open-about-map-btn')).toBeTruthy();
   });
 
-  test('switching administrative hierarchy tier filters active focus', () => {
+  test('filtering projects using map status filter bar', () => {
     const { getByTestId } = render(
       <MapScreen
         onNavigateToSignIn={mockOnNavigateToSignIn}
@@ -39,13 +39,13 @@ describe('MapScreen Component', () => {
       />,
     );
 
-    const citiesTierBtn = getByTestId('hierarchy-tier-cities');
-    expect(citiesTierBtn).toBeTruthy();
-    fireEvent.press(citiesTierBtn);
+    const ongoingFilterBtn = getByTestId('filter-btn-ongoing');
+    expect(ongoingFilterBtn).toBeTruthy();
+    fireEvent.press(ongoingFilterBtn);
 
-    const muniTierBtn = getByTestId('hierarchy-tier-municipalities');
-    expect(muniTierBtn).toBeTruthy();
-    fireEvent.press(muniTierBtn);
+    const delayedFilterBtn = getByTestId('filter-btn-delayed');
+    expect(delayedFilterBtn).toBeTruthy();
+    fireEvent.press(delayedFilterBtn);
   });
 
   test('toggling region focus presets expands the carousel and allows selecting a region', () => {

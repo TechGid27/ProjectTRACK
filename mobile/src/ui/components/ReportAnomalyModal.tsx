@@ -144,39 +144,6 @@ export default function ReportAnomalyModal({
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [capturedPhoto, setCapturedPhoto] = useState<{ uri: string; name?: string; type?: string } | null>(null);
-  const [capturedReceipt, setCapturedReceipt] = useState<QueuedAudit | null>(null);
-  const [verdict, setVerdict] = useState<ReportVerification | null>(null);
-  const [userOffsetMeters, setUserOffsetMeters] = useState(45);
-  const [deviceFix, setDeviceFix] = useState<{ latitude: number; longitude: number; accuracy: number | null } | null>(null);
-
-  // Target coordinates from selected project (or fallback Bogo project coordinates)
-  const targetCoords = useMemo(() => {
-    return {
-      lat: typeof selectedProj?.latitude === 'number' ? selectedProj.latitude : 11.0515,
-      lng: typeof selectedProj?.longitude === 'number' ? selectedProj.longitude : 124.0055,
-    };
-  }, [selectedProj]);
-
-  // Geofence check vs 150m threshold (Pillar 1)
-  const geofence = useMemo(() => {
-    const lat = deviceFix ? deviceFix.latitude : targetCoords.lat + userOffsetMeters * 0.000009;
-    const lng = deviceFix ? deviceFix.longitude : targetCoords.lng;
-    return checkGeofenceProximity(lat, lng, targetCoords.lat, targetCoords.lng, 150);
-  }, [deviceFix, targetCoords, userOffsetMeters]);
-
-  // Attempt real GPS fix on mount
-  useEffect(() => {
-    let active = true;
-    getDeviceFix().then((fix) => {
-      if (active && fix) {
-        setDeviceFix(fix);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Field Audit capture state (real hardware GPS, offline-first outbox)
   const [capturedReceipt, setCapturedReceipt] = useState<QueuedAudit | null>(null);
@@ -1173,6 +1140,14 @@ const styles = StyleSheet.create({
   shutterButtonText: {
     color: '#ffffff',
     fontSize: 12,
+    fontWeight: '800',
+  },
+  photoCapturedTag: {
+    color: '#10b981',
+    fontWeight: '800',
+  },
+  photoRequiredTag: {
+    color: '#ef4444',
     fontWeight: '800',
   },
   categoryGrid: {

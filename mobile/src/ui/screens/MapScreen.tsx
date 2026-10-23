@@ -17,7 +17,6 @@ import AboutMapModal from '../components/AboutMapModal';
 import ChatBotModal from '../components/ChatBotModal';
 import MapFilterBar, { MapFilterOption } from '../components/MapFilterBar';
 import FieldAuditorModal from '../components/FieldAuditorModal';
-import CebuMapHierarchyBar from '../components/CebuMapHierarchyBar';
 import CebuRegionQuickJump from '../components/CebuRegionQuickJump';
 import { pins, initialPins } from '../../data/pins';
 import {
@@ -460,16 +459,7 @@ export default function MapScreen({
         onResetSelection={handleResetSelection}
       />
 
-      {/* 2. Cebu Administrative Hierarchy Bar (Province > Cities > Municipalities) */}
-      <CebuMapHierarchyBar
-        selectedTier={hierarchyTier}
-        onSelectTier={setHierarchyTier}
-        selectedLgu={selectedLgu}
-        onResetLgu={handleResetSelection}
-        onSelectMunicipality={handleSelectMunicipality}
-      />
-
-      {/* 3. Floating Status & Budget Map Filter Pills */}
+      {/* 2. Floating Status & Budget Map Filter Pills */}
       <MapFilterBar
         activeFilter={activeFilter}
         onSelectFilter={setActiveFilter}
@@ -652,7 +642,7 @@ const styles = StyleSheet.create({
   },
   floatingRefreshBtn: {
     position: 'absolute',
-    top: 175,
+    top: 120,
     right: 16,
     backgroundColor: 'rgba(31, 61, 60, 0.95)',
     flexDirection: 'row',

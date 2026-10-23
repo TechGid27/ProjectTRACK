@@ -74,7 +74,7 @@ export default function MapHeader({
           style={styles.brandContainer}
           testID="brand-home-btn"
         >
-          <Logo size={30} testID="map-header-logo" />
+          <Logo size={30} variant="light" testID="map-header-logo" />
           <Text style={styles.brandTitle}>ProjectTRACK</Text>
         </TouchableOpacity>
       </View>

@@ -8,6 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Logo from './Logo';
 
 interface MapHeaderProps {
   totalLgus?: number;
@@ -73,7 +74,7 @@ export default function MapHeader({
           style={styles.brandContainer}
           testID="brand-home-btn"
         >
-          <View style={styles.badgeIndicator} />
+          <Logo size={30} testID="map-header-logo" />
           <Text style={styles.brandTitle}>ProjectTRACK</Text>
         </TouchableOpacity>
       </View>
@@ -222,11 +223,12 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     backgroundColor: '#34d399',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 44,
   },
   signInText: {
     color: '#0f2423',
@@ -238,9 +240,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     borderRadius: 18,
+    minHeight: 44,
   },
   avatarCircle: {
     width: 22,

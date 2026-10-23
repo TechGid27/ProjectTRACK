@@ -6,6 +6,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapHeader from '../components/MapHeader';
@@ -18,12 +19,6 @@ import ChatBotModal from '../components/ChatBotModal';
 import MapFilterBar, { MapFilterOption } from '../components/MapFilterBar';
 import FieldAuditorModal from '../components/FieldAuditorModal';
 import CebuRegionQuickJump from '../components/CebuRegionQuickJump';
-import { pins, initialPins } from '../../data/pins';
-import {
-  mockProjects,
-  getProjectsByLocation,
-  getProjectById,
-} from '../../data/mockApi';
 import { api } from '../../services/api';
 import {
   Pin,
@@ -78,10 +73,9 @@ export default function MapScreen({
   const [searchQuery, setSearchQuery] = useState('');
   const [sheetState, setSheetState] = useState<SheetDisplayState>(initialSheetState);
   const [isRefreshingMap, setIsRefreshingMap] = useState(false);
-  const [mapPins, setMapPins] = useState<Pin[]>(initialPins || pins || []);
-  const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>(
-    initialLgu ? getProjectsByLocation(initialLgu) : mockProjects,
-  );
+  const [mapPins, setMapPins] = useState<Pin[]>([]);
+  const [activeProjects, setActiveProjects] = useState<ProjectDetail[]>([]);
+  const [isLoadingPins, setIsLoadingPins] = useState(true);
 
   useEffect(() => {
     if (initialLgu) {
@@ -122,6 +116,7 @@ export default function MapScreen({
   // Fetch live map pins on mount
   useEffect(() => {
     let isMounted = true;
+    setIsLoadingPins(true);
     api
       .fetchMapPins()
       .then((livePins) => {
@@ -130,7 +125,10 @@ export default function MapScreen({
         }
       })
       .catch(() => {
-        // Retain initial pins
+        // Live-only: leave pins empty on failure
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingPins(false);
       });
     return () => {
       isMounted = false;
@@ -141,7 +139,7 @@ export default function MapScreen({
   useEffect(() => {
     const loc = selectedLgu || searchQuery.trim();
     if (!loc) {
-      setActiveProjects(mockProjects);
+      setActiveProjects([]);
       return;
     }
     let isMounted = true;
@@ -238,7 +236,7 @@ export default function MapScreen({
       }));
     }
 
-    return getProjectsByLocation(selectedLgu);
+    return [];
   }, [selectedLgu, activeProjects, mapPins]);
 
   const filteredPins = useMemo(() => {
@@ -262,19 +260,15 @@ export default function MapScreen({
       );
     }
     if (activeFilter === 'DELAYED') {
-      result = result.filter((p) => p.tone === 'warning');
+      result = result.filter((p) => p.tone === 'warning' || p.status === 'Delayed');
     } else if (activeFilter === 'ONGOING') {
-      result = result.filter((p) => p.tone !== 'warning');
+      result = result.filter(
+        (p) => p.tone !== 'warning' && p.status !== 'Delayed' && p.status !== 'Completed',
+      );
     } else if (activeFilter === 'COMPLETED') {
-      const completedIds = new Set(
-        mockProjects.filter((m) => m.status === 'Completed').map((m) => m.id),
-      );
-      result = result.filter((p) => completedIds.has(p.id));
+      result = result.filter((p) => p.status === 'Completed');
     } else if (activeFilter === 'HIGH_BUDGET') {
-      const highBudgetIds = new Set(
-        mockProjects.filter((m) => m.budget >= 50000000).map((m) => m.id),
-      );
-      result = result.filter((p) => highBudgetIds.has(p.id));
+      result = result.filter((p) => typeof p.budget === 'number' && p.budget >= 50000000);
     }
     return result;
   }, [mapPins, selectedLgu, hierarchyTier, searchQuery, activeFilter]);
@@ -338,12 +332,16 @@ export default function MapScreen({
     setSelectedPinId(pin.id);
     setSelectedLgu(pin.lgu);
 
-    const baseProject = getProjectById(pin.id) || {
+    const baseProject: ProjectDetail = {
       id: pin.id,
       title: pin.name,
-      contractor: 'Contractor on Record',
-      budget: 25000000,
-      status: pin.tone === 'warning' ? 'Delayed' : 'Ongoing',
+      contractor: pin.contractor || 'Contractor on Record',
+      budget: typeof pin.budget === 'number' ? pin.budget : 0,
+      status: (pin.status === 'Completed'
+        ? 'Completed'
+        : pin.tone === 'warning' || pin.status === 'Delayed'
+        ? 'Delayed'
+        : 'Ongoing') as ProjectStatus,
       lgu: pin.lgu,
       scope: pin.description,
     };
@@ -377,12 +375,28 @@ export default function MapScreen({
   };
 
   const handleSelectProjectById = (projectId: string) => {
-    const optimistic = getProjectById(projectId);
+    const matchingPin = mapPins.find((p) => p.id === projectId);
+    const optimistic: ProjectDetail | undefined = matchingPin
+      ? {
+          id: matchingPin.id,
+          title: matchingPin.name,
+          contractor: matchingPin.contractor || 'Contractor on Record',
+          budget: typeof matchingPin.budget === 'number' ? matchingPin.budget : 0,
+          status: (matchingPin.status === 'Completed'
+            ? 'Completed'
+            : matchingPin.tone === 'warning' || matchingPin.status === 'Delayed'
+            ? 'Delayed'
+            : 'Ongoing') as ProjectStatus,
+          lgu: matchingPin.lgu,
+          scope: matchingPin.description,
+          latitude: matchingPin.lat,
+          longitude: matchingPin.lng,
+        }
+      : undefined;
     if (optimistic) {
       setSelectedProject(optimistic);
       setIsDetailModalOpen(true);
     }
-    const matchingPin = mapPins.find((p) => p.id === projectId);
     if (matchingPin) {
       setSelectedPinId(matchingPin.id);
       mapRef.current?.animateToCoordinates(matchingPin.lat, matchingPin.lng, 4.5);
@@ -498,6 +512,28 @@ export default function MapScreen({
           width={mapWidth}
           height={mapHeight}
         />
+
+        {/* Live-data overlay: loading on first fetch, empty when backend returns nothing */}
+        {isLoadingPins && mapPins.length === 0 && (
+          <View style={styles.mapOverlay} pointerEvents="none" testID="map-pins-loading">
+            <ActivityIndicator size="large" color="#1f3d3c" />
+            <Text style={styles.mapOverlayText}>Loading live project pins…</Text>
+          </View>
+        )}
+        {!isLoadingPins && mapPins.length === 0 && (
+          <View style={styles.mapOverlay} pointerEvents="box-none" testID="map-pins-empty">
+            <Text style={styles.mapOverlayIcon}>📭</Text>
+            <Text style={styles.mapOverlayText}>No live project pins available.</Text>
+            <TouchableOpacity
+              style={styles.mapOverlayRetryBtn}
+              onPress={handleRefreshMap}
+              activeOpacity={0.8}
+              testID="map-pins-retry-btn"
+            >
+              <Text style={styles.mapOverlayRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Floating Civic Assistant Button */}
@@ -640,6 +676,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#cbe3df',
   },
+  mapOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+  },
+  mapOverlayIcon: {
+    fontSize: 34,
+  },
+  mapOverlayText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1f3d3c',
+    textAlign: 'center',
+  },
+  mapOverlayRetryBtn: {
+    backgroundColor: '#1f3d3c',
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  mapOverlayRetryText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
   floatingRefreshBtn: {
     position: 'absolute',
     top: 120,
@@ -647,9 +716,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(31, 61, 60, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 13,
+    paddingVertical: 11,
+    paddingHorizontal: 15,
     borderRadius: 20,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: 'rgba(52, 211, 153, 0.5)',
     shadowColor: '#000',

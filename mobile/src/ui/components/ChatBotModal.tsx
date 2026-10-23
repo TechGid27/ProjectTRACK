@@ -517,9 +517,9 @@ const styles = StyleSheet.create({
     maxHeight: 80,
   },
   sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#1f3d3c',
     justifyContent: 'center',
     alignItems: 'center',

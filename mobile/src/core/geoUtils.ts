@@ -524,3 +524,28 @@ export function isLguInHierarchyTier(
   }
   return true;
 }
+
+/**
+ * Compute the SVG viewBox string that renders a zoomed/panned view of a
+ * `width × height` map canvas WITHOUT raster scaling, so react-native-svg
+ * re-rasterizes vector paths crisply at any zoom level.
+ *
+ * It inverts the on-screen mapping used elsewhere in the map component:
+ *   screenX = width/2 + (svgX - width/2) * scale + offsetX
+ * giving a visible span of `canvas / scale` positioned so identical geometry
+ * lands on the same screen pixels as the previous transform-scale approach.
+ */
+export function computeMapViewBox(
+  scale: number,
+  offsetX: number,
+  offsetY: number,
+  width: number,
+  height: number,
+): string {
+  const safeScale = scale > 0 ? scale : 1;
+  const vbWidth = width / safeScale;
+  const vbHeight = height / safeScale;
+  const vbMinX = width / 2 - (width / 2 + offsetX) / safeScale;
+  const vbMinY = height / 2 - (height / 2 + offsetY) / safeScale;
+  return `${vbMinX.toFixed(2)} ${vbMinY.toFixed(2)} ${vbWidth.toFixed(2)} ${vbHeight.toFixed(2)}`;
+}

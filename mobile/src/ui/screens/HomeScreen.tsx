@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CebuVectorMap from '../components/CebuVectorMap';
@@ -17,11 +18,8 @@ import ProjectDetailModal from '../components/ProjectDetailModal';
 import ReportAnomalyModal from '../components/ReportAnomalyModal';
 import AboutMapModal from '../components/AboutMapModal';
 import ChatBotModal from '../components/ChatBotModal';
-import { pins, initialPins } from '../../data/pins';
-import {
-  mockProjects,
-  getProjectById,
-} from '../../data/mockApi';
+import FieldAuditorModal from '../components/FieldAuditorModal';
+import Logo from '../components/Logo';
 import { api } from '../../services/api';
 import { FAQS } from '../../data/faqs';
 import { Pin, ProjectDetail, AnomalyReport } from '../../core/types';
@@ -77,14 +75,16 @@ export default function HomeScreen({
   const [lguModalSearch, setLguModalSearch] = useState('');
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>(mockProjects.slice(0, 8));
+  const [liveTopProjects, setLiveTopProjects] = useState<ProjectDetail[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [livePins, setLivePins] = useState<Pin[]>([]);
 
   const [liveDelayedCount, setLiveDelayedCount] = useState<number | null>(null);
 
   const [backendStats, setBackendStats] = useState({
-    total_projects: mockProjects.length,
-    total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),
+    total_projects: 0,
+    total_budget: 0,
     total_lgus: 53,
     total_cities: 9,
     total_municipalities: 44,
@@ -104,6 +104,7 @@ export default function HomeScreen({
         setLiveTopProjects(topProjs);
       }
       if (pins && pins.length > 0) {
+        setLivePins(pins);
         const delayed = pins.filter(
           (p) =>
             p.tone === 'warning' ||
@@ -130,57 +131,73 @@ export default function HomeScreen({
 
   useEffect(() => {
     let isMounted = true;
-    api.fetchTopProjects(8).then((res) => {
-      if (isMounted && res && res.length > 0) {
-        setLiveTopProjects(res);
+
+    const loadInitialData = async () => {
+      setIsLoadingData(true);
+      setLoadError(false);
+      try {
+        const [topProjs, pins, sum] = await Promise.all([
+          api.fetchTopProjects(8),
+          api.fetchMapPins(),
+          api.fetchSummary(),
+        ]);
+        if (!isMounted) return;
+
+        if (topProjs && topProjs.length > 0) {
+          setLiveTopProjects(topProjs);
+        }
+        if (pins && pins.length > 0) {
+          setLivePins(pins);
+          const delayed = pins.filter(
+            (p) =>
+              p.tone === 'warning' ||
+              (p as any).status === 'Delayed' ||
+              (p as any).is_hotspot,
+          );
+          setLiveDelayedCount(delayed.length);
+        }
+        if (sum) {
+          setBackendStats({
+            total_projects: sum.total_projects,
+            total_lgus: sum.total_lgus,
+            total_cities: 9,
+            total_municipalities: 44,
+            total_budget: sum.total_budget,
+          });
+        }
+
+        // Treat a fully empty response as an error/empty condition.
+        const hasAnyData =
+          (topProjs && topProjs.length > 0) ||
+          (pins && pins.length > 0) ||
+          (sum && sum.total_projects > 0);
+        if (!hasAnyData) {
+          setLoadError(true);
+        }
+      } catch {
+        if (isMounted) setLoadError(true);
+      } finally {
+        if (isMounted) setIsLoadingData(false);
       }
-    });
-    api.fetchMapPins().then((pins) => {
-      if (isMounted && pins && pins.length > 0) {
-        const delayed = pins.filter(
-          (p) =>
-            p.tone === 'warning' ||
-            (p as any).status === 'Delayed' ||
-            (p as any).is_hotspot,
-        );
-        setLiveDelayedCount(delayed.length);
-      }
-    });
-    api.fetchSummary().then((sum) => {
-      if (isMounted) {
-        setBackendStats({
-          total_projects: sum.total_projects,
-          total_lgus: sum.total_lgus,
-          total_cities: 9,
-          total_municipalities: 44,
-          total_budget: sum.total_budget,
-        });
-      }
-    });
+    };
+
+    loadInitialData();
     return () => {
       isMounted = false;
     };
   }, []);
 
 
-  // High impact projects for carousel
+  // High impact projects for carousel (live only)
   const highImpactProjects = useMemo(() => {
-    if (liveTopProjects && liveTopProjects.length > 0) return liveTopProjects;
-    return [...mockProjects]
-      .sort((a, b) => b.budget - a.budget)
-      .slice(0, 8);
+    return liveTopProjects || [];
   }, [liveTopProjects]);
 
-  // Delayed projects count
-  const delayedCount =
-    liveDelayedCount !== null
-      ? liveDelayedCount
-      : mockProjects.filter((p) => p.status === 'Delayed').length;
+  // Delayed projects count (live only)
+  const delayedCount = liveDelayedCount !== null ? liveDelayedCount : 0;
 
-  // Total monitored budget calculated dynamically
-  const totalMonitoredBudget =
-    backendStats.total_budget ||
-    mockProjects.reduce((sum, p) => sum + p.budget, 0);
+  // Total monitored budget calculated dynamically (live only)
+  const totalMonitoredBudget = backendStats.total_budget || 0;
 
   // Filtered LGUs in modal
   const modalLgus = useMemo(() => {
@@ -205,17 +222,27 @@ export default function HomeScreen({
     setSelectedPinId(pin.id);
     setSelectedLgu(pin.lgu);
 
-    const project = getProjectById(pin.id) || {
+    const optimistic: ProjectDetail = {
       id: pin.id,
       title: pin.name,
-      contractor: 'Contractor on Record',
-      budget: 25000000,
-      status: pin.tone === 'warning' ? 'Delayed' : 'Ongoing',
+      contractor: pin.contractor || 'Contractor on Record',
+      budget: typeof pin.budget === 'number' ? pin.budget : 0,
+      status: (pin.status === 'Completed'
+        ? 'Completed'
+        : pin.tone === 'warning' || pin.status === 'Delayed'
+        ? 'Delayed'
+        : 'Ongoing') as ProjectDetail['status'],
       lgu: pin.lgu,
       scope: pin.description,
+      latitude: pin.lat,
+      longitude: pin.lng,
     };
-    setSelectedProject(project);
+    setSelectedProject(optimistic);
     setIsDetailModalOpen(true);
+
+    api.fetchProjectById(pin.id).then((live) => {
+      if (live) setSelectedProject(live);
+    });
   };
 
   const handleCardPress = (project: ProjectDetail) => {
@@ -252,7 +279,7 @@ export default function HomeScreen({
       >
         <View style={styles.headerTop}>
           <View style={styles.brandGroup}>
-            <View style={styles.liveIndicator} />
+            <Logo size={34} testID="home-header-logo" />
             <View>
               <Text style={styles.brandTitle}>ProjectTRACK</Text>
               <Text style={styles.brandSubtitle}>Cebu Civic Intelligence</Text>
@@ -360,7 +387,7 @@ export default function HomeScreen({
             <TouchableOpacity
               style={styles.actionCard}
               onPress={() => {
-                setSelectedProject(mockProjects[0]);
+                setSelectedProject(highImpactProjects[0] || null);
                 setIsAuditorModalOpen(true);
               }}
               activeOpacity={0.8}
@@ -420,26 +447,19 @@ export default function HomeScreen({
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.teaserMapFrame}
-            activeOpacity={0.9}
-            onPress={() => onNavigateToMap?.(selectedLgu || undefined)}
-            testID="teaser-map-touchable"
-            accessibilityLabel="Tap to open full interactive map"
-          >
-            <View pointerEvents="none">
-              <CebuVectorMap
-                selectedMunicipality={selectedLgu}
-                selectedPinId={selectedPinId}
-                pins={initialPins || pins || []}
-                width={previewWidth}
-                height={260}
-              />
-            </View>
-            <View style={styles.teaserTapBadge}>
-              <Text style={styles.teaserTapBadgeText}>🗺️ Tap to open interactive map</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={styles.teaserMapFrame}>
+            <CebuVectorMap
+              selectedMunicipality={selectedLgu}
+              selectedPinId={selectedPinId}
+              pins={livePins}
+              onSelectMunicipality={(m) => {
+                handleSelectMunicipality(m);
+              }}
+              onSelectPin={handleSelectPin}
+              width={previewWidth}
+              height={260}
+            />
+          </View>
         </View>
 
         {/* 5. Popular LGUs Horizontal Carousel */}
@@ -492,12 +512,42 @@ export default function HomeScreen({
             Major infrastructure investments across Cebu Province
           </Text>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.projectsCarouselContent}
-          >
-            {highImpactProjects.map((project) => {
+          {isLoadingData ? (
+            <View style={styles.stateBox} testID="home-projects-loading">
+              <ActivityIndicator size="small" color="#34d399" />
+              <Text style={styles.stateText}>Loading live DPWH projects…</Text>
+            </View>
+          ) : loadError ? (
+            <View style={styles.stateBox} testID="home-projects-error">
+              <Text style={styles.stateIcon}>⚠️</Text>
+              <Text style={styles.stateTitle}>Backend unavailable</Text>
+              <Text style={styles.stateText}>
+                Could not reach the ProjectTRACK backend. Pull to refresh to retry.
+              </Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={handleRefresh}
+                activeOpacity={0.8}
+                testID="home-projects-retry-btn"
+              >
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : highImpactProjects.length === 0 ? (
+            <View style={styles.stateBox} testID="home-projects-empty">
+              <Text style={styles.stateIcon}>📭</Text>
+              <Text style={styles.stateTitle}>No projects yet</Text>
+              <Text style={styles.stateText}>
+                No civil works records were returned for Cebu Province.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.projectsCarouselContent}
+            >
+              {highImpactProjects.map((project) => {
               const isDelayed = project.status === 'Delayed';
               const isCompleted = project.status === 'Completed';
 
@@ -554,6 +604,7 @@ export default function HomeScreen({
               );
             })}
           </ScrollView>
+          )}
         </View>
 
         {/* 7. FAQs Accordion */}
@@ -657,8 +708,8 @@ export default function HomeScreen({
 
       <ReportAnomalyModal
         visible={isReportModalOpen || isAuditorModalOpen}
-        project={selectedProject || mockProjects[0]}
-        availableProjects={mockProjects.slice(0, 10)}
+        project={selectedProject}
+        availableProjects={highImpactProjects}
         onClose={() => {
           setIsReportModalOpen(false);
           setIsAuditorModalOpen(false);
@@ -725,13 +776,15 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     backgroundColor: '#10b981',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 16,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   signInButtonText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   profileBadge: {
@@ -739,9 +792,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 16,
+    minHeight: 44,
   },
   avatarCircle: {
     width: 22,
@@ -963,11 +1017,13 @@ const styles = StyleSheet.create({
   },
   lguPill: {
     backgroundColor: '#162e2d',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#244846',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   lguPillActive: {
     backgroundColor: '#10b981',
@@ -984,6 +1040,45 @@ const styles = StyleSheet.create({
   },
   projectsSection: {
     marginBottom: 20,
+  },
+  stateBox: {
+    backgroundColor: '#162e2d',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#244846',
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 6,
+  },
+  stateIcon: {
+    fontSize: 28,
+  },
+  stateTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  stateText: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: '#10b981',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  retryBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
   },
   projectsCarouselContent: {
     gap: 12,

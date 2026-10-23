@@ -12,9 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { Contractor, ProjectDetail } from '../../core/types';
-import { mockProjects } from '../../data/mockApi';
 import { formatCurrencyPHP } from '../../core/geoUtils';
-import { topContractors } from '../../data/contractors';
 import { api } from '../../services/api';
 
 const PAGE_SIZE = 6;
@@ -38,25 +36,17 @@ export default function ContractorRankingScreen({
     setLoadingProjects(true);
     api.searchProjects(contractor.contractor, 30)
       .then((res) => {
-        if (res && res.length > 0) {
-          setContractorProjects(res);
-        } else {
-          const cleanName = contractor.contractor.toLowerCase();
-          const fallback = mockProjects.filter((p) => p.contractor.toLowerCase().includes(cleanName));
-          setContractorProjects(fallback);
-        }
+        setContractorProjects(res || []);
       })
       .catch(() => {
-        const cleanName = contractor.contractor.toLowerCase();
-        const fallback = mockProjects.filter((p) => p.contractor.toLowerCase().includes(cleanName));
-        setContractorProjects(fallback);
+        setContractorProjects([]);
       })
       .finally(() => {
         setLoadingProjects(false);
       });
   };
-  const [contractors, setContractors] = useState<Contractor[]>(topContractors);
-  const [loading, setLoading] = useState(false);
+  const [contractors, setContractors] = useState<Contractor[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -197,11 +187,29 @@ export default function ContractorRankingScreen({
           }
         >
           {pagedItems.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyTitle}>No contractors found</Text>
-              <Text style={styles.emptyText}>
-                No contractor matches &quot;{searchQuery}&quot;.
-              </Text>
+            <View style={styles.emptyBox} testID="contractor-ranking-empty">
+              {searchQuery.trim() ? (
+                <>
+                  <Text style={styles.emptyTitle}>No contractors found</Text>
+                  <Text style={styles.emptyText}>
+                    No contractor matches &quot;{searchQuery}&quot;.
+                  </Text>
+                </>
+              ) : loading ? (
+                <>
+                  <Text style={styles.emptyTitle}>Loading rankings…</Text>
+                  <Text style={styles.emptyText}>
+                    Fetching the live DPWH contractor leaderboard.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.emptyTitle}>No contractor data</Text>
+                  <Text style={styles.emptyText}>
+                    The backend returned no contractor rankings. Pull to refresh to retry.
+                  </Text>
+                </>
+              )}
             </View>
           ) : (
             pagedItems.map((contractor: Contractor, i: number) => {
@@ -424,11 +432,13 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 8,
     backgroundColor: '#f1f5f9',
     marginBottom: 12,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   backBtnText: {
     fontSize: 12,
@@ -612,12 +622,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pageBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#cbd5e1',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   pageBtnDisabled: {
     opacity: 0.4,

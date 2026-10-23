@@ -32,6 +32,7 @@ import {
   getLguClassification,
   isLguInHierarchyTier,
   RegionPreset,
+  computeMapViewBox,
 } from '../../core/geoUtils';
 import { haptics } from '../../services/haptics';
 import cebuDataRaw from '../../assets/cebuMunicipalities.json';
@@ -665,6 +666,16 @@ function CebuVectorMapImpl(
     return { left, top, width: cardW, visible };
   }, [activeSelectedPin, scale, offset, width, height]);
 
+  // Zoom/pan driven by the SVG viewBox so react-native-svg re-rasterizes vectors
+  // crisply at every zoom level (no raster magnification = no blur). Derived to
+  // match the existing screen<->SVG mapping:
+  //   screenX = width/2 + (svgX - width/2) * scale + offset.x
+  // Inverting for the viewBox: visible size = canvas / scale, origin offset so
+  // the same geometry lands on the same screen pixels as before.
+  const viewBox = useMemo(() => {
+    return computeMapViewBox(scale, offset.x, offset.y, width, height);
+  }, [scale, offset, width, height]);
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -771,6 +782,8 @@ function CebuVectorMapImpl(
             );
             scaleRef.current = nextScale;
             scaleAnim.setValue(nextScale);
+            // Commit live so the SVG viewBox re-rasterizes crisply at the new zoom.
+            setScale(nextScale);
           } else if (!evt.nativeEvent.touches || evt.nativeEvent.touches.length <= 1) {
             const maxPanX = width * scaleRef.current * 1.2;
             const maxPanY = height * scaleRef.current * 1.6;
@@ -784,6 +797,8 @@ function CebuVectorMapImpl(
             );
             offsetRef.current = { x: nextX, y: nextY };
             pan.setValue({ x: nextX, y: nextY });
+            // Commit live so the viewBox pans with the gesture.
+            setOffset({ x: nextX, y: nextY });
           }
         },
         onPanResponderRelease: (evt, gestureState) => {
@@ -948,24 +963,12 @@ function CebuVectorMapImpl(
         testID="map-gesture-surface"
         {...panResponder.panHandlers}
       >
-        {/* GPU Hardware-Accelerated Animated Layer */}
-        <Animated.View
-          style={[
-            styles.mapLayer,
-            {
-              width,
-              height,
-              transform: [
-                { translateX: pan.x },
-                { translateY: pan.y },
-                { scale: scaleAnim },
-              ],
-            },
-          ]}
-        >
-          <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-            <G originX={width / 2} originY={height / 2}>
-              {/* 53 Cebu LGUs (Consistent Base Styling) */}
+        {/* Vector layer: zoom & pan are driven by the SVG viewBox below, so
+            react-native-svg re-rasterizes paths crisply at every zoom level. */}
+        <View style={[styles.mapLayer, { width, height }]}>
+          <Svg width={width} height={height} viewBox={viewBox} testID="map-svg-canvas">
+            <G>
+              {/* 53 Cebu LGUs with Administrative Distinction */}
               <MunicipalitiesLayer
                 pathsData={pathsData}
                 selectedMunicipality={selectedMunicipality}
@@ -1005,7 +1008,7 @@ function CebuVectorMapImpl(
               />
             </G>
           </Svg>
-        </Animated.View>
+        </View>
       </View>
 
       {/* Floating Interactive Callout Card on Selected Project Pin */}
@@ -1155,9 +1158,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   controlBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: '#f8fafc',
     justifyContent: 'center',
     alignItems: 'center',

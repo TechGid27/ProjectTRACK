@@ -9,9 +9,6 @@ import {
   AppropriationSummary,
   SpatialContext,
 } from '../core/types';
-import { mockProjects, getProjectsByLocation, getProjectById } from '../data/mockApi';
-import { topContractors } from '../data/contractors';
-import { pins as localPins } from '../data/pins';
 import { outbox } from './outbox';
 import {
   sanitizeSearchQuery,
@@ -74,17 +71,17 @@ class ApiService {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return {
-        total_projects: data.total_projects ?? mockProjects.length,
-        total_contractors: data.total_contractors ?? topContractors.length,
-        total_budget: data.total_budget ?? 4500000000,
-        total_lgus: 53,
+        total_projects: typeof data.total_projects === 'number' ? data.total_projects : 0,
+        total_contractors: typeof data.total_contractors === 'number' ? data.total_contractors : 0,
+        total_budget: typeof data.total_budget === 'number' ? data.total_budget : 0,
+        total_lgus: typeof data.total_lgus === 'number' ? data.total_lgus : 53,
       };
     } catch {
-      // Fallback to local verified figures
+      // Live-only: no mock fallback. Return a neutral empty summary.
       return {
-        total_projects: mockProjects.length,
-        total_contractors: topContractors.length,
-        total_budget: mockProjects.reduce((sum, p) => sum + p.budget, 0),
+        total_projects: 0,
+        total_contractors: 0,
+        total_budget: 0,
         total_lgus: 53,
       };
     }
@@ -108,9 +105,9 @@ class ApiService {
           project_count: typeof item.project_count === 'number' ? item.project_count : 1,
         }));
       }
-      return topContractors.slice(0, limit);
+      return [];
     } catch {
-      return topContractors.slice(0, limit);
+      return [];
     }
   }
 
@@ -131,9 +128,9 @@ class ApiService {
           lgu: p.location || 'Cebu Province',
         }));
       }
-      return mockProjects.slice(0, limit);
+      return [];
     } catch {
-      return mockProjects.slice(0, limit);
+      return [];
     }
   }
 
@@ -161,21 +158,9 @@ class ApiService {
           source_of_funds: p.source_of_funds,
         }));
       }
-      const lower = cleanQ.toLowerCase();
-      return mockProjects.filter(
-        (p) =>
-          p.title.toLowerCase().includes(lower) ||
-          p.lgu.toLowerCase().includes(lower) ||
-          p.contractor.toLowerCase().includes(lower),
-      );
+      return [];
     } catch {
-      const lower = cleanQ.toLowerCase();
-      return mockProjects.filter(
-        (p) =>
-          p.title.toLowerCase().includes(lower) ||
-          p.lgu.toLowerCase().includes(lower) ||
-          p.contractor.toLowerCase().includes(lower),
-      );
+      return [];
     }
   }
 
@@ -227,9 +212,9 @@ class ApiService {
         }
         return uniqueProjects;
       }
-      return getProjectsByLocation(cleanLocation);
+      return [];
     } catch {
-      return getProjectsByLocation(cleanLocation);
+      return [];
     }
   }
 
@@ -262,7 +247,7 @@ class ApiService {
         is_hotspot: (typeof p.report_count === 'number' && p.report_count >= 2) || p.status === 'Flagged',
       };
     } catch {
-      return getProjectById(cleanId);
+      return undefined;
     }
   }
 
@@ -295,9 +280,9 @@ class ApiService {
           };
         });
       }
-      return localPins;
+      return [];
     } catch {
-      return localPins;
+      return [];
     }
   }
 
@@ -341,28 +326,11 @@ class ApiService {
         spatial: data.spatial,
       };
     } catch {
-      // Deterministic civic fallback for offline testing
-      const q = cleanMsg.toLowerCase();
-      if (q.includes('bogo')) {
-        return {
-          answer:
-            'In Bogo City, QM BUILDERS holds the largest flood mitigation contract: ₱49,000,000 for the Construction of Flood Mitigation Structure along Bogo River (Project 24HD0012).',
-          sources: ['24HD0012'],
-          mode: 'offline_civic_agent',
-        };
-      }
-      if (q.includes('24hh0043') || q.includes('lahug')) {
-        return {
-          answer:
-            'Project 24HH0043: "Lahug River Flood Control Dredging & Slope Reinforcement" located in Lahug, Cebu City. Awarded to QM BUILDERS with an approved budget of ₱85,200,000.',
-          sources: ['24HH0043'],
-          mode: 'offline_civic_agent',
-        };
-      }
+      // Live-only: no canned civic answers. Signal the assistant is unreachable.
       return {
         answer:
-          'According to DPWH Cebu knowledge graph records, projects and budget allocations are tracked across all 53 Local Government Units in Cebu Province.',
-        mode: 'offline_civic_agent',
+          'The ProjectTRACK assistant is currently unavailable. Please check your connection to the backend and try again.',
+        mode: 'unavailable',
       };
     }
   }
@@ -375,14 +343,7 @@ class ApiService {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch {
-      return [
-        {
-          office_name: 'Cebu 1st District Engineering Office',
-          total_budget: 1850000000,
-          project_count: 42,
-          source_of_funds: 'GAA 2024',
-        },
-      ];
+      return [];
     }
   }
 

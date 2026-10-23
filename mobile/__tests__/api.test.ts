@@ -16,6 +16,13 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(api.getBaseUrl()).toBe('http://192.168.1.50:8000/api');
   });
 
+  test('setBaseUrl accepts a cross-origin LAN/deployment URL', () => {
+    api.setBaseUrl('http://10.0.0.42:8000/api');
+    expect(api.getBaseUrl()).toBe('http://10.0.0.42:8000/api');
+    api.setBaseUrl('https://api.projecttrack.ph/api');
+    expect(api.getBaseUrl()).toBe('https://api.projecttrack.ph/api');
+  });
+
   test('fetchSummary returns data on successful HTTP response', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -33,12 +40,13 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(summary.total_lgus).toBe(53);
   });
 
-  test('fetchSummary gracefully falls back to local data if network fails', async () => {
+  test('fetchSummary returns a neutral empty summary if network fails', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
 
     const summary = await api.fetchSummary();
-    expect(summary.total_projects).toBeGreaterThan(0);
-    expect(summary.total_contractors).toBeGreaterThan(0);
+    expect(summary.total_projects).toBe(0);
+    expect(summary.total_contractors).toBe(0);
+    expect(summary.total_budget).toBe(0);
     expect(summary.total_lgus).toBe(53);
   });
 
@@ -56,12 +64,11 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(contractors[0].total_budget).toBe(1500000000);
   });
 
-  test('fetchTopContractors falls back to local dataset on network error', async () => {
+  test('fetchTopContractors returns an empty list on network error (no mock fallback)', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('Failed to connect'));
 
     const contractors = await api.fetchTopContractors(5);
-    expect(contractors.length).toBe(5);
-    expect(contractors[0].contractor).toBeDefined();
+    expect(contractors).toEqual([]);
   });
 
   test('sendChatMessage sends prompt and returns parsed answer or offline fallback', async () => {
@@ -79,11 +86,11 @@ describe('ApiService (FastAPI integration & offline fallback)', () => {
     expect(response.answer).toContain('QM BUILDERS');
     expect(response.mode).toBe('rag');
 
-    // 2. Offline fallback case
+    // 2. Unavailable fallback case (live-only: no canned civic answers)
     global.fetch = jest.fn().mockRejectedValue(new Error('Connection refused'));
     const fallbackResponse = await api.sendChatMessage('How many projects in Bogo?');
     expect(fallbackResponse.answer).toBeDefined();
-    expect(fallbackResponse.mode).toBe('offline_civic_agent');
+    expect(fallbackResponse.mode).toBe('unavailable');
   });
 
   test('fetchTopProjects returns high impact projects', async () => {

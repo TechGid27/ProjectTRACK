@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 import {
   ProjectDetail,
   Contractor,
@@ -10,6 +11,7 @@ import {
   SpatialContext,
 } from '../core/types';
 import { outbox } from './outbox';
+import { tokenStore } from './tokenStore';
 import {
   sanitizeSearchQuery,
   sanitizeChatMessage,
@@ -36,21 +38,22 @@ const DEFAULT_API_BASE = getInitialBaseUrl();
 
 /**
  * Resolve the OAuth redirect target — always the MOBILE APP's own callback, so
- * Google sign-in returns to this app rather than bouncing to the deployed
+ * Google sign-in returns to THIS app rather than bouncing to the deployed
  * website.
  *
- *   • Native -> the app's custom scheme ("projecttrack://auth/callback"); the
- *               in-app auth session deep-links back here.
- *   • Web    -> this app's own origin ("<origin>/auth/callback"), NOT the
- *               deployed website origin.
+ *   • Native (standalone/dev build) -> the app scheme, e.g.
+ *       "projecttrack://auth/callback"
+ *   • Native (Expo Go)              -> an "exp://<host>/--/auth/callback" URL
+ *       that Expo Go can route back into the running app. A hardcoded custom
+ *       scheme does NOT work in Expo Go, which is why login previously only
+ *       completed on the website.
+ *   • Web                            -> this app's own origin
+ *       "<origin>/auth/callback" (NOT the deployed website origin).
  *
- * An explicit `EXPO_PUBLIC_OAUTH_REDIRECT` env var overrides both (useful to
- * pin the exact URL that is allow-listed in the backend + Supabase redirect
- * list, which is required for the provider to redirect back here instead of
- * falling back to the Supabase Site URL / deployed website).
- *
- * Returns `undefined` only when no web origin can be resolved, letting the
- * caller omit the param.
+ * `expo-linking`'s createURL() produces the correct form for the current
+ * runtime automatically. An explicit EXPO_PUBLIC_OAUTH_REDIRECT env var
+ * overrides everything (pin an exact URL that is allow-listed in the backend +
+ * Supabase redirect list).
  */
 export const NATIVE_OAUTH_REDIRECT = 'projecttrack://auth/callback';
 
@@ -63,6 +66,14 @@ export function resolveOAuthRedirect(): string | undefined {
       return `${window.location.origin}/auth/callback`;
     }
     return undefined;
+  }
+  // Native: build a runtime-correct deep link. In Expo Go this yields an
+  // exp:// URL; in a standalone/dev build it yields projecttrack://auth/callback.
+  try {
+    const url = Linking.createURL('auth/callback');
+    if (url) return url;
+  } catch {
+    // Fall through to the static scheme if the linking helper is unavailable.
   }
   return NATIVE_OAUTH_REDIRECT;
 }
@@ -412,6 +423,10 @@ class ApiService {
       if (!res.ok) {
         return { user: null, error: data?.detail || 'Sign-in failed.' };
       }
+      // Native clients persist the returned tokens (web relies on the cookie).
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
+      }
       return { user: data.user || data };
     } catch {
       return { user: null, error: 'Network error: Unable to reach authentication server.' };
@@ -443,6 +458,9 @@ class ApiService {
       const data = await res.json();
       if (!res.ok) {
         return { user: null, error: data?.detail || 'Sign-up failed.' };
+      }
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
       }
       return { user: data.user || data, message: data.message };
     } catch {
@@ -493,6 +511,12 @@ class ApiService {
       if (!res.ok) {
         return { user: null, error: data?.detail || 'OAuth callback verification failed.' };
       }
+      // Persist tokens on native so the OAuth session survives app restarts.
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
+      } else {
+        await tokenStore.save({ access_token: accessToken, refresh_token: refreshToken ?? null });
+      }
       return { user: data.user || data };
     } catch {
       return { user: null, error: 'Network error: Unable to verify OAuth callback.' };
@@ -501,23 +525,34 @@ class ApiService {
 
   async signOut(): Promise<void> {
     try {
+      const authHeaders = await tokenStore.authHeaders();
       await fetch(`${this.baseUrl}/auth/signout`, {
         method: 'POST',
         credentials: 'include',
+        headers: authHeaders,
       });
     } catch {
       // offline noop
+    } finally {
+      // Always clear local tokens so the device is signed out even if the
+      // network call failed.
+      await tokenStore.clear();
     }
   }
 
   async getSession(): Promise<any | null> {
     try {
+      const authHeaders = await tokenStore.authHeaders();
       const res = await fetch(`${this.baseUrl}/auth/session`, {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', ...authHeaders },
         credentials: 'include',
       });
       if (!res.ok) return null;
       const data = await res.json();
+      // If the backend refreshed the session, persist the new tokens (native).
+      if (data?.tokens?.access_token) {
+        await tokenStore.save(data.tokens);
+      }
       return data?.user ?? null;
     } catch {
       return null;
@@ -576,9 +611,11 @@ class ApiService {
       }
     }
 
+    const authHeaders = await tokenStore.authHeaders();
     const res = await fetch(`${this.baseUrl}/reports`, {
       method: 'POST',
       credentials: 'include',
+      headers: authHeaders,
       body: form,
     });
     if (!res.ok) {
@@ -599,8 +636,9 @@ class ApiService {
   /** Fetch a project's reports with verification badges (Pillar 5). */
   async fetchProjectReports(projectId: string): Promise<ReportRecord[]> {
     const cleanId = sanitizeSearchQuery(projectId, 50);
+    const authHeaders = await tokenStore.authHeaders();
     const res = await fetch(`${this.baseUrl}/reports/${encodeURIComponent(cleanId)}`, {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...authHeaders },
       credentials: 'include',
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

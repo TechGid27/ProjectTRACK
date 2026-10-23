@@ -4,9 +4,9 @@
 
 | Component | Version | Supported |
 | :--- | :--- | :---: |
-| Backend (FastAPI) | 1.0.x | ✅ |
-| Website (React 19 + Vite 8) | 0.x | ✅ |
-| Mobile (Expo SDK 52) | 1.0.x | ✅ |
+| Backend (FastAPI) | 1.0.x | Yes |
+| Website (React 19 + Vite 8) | 0.x | Yes |
+| Mobile (Expo SDK 52) | 1.0.x | Yes |
 
 Only the latest release on the `development` and `main` branches receives security updates.
 

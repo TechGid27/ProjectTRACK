@@ -8,25 +8,25 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 
 ## Key Features
 
-* **⚡ Sub-20ms Graph Traversal**: Direct Cypher queries and full-text index lookups across 4,370+ DPWH projects, contractors, budgets, and locations in Cebu.
-* **🛡️ 5-Layer Domain Guardrails**: Bulletproof domain lock that intercepts programming questions, generic dictionary definitions, persona overrides (`act as a teacher`), and off-topic queries in `<0.1ms` before hitting Neo4j or the LLM.
-* **🧼 Prompt-Injection Hardening**: Every user message and client-supplied history turn is normalized before the guardrail (NFKC folding, zero-width / bidi / control-character stripping, whitespace de-flooding, length cap). The intent gate blocks common injection phrasings (ignore/disregard/forget previous instructions, persona and developer-mode jailbreaks, prompt exfiltration, and chat-template delimiters like `</system>` or `<|im_start|>`), and instruction-override content planted in history is rejected too.
-* **🔐 Supabase Authentication (Backend-Managed)**: Ready-to-use `/api/auth` endpoints (OAuth URL, callback, session, sign-in, sign-up, sign-out) backed by Supabase GoTrue. Tokens are kept in an HTTP-only session cookie and auto-refreshed; a `get_current_user` dependency guards protected routes.
-* **🤖 Multi-Tier Fallback Resilience (100% Uptime / Zero Crash)**:
+* **Sub-20ms Graph Traversal**: Direct Cypher queries and full-text index lookups across 4,370+ DPWH projects, contractors, budgets, and locations in Cebu.
+* **5-Layer Domain Guardrails**: Bulletproof domain lock that intercepts programming questions, generic dictionary definitions, persona overrides (`act as a teacher`), and off-topic queries in `<0.1ms` before hitting Neo4j or the LLM.
+* **Prompt-Injection Hardening**: Every user message and client-supplied history turn is normalized before the guardrail (NFKC folding, zero-width / bidi / control-character stripping, whitespace de-flooding, length cap). The intent gate blocks common injection phrasings (ignore/disregard/forget previous instructions, persona and developer-mode jailbreaks, prompt exfiltration, and chat-template delimiters like `</system>` or `<|im_start|>`), and instruction-override content planted in history is rejected too.
+* **Supabase Authentication (Backend-Managed)**: Ready-to-use `/api/auth` endpoints (OAuth URL, callback, session, sign-in, sign-up, sign-out) backed by Supabase GoTrue. Tokens are kept in an HTTP-only session cookie and auto-refreshed; a `get_current_user` dependency guards protected routes. Native clients (mobile APK) receive `SessionTokens` in the response body and authenticate via `Authorization: Bearer` and `X-Refresh-Token` headers, validated against `MOBILE_APP_SCHEMES` (`projecttrack`, `exp`) for OAuth redirect URIs.
+* **Multi-Tier Fallback Resilience (100% Uptime / Zero Crash)**:
   * **Tier 0 (Primary Cloud AI)**: Groq LPU running `qwen/qwen3.8-27b` delivering ~500+ tok/s response speed with situational token budgeting.
   * **Tier 1 (Offline Local AI Fallback)**: Lightweight local model **`qwen2.5:0.5b` (~398 MB)** via Ollama, accessible via 1-command installer (`python cli.py --setup-local-ai`).
   * **Tier 2 (Instant Graph Deterministic Synthesizer)**: Zero-token, sub-5ms fact synthesizer that computes fluent, plain-English engineering summaries directly from Neo4j facts when external LLMs hit rate limits (HTTP 429) or are offline.
-* **📦 1-Command Permission-Gated Local AI Setup**:
+* **1-Command Permission-Gated Local AI Setup**:
   * Run `python cli.py --setup-local-ai` to configure local Ollama and pull `qwen2.5:0.5b` (~398 MB, <600MB RAM, CPU-friendly).
   * Always prompts the user for explicit permission (`[y/N]`) before installing or downloading anything.
-* **📍 Batch Geocoding & Mapping**:
+* **Batch Geocoding & Mapping**:
   * Run `python cli.py --geocode` to batch-geocode all Neo4j location and project nodes with verified WGS84 coordinates.
-* **⚡ Instant Cypher Mode (Zero AI Needed)**: Full instant lookup cards, analytics, and full-text search run purely on Neo4j Aura in `<10ms`—no local LLM or API keys required.
+* **Instant Cypher Mode (Zero AI Needed)**: Full instant lookup cards, analytics, and full-text search run purely on Neo4j Aura in `<10ms`—no local LLM or API keys required.
 * **Conversational Memory**: Context-aware follow-ups that remember the prior topic (a location, e.g. "tell me more about it" after "projects in Cordova", or a project). A deterministic heuristic handles common cues; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying strictly DB-locked and injection-safe.
 * **Spatial Answer Targeting**: Location questions fly the map to the LGU; singular/superlative follow-ups ("what's the most expensive one?", "where is it located?", "most reported in Cordova?") zoom to that one project and highlight its pin. Superlative intent is inherited across location switches ("what about in Cordova?"). Report-volume superlatives ("most reported" / "most flagged") are ranked from the citizen field-report store (Supabase) so the chat agrees with the map's Report Verification legend.
 * **Grounded 5W+H Answers**: In `ai` mode, grounded answers are organized around a project's WHAT (scope), WHERE (location), WHO (contractor + implementing office), WHEN (timeline + status), WHY (public benefit inferred from the project's own category/scope), and HOW (funding/budget and citizen-report activity) — using only facts in the retrieved context, with no outside knowledge and no server-side vendor identifiers surfaced to the UI.
-* **📊 Instant Graph Analytics**: Sub-millisecond aggregation calculates total budget, contractor rankings, project counts, and sector breakdowns directly from graph relationships.
-* **📍 Field Report Verification (`/api/reports`)**: Authenticated citizen reports with a server-authoritative ≤150m geofence check (Pillar 1), ELA + perceptual-hash image forensics against prior photos (Pillar 2), a 3-reports/day limit with reputation scoring (Pillar 3), and verification badging surfaced to web/mobile (Pillar 5). Rows and photos persist to Supabase Postgres + Storage; a lightweight `:Report` node is linked in Neo4j. Apply `supabase/migrations/*.sql` (see `supabase/README.md`).
+* **Instant Graph Analytics**: Sub-millisecond aggregation calculates total budget, contractor rankings, project counts, and sector breakdowns directly from graph relationships.
+* **Field Report Verification (`/api/reports`)**: Authenticated citizen reports with a server-authoritative ≤150m geofence check (Pillar 1), ELA + perceptual-hash image forensics against prior photos (Pillar 2), a 3-reports/day limit with reputation scoring (Pillar 3), and verification badging surfaced to web/mobile (Pillar 5). Rows and photos persist to Supabase Postgres + Storage; a lightweight `:Report` node is linked in Neo4j. Apply `supabase/migrations/*.sql` (see `supabase/README.md`).
 
 ---
 
@@ -34,7 +34,7 @@ Built with **Neo4j Aura (Knowledge Graph)**, **Supabase (Document Lake)**, **Api
 
 ```text
 backend/
-├── backend/                    # ⚡ FastAPI REST & SSE Streaming Backend
+├── backend/                    # FastAPI REST & SSE Streaming Backend
 │   ├── app.py                 # FastAPI application factory, CORS, lifespan & error handlers
 │   ├── config.py               # Pydantic Settings configuration
 │   ├── setup_local_ai.py       # 1-command permission-gated local AI installer (qwen2.5:0.5b)
@@ -54,7 +54,7 @@ backend/
 │       └── test_fallback.py    # LLM fallback & synthesizer tests (5 tests)
 ├── run.py                      # Start the web API server: `python run.py`
 ├── cli.py                      # Master CLI (interactive menu, queries, analytics, --sync, --scrape)
-├── pipeline/                   # 📦 Core modular pipeline package
+├── pipeline/                   # Core modular pipeline package
 │   ├── __init__.py             # Unified package exports
 │   ├── scrape_cebu_dpwh.py     # BetterGov scraper -> Apify & Supabase (full structured metadata)
 │   ├── sync_to_neo4j.py        # Paginated batch ingestion -> Neo4j Aura (metadata-first + FundingSource)
@@ -183,7 +183,7 @@ The installer will:
 
 ---
 
-## 💻 How to Run (Master CLI)
+## How to Run (Master CLI)
 
 Everything is executed through [`main.py`](file:///C:/Users/User/VSCode_Programming/track/ProjectTRACK/backend/main.py):
 
@@ -193,7 +193,7 @@ python cli.py
 ```
 Connects to Neo4j Aura and launches the interactive query environment:
 ```text
-⚡ Neo4j Knowledge Graph Console (DPWH Cebu Infrastructure)
+Neo4j Knowledge Graph Console (DPWH Cebu Infrastructure)
 Connected to Neo4j Aura + Groq LPU Engine (qwen/qwen3.8-27b)
 =================================================================
 Commands:
@@ -310,18 +310,18 @@ flowchart TD
 
 | Query Type | Example | Result |
 | :--- | :--- | :--- |
-| **Project ID** | `24HH0043`, `25H00064` | ✅ Instant Project Card (<10ms) |
-| **Location Query** | `any projects in Bogo?`, `projects in Cordova` | ✅ Verified project list + insights |
-| **Scope / Topic** | `what is flood control?`, `asphalt overlay` | ✅ Grounded DPWH engineering synthesis |
-| **Contractor Inquiry** | `who is WTG Construction?`, `top contractors` | ✅ Total budget & project stats |
-| **Programming Request** | `what is the code for for loops?`, `python script` | ❌ Blocked (`<0.1ms`) |
-| **Generic Definition** | `what is dictionary?`, `what is science?` | ❌ Blocked (`<0.1ms`) |
-| **Persona / Jailbreak** | `act as a teacher`, `ignore previous instructions` | ❌ Blocked (`<0.1ms`) |
-| **Conversational Trivia** | `tell me a joke`, `recipe for adobo` | ❌ Blocked (`<0.1ms`) |
+| **Project ID** | `24HH0043`, `25H00064` | Instant Project Card (<10ms) |
+| **Location Query** | `any projects in Bogo?`, `projects in Cordova` | Verified project list + insights |
+| **Scope / Topic** | `what is flood control?`, `asphalt overlay` | Grounded DPWH engineering synthesis |
+| **Contractor Inquiry** | `who is WTG Construction?`, `top contractors` | Total budget & project stats |
+| **Programming Request** | `what is the code for for loops?`, `python script` | Blocked (`<0.1ms`) |
+| **Generic Definition** | `what is dictionary?`, `what is science?` | Blocked (`<0.1ms`) |
+| **Persona / Jailbreak** | `act as a teacher`, `ignore previous instructions` | Blocked (`<0.1ms`) |
+| **Conversational Trivia** | `tell me a joke`, `recipe for adobo` | Blocked (`<0.1ms`) |
 
 ---
 
-## 🗺️ Knowledge Graph Schema (Enriched)
+## Knowledge Graph Schema (Enriched)
 
 The ingestion pipeline builds the following node and relationship model in Neo4j
 (all nodes also carry the `:base` label for LightRAG compatibility):
@@ -354,7 +354,7 @@ facts.
 
 ---
 
-## 🧪 Running Unit & Integration Tests
+## Running Unit & Integration Tests
 
 Run the full automated test suite (55 unit & integration tests):
 
@@ -376,7 +376,7 @@ The test suite validates:
 
 ---
 
-## ❓ Troubleshooting
+## Troubleshooting
 
 | Issue | Solution |
 | :--- | :--- |

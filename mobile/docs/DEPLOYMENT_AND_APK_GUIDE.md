@@ -99,10 +99,71 @@ However, on physical Android phones, **`10.0.2.2` and `localhost` do not work** 
 4. Build the APK. Both your phone and your development machine must be on the same Wi-Fi network.
 
 ### Setting Up Production Cloud Testing:
-Set `EXPO_PUBLIC_API_URL` to your live HTTPS production endpoint:
+Set `EXPO_PUBLIC_API_URL` to your live HTTPS production endpoint. For EAS
+cloud builds this is wired in `eas.json` (NOT `mobile/.env`, which only applies
+to local `expo start`). The deployed backend is:
 ```env
-EXPO_PUBLIC_API_URL=https://api.projecttrack.org/api
+EXPO_PUBLIC_API_URL=https://projecttrack-28nb.onrender.com/api
 ```
+
+---
+
+## 5a. Required Configuration for a Working APK (Auth + Backend)
+
+A standalone APK runs on a real device with **no connection to your dev
+machine**, so several settings must be correct for login and data to work.
+The repo already ships the code/config below; the **dashboard/deploy items are
+the ones you must set yourself**.
+
+### Already configured in the repo
+- **Backend URL** — `eas.json` `preview` (APK) and `production` profiles set
+  `EXPO_PUBLIC_API_URL=https://projecttrack-28nb.onrender.com/api`.
+- **HTTPS only** — `app.json` sets `android.usesCleartextTraffic: false`
+  (the APK talks to the backend over HTTPS; no cleartext needed).
+- **OAuth deep link** — `app.json` registers an Android intent filter for
+  `projecttrack://auth/callback`, so Google sign-in reopens the installed app.
+- **Native session persistence** — the backend returns Supabase tokens in the
+  response body (`tokens`) and also accepts an `Authorization: Bearer` header;
+  the app stores tokens in the OS keystore (`expo-secure-store`,
+  `src/services/tokenStore.ts`) and sends them on every authenticated request.
+  This is required because a React Native / APK client cannot rely on the
+  browser's HTTP-only cookie the way the web app does.
+
+### Dashboard & deploy steps you MUST do
+1. **Supabase → Authentication → URL Configuration → Redirect URLs** — add:
+   ```
+   projecttrack://**
+   exp://**
+   ```
+   (`projecttrack://**` is for the APK; `exp://**` is for Expo Go dev.)
+   Leave the **Site URL** as the deployed website — do not change it. Without
+   the redirect entry Supabase falls back to the Site URL and login bounces to
+   the website instead of the app.
+2. **Google Cloud Console → OAuth client → Authorized redirect URIs** — must
+   contain the Supabase callback (not the app's):
+   ```
+   https://<your-supabase-ref>.supabase.co/auth/v1/callback
+   ```
+3. **Render (deployed backend) environment** — for the web app's cross-site
+   cookie, set:
+   ```
+   AUTH_COOKIE_SECURE=true
+   AUTH_COOKIE_SAMESITE=none
+   FRONTEND_URL=https://projecttrack.pages.dev
+   ```
+   (The APK uses token headers, not the cookie, so these only affect the web
+   client — but they must be set for the website to stay logged in.)
+   Redeploy the backend from the latest branch so the token/`MOBILE_APP_SCHEMES`
+   changes are live.
+4. **Release keystore SHA-256** (production signing) — add the fingerprint to
+   Supabase (see §7) so `projecttrack://` deep links are trusted on signed APKs.
+
+### Quick verification
+- Open `https://projecttrack-28nb.onrender.com/api/health` in a browser — it
+  should return JSON (backend is up).
+- Install the APK, tap **Continue with Google**, authenticate → you should land
+  **back in the app** (not the website), and the session should survive an app
+  restart.
 
 ---
 

@@ -69,6 +69,11 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
 
     const [currentZoom, setCurrentZoom] = useState<number>(9);
 
+    const selectedNormLgu = useMemo(
+      () => (selectedMunicipality ? normalizeLguName(selectedMunicipality).toLowerCase() : ''),
+      [selectedMunicipality],
+    );
+
     // Imperative ref methods for AI Chatbot and parent screens.
     // The `zoom` argument uses SVG vector-map scale semantics (1 = province …
     // 12 = street level) and is converted to a MapLibre zoom level here.
@@ -152,6 +157,7 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
           const norm = normalizeCoordinates(rawLat, rawLng);
           if (norm.status === 'rejected') return null;
 
+          const isHotspot = p.tone === 'hotspot' || (typeof p.report_count === 'number' && p.report_count > 0);
           const isDelayed = p.tone === 'warning' || p.status === 'Delayed';
           const isCompleted = p.status === 'Completed';
 
@@ -162,7 +168,7 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
               id: p.id,
               name: p.name,
               lgu: p.lgu,
-              tone: isDelayed ? 'delayed' : isCompleted ? 'completed' : 'ongoing',
+              tone: isHotspot ? 'hotspot' : isDelayed ? 'delayed' : isCompleted ? 'completed' : 'ongoing',
               isSelected: p.id === selectedPinId,
             },
             geometry: {
@@ -266,11 +272,11 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
               ne: [CEBU_GEO_BOUNDS.e, CEBU_GEO_BOUNDS.n],
               sw: [CEBU_GEO_BOUNDS.w, CEBU_GEO_BOUNDS.s],
             }}
-            minZoomLevel={7.5}
+            minZoomLevel={8.0}
             maxZoomLevel={18}
           />
 
-          {/* Cebu Municipal Boundaries */}
+          {/* Cebu Municipal Boundaries with Brand Highlights */}
           <ShapeSource
             id="cebuMunicipalities"
             shape={cebuDataRaw as any}
@@ -285,16 +291,36 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
             <FillLayer
               id="muniFill"
               style={{
-                fillColor: '#1f3d3c',
-                fillOpacity: 0.12,
+                fillColor: [
+                  'case',
+                  ['==', ['downcase', ['get', 'name']], selectedNormLgu],
+                  '#1f3d3c',
+                  '#0f766e',
+                ],
+                fillOpacity: [
+                  'case',
+                  ['==', ['downcase', ['get', 'name']], selectedNormLgu],
+                  0.42,
+                  0.14,
+                ],
               }}
             />
             <LineLayer
               id="muniBorders"
               style={{
-                lineColor: '#0f2423',
-                lineWidth: 1.2,
-                lineOpacity: 0.5,
+                lineColor: [
+                  'case',
+                  ['==', ['downcase', ['get', 'name']], selectedNormLgu],
+                  '#0f2423',
+                  '#0d9488',
+                ],
+                lineWidth: [
+                  'case',
+                  ['==', ['downcase', ['get', 'name']], selectedNormLgu],
+                  2.5,
+                  1.0,
+                ],
+                lineOpacity: 0.75,
               }}
             />
           </ShapeSource>
@@ -376,32 +402,34 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
                 circleRadius: [
                   'step',
                   ['get', 'point_count'],
-                  14,
+                  16,
                   10,
-                  18,
+                  20,
                   25,
-                  22,
+                  24,
                   50,
-                  26,
+                  28,
                 ],
                 circleStrokeColor: '#ffffff',
                 circleStrokeWidth: 2,
               }}
             />
 
-            {/* Cluster Count Label */}
+            {/* Cluster Count Label (Single supported font stack for reliability) */}
             <SymbolLayer
               id="clusterCount"
               filter={['has', 'point_count']}
               style={{
                 textField: '{point_count}',
-                textSize: 11,
+                textSize: 12,
                 textColor: '#ffffff',
-                textFont: ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                textFont: ['Open Sans Bold'],
+                textAllowOverlap: true,
+                textIgnorePlacement: true,
               }}
             />
 
-            {/* Individual Diamond Markers at Zoom >= 14 */}
+            {/* Individual Markers when unclustered or at Zoom >= 14 */}
             <CircleLayer
               id="unclusteredPin"
               filter={['!', ['has', 'point_count']]}
@@ -413,11 +441,28 @@ const MapLibreCebuMap = forwardRef<MapLibreCebuMapRef, MapLibreCebuMapProps>(
                   '#f59e0b', // Amber diamond
                   'completed',
                   '#0284c7', // Blue diamond
+                  'hotspot',
+                  '#ef4444', // Red hotspot
                   '#0d9488', // Teal diamond (Ongoing)
                 ],
-                circleRadius: 6.5,
-                circleStrokeColor: '#ffffff',
-                circleStrokeWidth: 1.5,
+                circleRadius: [
+                  'case',
+                  ['get', 'isSelected'],
+                  9.5,
+                  6.5,
+                ],
+                circleStrokeColor: [
+                  'case',
+                  ['get', 'isSelected'],
+                  '#facc15', // Gold highlight
+                  '#ffffff',
+                ],
+                circleStrokeWidth: [
+                  'case',
+                  ['get', 'isSelected'],
+                  2.5,
+                  1.5,
+                ],
               }}
             />
           </ShapeSource>

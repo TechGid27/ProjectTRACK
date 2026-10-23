@@ -283,12 +283,26 @@ export function normalizeCoordinates(
     return { lat: 10.3157, lng: 123.8854, status: 'rejected' };
   }
 
-  const minLat = 9.0;
-  const maxLat = 12.0;
-  const minLng = 122.5;
-  const maxLng = 125.0;
+  // Hard geographic bounds for Cebu Province (Mainland + Bantayan + Camotes)
+  const minLat = 9.35;
+  const maxLat = 11.55;
+  const minLng = 123.20;
+  const maxLng = 124.65;
 
   if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) {
+    return { lat, lng, status: 'rejected' };
+  }
+
+  // Geographic boundary sanity checks for neighboring islands:
+  // 1. Bohol rejection: In southern latitudes (lat < 10.15), points east of lng 123.68
+  //    are across the Bohol Strait on Bohol Island (e.g. lat 9.74, lng 123.93).
+  if (lat < 10.15 && lng > 123.68) {
+    return { lat, lng, status: 'rejected' };
+  }
+
+  // 2. Negros rejection: In southern/central latitudes (lat < 10.5), points west of
+  //    lng 123.25 are across the Tañon Strait on Negros Island.
+  if (lat < 10.5 && lng < 123.25) {
     return { lat, lng, status: 'rejected' };
   }
 
@@ -306,7 +320,6 @@ export const CEBU_COMPONENT_CITIES = new Set<string>([
   'Carcar City',
   'Danao City',
   'Naga City',
-  'City of Naga',
   'Talisay City',
   'Toledo City',
 ]);

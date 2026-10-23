@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Layout from '../../layout/Layout'
 import {
   getSession,
   redirectToOAuth,
@@ -73,9 +72,15 @@ function SignInPage() {
     event.preventDefault()
     setBusy('email')
     setStatus(null)
+
     try {
-      await signInWithEmail(email, password)
-      navigate('/', { replace: true })
+      const user = await signInWithEmail(email, password)
+
+      if (user) {
+        navigate('/', { replace: true })
+      } else {
+        setStatus('Login successful, but no user data was returned.')
+      }
     } catch (error) {
       setStatus(error.message)
     } finally {
@@ -96,10 +101,9 @@ function SignInPage() {
   const accountEmail = session?.email ?? session?.id ?? 'your account'
 
   return (
-    <Layout>
-      <section>
-        <div className="mx-auto max-w-md px-6 py-16">
-          <h1 className="font-serif text-3xl text-gray-a12">Sign in</h1>
+    <section>
+      <div className="mx-auto max-w-md px-6 py-16">
+        <h1 className="font-serif text-3xl text-gray-a12">Sign in</h1>
           <p className="mt-2 text-sm text-gray-a11">
             Access ProjectTRACK with your Google account, or with your email
             and password.
@@ -206,7 +210,6 @@ function SignInPage() {
           </p>
         </div>
       </section>
-    </Layout>
   )
 }
 

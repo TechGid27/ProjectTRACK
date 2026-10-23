@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSession, signOut } from '../services/auth'
 import { useRoute, navigate } from '../app/router'
-import { applyTheme, getInitialTheme, toggleTheme } from '../services/theme'
+import { getInitialTheme, toggleTheme } from '../services/theme'
 
 function normalize(href) {
   const path = href.replace(/^#/, '')
@@ -121,24 +121,31 @@ function Header({ name, links }) {
     setTheme((current) => toggleTheme(current))
   }
 
-  // Keep the attribute in sync if the component mounts after a route change.
-  useEffect(() => {
-    applyTheme(theme)
-  }, [theme])
-
+  // Keep the avatar/sign-in state in sync; Header now stays mounted across
+  // route changes (Layout is hoisted into App), so this only revalidates.
   useEffect(() => {
     let cancelled = false
-    getSession()
-      .then((u) => {
-        if (!cancelled) setUser(u)
-      })
-      .catch(() => {
-        if (!cancelled) setUser(null)
-      })
+
+    async function syncUser() {
+      try {
+        const sessionUser = await getSession()
+
+        if (!cancelled) {
+          setUser(sessionUser ?? null)
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null)
+        }
+      }
+    }
+
+    syncUser()
+
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [route])
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -219,27 +226,51 @@ function Header({ name, links }) {
         </a>
 
         {/* Centered APK download — absolutely centered so nav width can't shift it. */}
-        <GetAppButton className="absolute left-1/2 hidden -translate-x-1/2 md:inline-flex" />
+        {/* <GetAppButton className="absolute left-1/2 hidden -translate-x-1/2 md:inline-flex" /> */}
 
         <nav aria-label="Main" className="hidden md:block">
           <ul className="flex items-center gap-1.5">
-            {visibleLinks.map((link) => {
-              const active = normalize(link.href) === route
-              const isSignIn = normalize(link.href) === '/signin'
-              return (
-                <li key={link.href}>
-                  <NavLink
-                    link={link}
-                    active={active}
-                    isSignIn={isSignIn}
-                  />
-                </li>
-              )
-            })}
+            {visibleLinks
+              .filter((link) => normalize(link.href) !== '/signin')
+              .map((link) => {
+                const active = normalize(link.href) === route
+
+                return (
+                  <li key={link.href}>
+                    <NavLink
+                      link={link}
+                      active={active}
+                      isSignIn={false}
+                    />
+                  </li>
+                )
+              })}
+
             <li>
-              <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+              <GetAppButton />
             </li>
-            {user && (
+
+            <li>
+              <ThemeToggle
+                theme={theme}
+                onToggle={handleToggleTheme}
+              />
+            </li>
+
+            {!user &&
+              visibleLinks
+                .filter((link) => normalize(link.href) === '/signin')
+                .map((link) => (
+                  <li key={link.href}>
+                    <NavLink
+                      link={link}
+                      active={normalize(link.href) === route}
+                      isSignIn={true}
+                    />
+                  </li>
+                ))}
+
+             {user && (
               <li className="relative" ref={menuRef}>
                 <button
                   type="button"
@@ -323,6 +354,7 @@ function Header({ name, links }) {
               )
             })}
           </ul>
+          
           <div className="mt-2">
             <GetAppButton className="w-full justify-center" />
           </div>

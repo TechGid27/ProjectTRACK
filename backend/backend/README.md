@@ -8,20 +8,20 @@ Powered by **Neo4j Aura**, **Groq LPU Engine (`qwen/qwen3.8-27b`)**, and **Multi
 
 ## Key Features
 
-* **⚡ Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
-* **🛡️ 5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
-* **🧼 Prompt-Injection Hardening**: User messages and client-supplied history are normalized (NFKC, zero-width/control-char stripping, whitespace de-flooding, length cap) and screened for common injection phrasings (instruction-override, persona/developer-mode jailbreaks, prompt exfiltration, chat-template delimiters). Instruction-override content planted in history is also rejected.
-* **🤖 Multi-Tier Fallback Resilience**:
+* **Sub-20ms Graph Traversal**: Query 4,370+ DPWH civil works projects, contractors, and budgets directly from Neo4j Aura.
+* **5-Layer Domain Guardrails**: Sub-millisecond pre-retrieval intent classifier that blocks code requests, generic trivia, persona overrides, and off-domain queries before touching Neo4j or the LLM.
+* **Prompt-Injection Hardening**: User messages and client-supplied history are normalized (NFKC, zero-width/control-char stripping, whitespace de-flooding, length cap) and screened for common injection phrasings (instruction-override, persona/developer-mode jailbreaks, prompt exfiltration, chat-template delimiters). Instruction-override content planted in history is also rejected.
+* **Multi-Tier Fallback Resilience**:
   * **Groq LPU**: Primary high-speed cloud generation at ~500+ tok/s.
   * **Local Ollama Fallback**: Lightweight `qwen2.5:0.5b` (~398 MB) offline fallback via `python main.py --setup-local-ai`.
   * **Deterministic Graph Synthesizer**: Sub-5ms zero-token factual synthesizer ensuring zero failures on rate limits (HTTP 429).
-* **⚡ Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
-* **🌊 Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
+* **Instant Cypher Mode**: Retrieve project cards, analytics, and municipality summaries in `<10ms` without waiting for LLM generation.
+* **Real-Time SSE Token Streaming**: Server-Sent Events (`/api/chat/stream`) for streaming token-by-token responses to web chat interfaces.
 * **Conversational Memory & Spatial Targeting**: Follow-ups remember the prior location or project; a sandboxed, whitelist-validated LLM reference resolver handles ambiguous phrasing while staying DB-locked and injection-safe. Chat answers carry map coordinates that fly to an LGU or zoom to a single project.
-* **📊 Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
-* **📍 Field Report Verification**: Authenticated citizen reports (`/api/reports`) with a server-authoritative ≤150m geofence check against DPWH coordinates (Pillar 1), ELA + perceptual-hash image forensics (Pillar 2), identity gating with a 3-reports/day limit and reputation scoring (Pillar 3), and verification badging (Pillar 5). Persisted to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
-* **🔄 Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping, plus a **passive periodic scraper** (APScheduler) that re-scrapes DPWH/PhilGEPS on a recurring interval (default ~90 days) and re-syncs into Neo4j automatically — even when deployed — with durable last-run state in Supabase (`/api/pipeline/schedule`).
-* **🩺 Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
+* **Graph Analytics**: Contractor leaderboards, project rankings, and total budget aggregations.
+* **Field Report Verification**: Authenticated citizen reports (`/api/reports`) with a server-authoritative ≤150m geofence check against DPWH coordinates (Pillar 1), ELA + perceptual-hash image forensics (Pillar 2), identity gating with a 3-reports/day limit and reputation scoring (Pillar 3), and verification badging (Pillar 5). Persisted to Supabase Postgres + Storage with a lightweight Neo4j `:Report` node.
+* **Asynchronous Pipeline Operations**: Background task tracking for Supabase-to-Neo4j syncing and Apify scraping, plus a **passive periodic scraper** (APScheduler) that re-scrapes DPWH/PhilGEPS on a recurring interval (default ~90 days) and re-syncs into Neo4j automatically — even when deployed — with durable last-run state in Supabase (`/api/pipeline/schedule`).
+* **Resilient Health Diagnostics**: Comprehensive monitoring of Neo4j Aura and LLM availability with graceful degradation reporting.
 
 ---
 
@@ -273,7 +273,7 @@ async def private(user = Depends(get_current_user)):
 
 ---
 
-### ⚙️ Pipeline Administration
+### Pipeline Administration
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |

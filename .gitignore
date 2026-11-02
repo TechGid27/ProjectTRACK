@@ -70,6 +70,7 @@ lerna-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+.fuse_hidden*
 
 # Logs
 *.log

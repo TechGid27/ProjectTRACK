@@ -1,22 +1,20 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { fetchSummary } from '../services/api'
-import { CEBU_LGU_NAMES } from '../data/cebuLguNames'
+import { PH_PROVINCE_NAMES } from '../data/phProvinceNames'
 
 import { MapProvider } from '../features/map/MapContext'
 
-const CebuMap = lazy(() => import('../features/map/CebuMap'))
+const PhilippinesMap = lazy(() => import('../features/map/PhilippinesMap'))
 const ChatCopilot = lazy(() => import('../features/chat/ChatCopilot'))
-
-const CITY_RE = /^(City of |.* City$)/
 
 const FAQS = [
   {
     q: 'What data does ProjectTRACK show?',
-    a: 'ProjectTrack loads DPWH public-works projects for Cebu Province from its project database — including project ID, description, location, contractor, budget, and status (ongoing, completed with completion percentage, or bidding/procurement).',
+    a: 'The map covers the whole Philippines — all 87 provinces and highly-urbanized cities — while the project database currently loads DPWH public-works projects for Cebu Province, including project ID, description, location, contractor, budget, and status (ongoing, completed with completion percentage, or bidding/procurement). Coverage expands region by region as new data is ingested.',
   },
   {
-    q: 'How do I find projects in my municipality?',
-    a: 'Click the municipality polygon on the map, or use the Location Intel panel on the left. You can also use the chat assistant in the bottom-right corner to ask questions like “List ongoing projects in Toledo City.”',
+    q: 'How do I find projects in my area?',
+    a: 'Click a province on the map (or pick one from the list below) — its cities and municipalities outline immediately, so you can click one to drill in — then open the project list in the Location Intel panel. You can also use the chat assistant in the bottom-right corner to ask questions like “List ongoing projects in Toledo City.”',
   },
   {
     q: 'What do the map pin colors mean?',
@@ -63,12 +61,16 @@ function AboutMapModal({ onClose }) {
           </button>
         </div>
         <p className="mt-4 text-sm leading-6 text-gray-a11">
-          The interactive map shows every DPWH project site in Cebu Province
-          loaded from the project database. Click a municipality polygon to zoom
-          in and see its projects, budgets, and statuses in the Location Intel
-          panel. Click a diamond pin to open the full project details. Use the
-          legend at the top-right to filter projects by status — and to show
-          only sites with citizen reports of a given verification tone.
+          The interactive map spans the entire Philippines — pan and zoom across
+          all provinces and highly-urbanized cities, then click a boundary to
+          zoom in. Selecting a province outlines its cities and municipalities
+          right away, so a second click drills into that city or municipality
+          and shows its projects, budgets, and statuses in the Location Intel
+          panel. Project data is currently loaded for Cebu Province, so other
+          regions render as empty geography until their records are ingested.
+          Click a diamond pin to open the full project details. Use the legend
+          at the top-right to filter projects by status — and to show only
+          sites with citizen reports of a given verification tone.
         </p>
         <ul className="mt-5 space-y-2.5 text-sm text-gray-a11">
           <li className="flex items-center gap-2.5">
@@ -89,7 +91,8 @@ function AboutMapModal({ onClose }) {
           </li>
           <li className="flex items-center gap-2.5">
             <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-gray-a8" />
-            Grey outline — Municipality boundary (click to select)
+            Grey outline — Province / HUC boundary (click to select; its cities
+            and municipalities then outline)
           </li>
         </ul>
         <p className="mt-5 text-sm font-semibold text-gray-a12">
@@ -113,7 +116,7 @@ function AboutMapModal({ onClose }) {
         <p className="mt-4 text-sm leading-6 text-gray-a10">
           Click a verification chip in the legend to show only projects with
           that report tone — the visible pins are re-colored to match, and the
-          filter stays active while you pan around the open municipality.
+          filter stays active while you pan around the open province.
         </p>
         <p className="mt-4 text-sm leading-6 text-gray-a10">
           When several projects share the same coordinate, a single pin is
@@ -153,9 +156,7 @@ function HomePage() {
     return () => document.removeEventListener('keydown', onKey)
   }, [aboutOpen])
 
-  const names = CEBU_LGU_NAMES
-  const cities = names.filter((n) => CITY_RE.test(n)).length
-  const townCount = names.length - cities
+  const names = PH_PROVINCE_NAMES
 
   return (
     <MapProvider>
@@ -166,37 +167,39 @@ function HomePage() {
           </div>
         }
       >
-        <CebuMap />
+        <PhilippinesMap />
       </Suspense>
       <section className="border-t border-gray-a5">
         <div className="mx-auto max-w-3xl px-6 py-14">
           <h2 className="font-serif text-3xl text-gray-a12">
-            Cebu infrastructure, made transparent
+            Philippine infrastructure, made transparent
           </h2>
           <p className="mt-4 text-base leading-7 text-gray-a11">
             ProjectTrack is a civic intelligence and transparency engine for
             Department of Public Works and Highways (DPWH) infrastructure
-            projects across all 53 Local Government Units of Cebu Province — 44
-            municipalities and 9 cities. It turns fragmented public civil-works
+            projects. The map covers every province and highly-urbanized city
+            in the Philippines, and today it carries DPWH records for Cebu
+            Province — 44 municipalities and 9 cities — with more regions coming
+            as data is ingested. It turns fragmented public civil-works
             disclosures into verifiable, geospatial, community intelligence. The
             map above is interactive: each diamond marker is a tracked project
             site, and its color shows the project's status (ongoing, completed,
             or bidding) or, when a Report Verification filter is on, the
             verification tone of citizen reports filed for it (On-Site Verified,
-            Photo Flagged, Unverified). The pages below present the same material
-            as plain text, one page per municipality.
+            Photo Flagged, Unverified). The pages below present the same
+            material as plain text, one page per province.
           </p>
           <p className="mt-5 text-sm text-gray-a10">
-            {names.length} LGUs ·{' '}
-            {projectCount === null ? '—' : projectCount} projects tracked ·{' '}
-            {cities} cities · {townCount} municipalities
+            {names.length} provinces / HUCs ·{' '}
+            {projectCount === null ? '—' : projectCount} projects tracked · Cebu
+            coverage
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <a
-              href="#municipalities"
+              href="#provinces"
               className="rounded-xl bg-[#1f3d3c] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#16302f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1f3d3c]"
             >
-              Browse by municipality
+              Browse by province
             </a>
             <button
               type="button"
@@ -207,12 +210,13 @@ function HomePage() {
             </button>
           </div>
 
-          <div id="municipalities" className="mt-14 scroll-mt-20 border-t border-gray-a5 pt-10">
+          <div id="provinces" className="mt-14 scroll-mt-20 border-t border-gray-a5 pt-10">
             <h3 className="font-serif text-2xl text-gray-a12">
-              Browse by municipality
+              Browse by province
             </h3>
             <p className="mt-2 text-sm text-gray-a10">
-              Click an LGU to select it on the map above.
+              Click a province to select it on the map above. Project records
+              are available for Cebu today.
             </p>
             <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {[...names]

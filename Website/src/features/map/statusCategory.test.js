@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { statusCategory } from './CebuMap'
+import { statusCategory } from './PhilippinesMap'
 
 describe('statusCategory (pin colors + legend filter)', () => {
   it('classifies plain statuses', () => {

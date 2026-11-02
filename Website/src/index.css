@@ -137,6 +137,27 @@ body {
   stroke-width: 2;
 }
 
+/* City / municipality outlines of the focused province. They carry the
+   province's selected fill so a clicked province reads as one darker unit
+   with thin internal borders (the province border underneath stays at 2px). */
+.lgu {
+  fill: #6f9c78;
+  stroke: #2c3d36;
+  stroke-width: 1;
+  cursor: pointer;
+  transition: fill 0.15s ease;
+}
+
+.lgu:hover {
+  fill: #7fae88;
+}
+
+.lgu.lgu--selected {
+  fill: #5c8a67;
+  stroke: #0c1418;
+  stroke-width: 2;
+}
+
 .bgy {
   fill: rgba(255, 255, 255, 0.07);
   stroke: #4b6355;
@@ -265,19 +286,31 @@ body {
   z-index: 1000 !important;
 }
 
-.muni-label {
+.muni-label,
+.prov-label {
   display: none;
   position: absolute;
   transform: translate(-50%, -50%);
-  color: #22332b;
+  color: #1b2a24;
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
   pointer-events: none;
-  text-shadow: 0 0 3px rgba(255, 255, 255, 0.55);
+  /* Layered white halo keeps dark text readable over land, borders and the
+     dark water background alike. */
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 4px rgba(255, 255, 255, 0.85),
+    0 1px 3px rgba(255, 255, 255, 0.7);
 }
 
-.show-labels .muni-label {
+/* Province / HUC labels appear on the national view. */
+.show-province-labels .prov-label {
+  display: block;
+}
+
+/* Cebu LGU labels only once zoomed in (municipality scale). */
+.show-lgu-labels .muni-label {
   display: block;
 }
 

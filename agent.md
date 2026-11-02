@@ -42,7 +42,7 @@
 
 Use specific, descriptive scopes corresponding to the project architecture:
 
-- **`map`**: Leaflet map components, layers, pin rendering, camera controller (`CebuMap`, `MapContext`, `BarangayLayer`).
+- **`map`**: Leaflet map components, layers, pin rendering, camera controller (`PhilippinesMap`, `MapContext`, `BarangayLayer`).
 - **`chat`**: AI chat copilot, SSE streaming, prompt engineering, instant lookup (`ChatCopilot`, `chat.py`).
 - **`backend`**: FastAPI endpoints, router configuration, application lifecycle.
 - **`auth`**: Supabase authentication, session cookies, and route guards (`supabase_auth.py`, `api/auth.py`).

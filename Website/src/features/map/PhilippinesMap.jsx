@@ -16,27 +16,36 @@ import {
   captureGeolocationDetailed,
   geolocationFailureMessage,
 } from '../../services/geolocation'
-import {
-  BARANGAY_MIN_ZOOM,
-  fetchOsmContextCached,
-  featureCentroid,
-} from '../../services/overpass'
+import { BARANGAY_MIN_ZOOM, featureCentroid } from '../../services/overpass'
 import { useMapContext } from './MapContext'
 import { clusterByProximity } from './cluster'
 import MapLegend from './MapLegend'
 import VerificationBadges from './VerificationBadges'
 
 const BOUNDS = [
-  [9.32, 123.2],
-  [11.45, 124.65],
+  [4.2, 114.5],
+  [21.5, 127.5],
 ]
 
-const LABEL_MIN_ZOOM = 11
+const LABEL_MIN_ZOOM = 6
+const LGU_LABEL_MIN_ZOOM = 11
+// Below this zoom an LGU polygon click resolves to its province instead of
+// jumping straight into a municipality.
+const LGU_SELECT_MIN_ZOOM = 10
 
 const CONTROL_BTN =
   'grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-black/65 text-white shadow-lg backdrop-blur-md transition hover:bg-black/85 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70'
 
 function labelIcon(name) {
+  return divIcon({
+    className: '',
+    html: `<span class="prov-label">${name}</span>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  })
+}
+
+function lguLabelIcon(name) {
   return divIcon({
     className: '',
     html: `<span class="muni-label">${name}</span>`,
@@ -51,15 +60,6 @@ function barangayLabelIcon(name) {
     html: `<span class="bgy-label">${name}</span>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
-  })
-}
-
-function barangayPlaceIcon(name) {
-  return divIcon({
-    className: '',
-    html: `<span class="bgy-dot"></span><span class="bgy-label bgy-label--place">${name}</span>`,
-    iconSize: [8, 8],
-    iconAnchor: [4, 4],
   })
 }
 
@@ -119,18 +119,235 @@ function MapLabels() {
 
   useEffect(() => {
     const container = map.getContainer()
-    const sync = () =>
-      container.classList.toggle('show-labels', map.getZoom() >= LABEL_MIN_ZOOM)
+    const sync = () => {
+      const level = map.getZoom()
+      container.classList.toggle('show-province-labels', level >= LABEL_MIN_ZOOM)
+      container.classList.toggle('show-lgu-labels', level >= LGU_LABEL_MIN_ZOOM)
+    }
 
     sync()
     map.on('zoomend', sync)
     return () => {
       map.off('zoomend', sync)
-      container.classList.remove('show-labels')
+      container.classList.remove('show-province-labels')
+      container.classList.remove('show-lgu-labels')
     }
   }, [map])
 
   return null
+}
+
+// --- Label decluttering -------------------------------------------------
+// Labels are placed greedily in priority order (selected place, then LGUs,
+// then provinces by land area) and anything that would overlap an already
+// placed label is dropped — it comes back as the visitor zooms in. Candidates
+// are compared in world pixels at the current zoom: panning translates every
+// label by the same amount, so overlap only changes when the zoom or the
+// label set does.
+const LABEL_PAD = 5
+const LABEL_BOX_HEIGHT = 13
+const NCR_PREFIX = 'NCR,'
+const NCR_MERGED_NAME = 'Metro Manila'
+const NCR_MANILA = 'NCR, City of Manila, First District'
+// Below this zoom Metro Manila's four districts collapse into one label.
+const NCR_MERGE_MAX_ZOOM = 9
+// Area score (same units as the province ranking) keeping Metro Manila listed.
+const NCR_MERGED_AREA = 9000
+
+const measureContext =
+  typeof document !== 'undefined'
+    ? document.createElement('canvas').getContext('2d')
+    : null
+const labelWidthCache = new Map()
+
+function labelWidth(name) {
+  const cached = labelWidthCache.get(name)
+  if (cached != null) return cached
+  let width
+  if (measureContext) {
+    measureContext.font = '600 10px ui-sans-serif, system-ui, sans-serif'
+    width = measureContext.measureText(name).width
+  } else {
+    width = name.length * 5.5
+  }
+  labelWidthCache.set(name, width)
+  return width
+}
+
+const labelAreaCache = new Map()
+
+function ringArea(ring) {
+  let sum = 0
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1]
+  }
+  return Math.abs(sum / 2)
+}
+
+function featureArea(feature) {
+  const name = feature.properties.name
+  const cached = labelAreaCache.get(name)
+  if (cached != null) return cached
+  const geom = feature.geometry
+  let area = 0
+  if (geom?.type === 'Polygon') {
+    area = Math.max(0, ...geom.coordinates.map(ringArea))
+  } else if (geom?.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates) {
+      const outer = ringArea(poly[0])
+      if (outer > area) area = outer
+    }
+  }
+  labelAreaCache.set(name, area)
+  return area
+}
+
+function boxesOverlap(a, b) {
+  return !(
+    a.x + a.w <= b.x ||
+    b.x + b.w <= a.x ||
+    a.y + a.h <= b.y ||
+    b.y + b.h <= a.y
+  )
+}
+
+function placeMapLabels({
+  map,
+  zoom,
+  provinces,
+  lgus,
+  selected,
+  includeProvinces,
+  includeLgus,
+  hiddenProvince,
+}) {
+  const items = []
+  const selectedName = selected?.name ?? null
+
+  if (includeLgus && lgus) {
+    for (const feature of lgus.features) {
+      const name = feature.properties.name
+      items.push({
+        key: `lgu:${name}`,
+        name,
+        label: feature.properties.label,
+        icon: lguLabelIcon(name),
+        rank: name === selectedName ? 0 : 1,
+        area: 0,
+      })
+    }
+  }
+
+  if (includeProvinces && provinces) {
+    const ncr = []
+    for (const feature of provinces.features) {
+      const name = feature.properties.name
+      if (name.startsWith(NCR_PREFIX)) {
+        ncr.push(feature)
+        continue
+      }
+      // Once a province's LGU labels are up, its own name would just collide
+      // with them — drop it.
+      if (name === hiddenProvince) continue
+      items.push({
+        key: `prov:${name}`,
+        name,
+        label: feature.properties.label,
+        icon: labelIcon(name),
+        rank: name === selectedName ? 0 : 2,
+        area: featureArea(feature),
+      })
+    }
+
+    const ncrSelected = ncr.find((f) => f.properties.name === selectedName)
+    if (zoom < NCR_MERGE_MAX_ZOOM && !ncrSelected) {
+      const manila = ncr.find((f) => f.properties.name === NCR_MANILA) ?? ncr[0]
+      if (manila) {
+        items.push({
+          key: 'prov:ncr',
+          name: NCR_MERGED_NAME,
+          label: manila.properties.label,
+          icon: labelIcon(NCR_MERGED_NAME),
+          rank: 2,
+          area: NCR_MERGED_AREA,
+        })
+      }
+    } else {
+      for (const feature of ncr) {
+        const name = feature.properties.name
+        if (name === hiddenProvince) continue
+        items.push({
+          key: `prov:${name}`,
+          name,
+          label: feature.properties.label,
+          icon: labelIcon(name),
+          rank: name === selectedName ? 0 : 2,
+          area: featureArea(feature),
+        })
+      }
+    }
+  }
+
+  items.sort(
+    (a, b) => a.rank - b.rank || b.area - a.area || a.name.localeCompare(b.name),
+  )
+
+  const boxes = []
+  const visible = []
+  for (const item of items) {
+    const point = map.project([item.label[1], item.label[0]], zoom)
+    const w = labelWidth(item.name) + LABEL_PAD * 2
+    const h = LABEL_BOX_HEIGHT + LABEL_PAD * 2
+    const rect = { x: point.x - w / 2, y: point.y - h / 2, w, h }
+    if (boxes.some((box) => boxesOverlap(box, rect))) continue
+    boxes.push(rect)
+    visible.push(item)
+  }
+  return visible
+}
+
+function MapPlaceLabels({
+  provinces,
+  lgus,
+  selected,
+  zoom,
+  includeProvinces,
+  includeLgus,
+  hiddenProvince,
+}) {
+  const map = useMap()
+  const visible = useMemo(
+    () =>
+      placeMapLabels({
+        map,
+        zoom,
+        provinces,
+        lgus,
+        selected,
+        includeProvinces,
+        includeLgus,
+        hiddenProvince,
+      }),
+    [
+      map,
+      zoom,
+      provinces,
+      lgus,
+      selected,
+      includeProvinces,
+      includeLgus,
+      hiddenProvince,
+    ],
+  )
+
+  return visible.map((item) => (
+    <Marker
+      key={item.key}
+      position={[item.label[1], item.label[0]]}
+      icon={item.icon}
+      interactive={false}
+    />
+  ))
 }
 
 function MapContextCameraController() {
@@ -158,7 +375,7 @@ function MapCamera({ target }) {
         duration: 0.9,
       })
     } else {
-      map.flyTo([target.lat, target.lng], 12, { duration: 0.8 })
+      map.flyTo([target.lat, target.lng], target.zoom ?? 8, { duration: 0.8 })
     }
   }, [map, target])
 
@@ -202,30 +419,18 @@ function ZoomWatcher({ onZoom }) {
   return null
 }
 
-const BARANGAY_PLACES_MIN_ZOOM = 13
+let provincesFilePromise = null
 
-function roadClassName(highway) {
-  if (highway === 'motorway' || highway === 'trunk') return 'road road--major'
-  if (highway === 'primary') return 'road road--primary'
-  if (highway === 'secondary') return 'road road--secondary'
-  if (highway === 'residential' || highway === 'unclassified') {
-    return 'road road--minor'
-  }
-  return 'road road--tertiary'
-}
-
-let municipalitiesFilePromise = null
-
-function loadMunicipalities() {
-  if (!municipalitiesFilePromise) {
-    municipalitiesFilePromise = fetch('/data/cebuMunicipalities.json')
+function loadProvinces() {
+  if (!provincesFilePromise) {
+    provincesFilePromise = fetch('/data/phProvinces.json')
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => {
-        municipalitiesFilePromise = null
+        provincesFilePromise = null
         return null
       })
   }
-  return municipalitiesFilePromise
+  return provincesFilePromise
 }
 
 let barangayFilePromise = null
@@ -242,6 +447,48 @@ function loadCebuBarangays() {
   return barangayFilePromise
 }
 
+// One GeoJSON per province (public/data/lgus/<slug>.json) so the map only
+// fetches the outlines of the province the visitor actually clicks.
+// Cebu reuses cebuMunicipalities.json — the same file the backend's
+// reverse-geocoder reads — so there is a single Cebu boundary source.
+const lguFilePromises = new Map()
+
+function lguSlug(name) {
+  return String(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function loadProvinceLgus(provinceName) {
+  const slug = lguSlug(provinceName)
+  if (!slug) return Promise.resolve(null)
+  const cached = lguFilePromises.get(slug)
+  if (cached) return cached
+  const path =
+    slug === 'cebu'
+      ? '/data/cebuMunicipalities.json'
+      : `/data/lgus/${slug}.json`
+  const promise = fetch(path)
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data) return null
+      // Stamp the parent province so an LGU click can resolve its own file.
+      for (const feature of data.features) {
+        feature.properties.province =
+          feature.properties.province ?? provinceName
+      }
+      return data
+    })
+    .catch(() => {
+      lguFilePromises.delete(slug)
+      return null
+    })
+  lguFilePromises.set(slug, promise)
+  return promise
+}
+
+// The barangay dataset is keyed by Cebu municipality/city.
 function findLguBarangays(all, name) {
   if (!all) return null
   if (all[name]) return all[name]
@@ -250,9 +497,8 @@ function findLguBarangays(all, name) {
   return match ? all[match] : null
 }
 
-function BarangayLayer({ target, visible, zoom }) {
+function BarangayLayer({ target, visible }) {
   const [allBarangays, setAllBarangays] = useState(null)
-  const [osmState, setOsmState] = useState({ name: null, fc: null })
 
   useEffect(() => {
     let cancelled = false
@@ -264,64 +510,33 @@ function BarangayLayer({ target, visible, zoom }) {
     }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!visible || !target?.feature) return undefined
-    const name = target.name
-    fetchOsmContextCached(lguQuery(name), target.feature).then((fc) => {
-      if (!cancelled) setOsmState({ name, fc })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [visible, target])
-
   const bgyFc =
-    visible && target ? findLguBarangays(allBarangays, target.name) : null
-  const osm =
-    visible && target && osmState.name === target.name ? osmState.fc : null
-
+    visible && target?.level === 'lgu'
+      ? findLguBarangays(allBarangays, target.name)
+      : null
   const polygonFeatures = bgyFc ? bgyFc.features : []
-  const placeFeatures =
-    osm && zoom >= BARANGAY_PLACES_MIN_ZOOM
-      ? osm.features.filter((feature) => feature.geometry.type === 'Point')
-      : []
-  const roadFeatures = osm
-    ? osm.features.filter((feature) => feature.geometry.type === 'LineString')
-    : []
 
-  if (!polygonFeatures.length && !placeFeatures.length && !roadFeatures.length) {
+  if (!polygonFeatures.length) {
     return null
   }
 
   return (
     <>
-      {roadFeatures.length > 0 && (
-        <GeoJSON
-          key={`${target.name}-roads`}
-          data={{ type: 'FeatureCollection', features: roadFeatures }}
-          style={(feature) => ({
-            className: roadClassName(feature.properties.highway),
-          })}
-        />
-      )}
-      {polygonFeatures.length > 0 && (
-        <GeoJSON
-          key={target.name}
-          data={{ type: 'FeatureCollection', features: polygonFeatures }}
-          style={() => ({ className: 'bgy', fillOpacity: 1 })}
-          onEachFeature={(feature, layer) => {
-            layer.on('click', (event) => {
-              DomEvent.stopPropagation(event.originalEvent)
-            })
-            layer.bindTooltip(feature.properties.name, {
-              sticky: true,
-              className: 'pin-label',
-              opacity: 1,
-            })
-          }}
-        />
-      )}
+      <GeoJSON
+        key={target.name}
+        data={{ type: 'FeatureCollection', features: polygonFeatures }}
+        style={() => ({ className: 'bgy', fillOpacity: 1 })}
+        onEachFeature={(feature, layer) => {
+          layer.on('click', (event) => {
+            DomEvent.stopPropagation(event.originalEvent)
+          })
+          layer.bindTooltip(feature.properties.name, {
+            sticky: true,
+            className: 'pin-label',
+            opacity: 1,
+          })
+        }}
+      />
       {polygonFeatures.map((feature) => {
         const [lng, lat] = featureCentroid(feature)
         return (
@@ -333,28 +548,68 @@ function BarangayLayer({ target, visible, zoom }) {
           />
         )
       })}
-      {placeFeatures.map((feature) => {
-        const [lng, lat] = feature.geometry.coordinates
-        return (
-          <Marker
-            key={`place-${feature.properties.name}-${lat}-${lng}`}
-            position={[lat, lng]}
-            icon={barangayPlaceIcon(feature.properties.name)}
-            interactive={false}
-          />
-        )
-      })}
     </>
   )
 }
 
 const CITY_RE = /^(City of |.* City$)/
 
+// The focused province's city/municipality outlines, layered over it as soon
+// as it is clicked — the same look for all 87 provinces. The live Leaflet zoom
+// is read from useMap() because react-leaflet freezes the GeoJSON callbacks at
+// mount (they only refresh when the layer remounts).
+function ProvinceLguLayer({
+  data,
+  province,
+  provinces,
+  selected,
+  spatialLocation,
+  onSelect,
+}) {
+  const map = useMap()
+  return (
+    <GeoJSON
+      key={`lgus-${province}-${selected?.level || 'none'}-${selected?.name || 'none'}-${spatialLocation || 'none'}`}
+      data={data}
+      style={(feature) => ({
+        className:
+          feature.properties.name === selected?.name &&
+          selected?.level === 'lgu'
+            ? 'lgu lgu--selected'
+            : 'lgu',
+        fillOpacity: 1,
+      })}
+      onEachFeature={(feature, layer) => {
+        layer.on('click', (event) => {
+          DomEvent.stopPropagation(event.originalEvent)
+          const isSameLgu =
+            selected?.level === 'lgu' && selected.name === feature.properties.name
+          if (isSameLgu) return
+          if (map.getZoom() >= LGU_SELECT_MIN_ZOOM) {
+            onSelect(feature, 'lgu')
+            return
+          }
+          // Province scale: a click on an LGU drills in when the province is
+          // already the focus, otherwise it selects the province first.
+          if (selected?.level === 'province' && selected.name === province) {
+            onSelect(feature, 'lgu')
+            return
+          }
+          const provinceFeature = provinces?.features.find(
+            (f) => f.properties.name === province,
+          )
+          if (provinceFeature) onSelect(provinceFeature, 'province')
+        })
+      }}
+    />
+  )
+}
+
 const WATER_BODIES = [
-  { name: 'Visayan Sea', side: 'North' },
-  { name: 'Tañon Strait', side: 'West' },
-  { name: 'Camotes Sea', side: 'East' },
-  { name: 'Cebu Strait', side: 'East' },
+  { name: 'Philippine Sea', side: 'East' },
+  { name: 'South China Sea', side: 'West' },
+  { name: 'Sulu Sea', side: 'Southwest' },
+  { name: 'Celebes Sea', side: 'South' },
 ]
 
 const STATUS_CLS = {
@@ -426,19 +681,21 @@ function LocationIntelPanel({
   locProjects,
   locError,
   mapPins,
-  municipalities,
+  provinces,
+  lgus,
 }) {
   const panelRef = useRef(null)
   const cardRefs = useRef({})
   const [projPage, setProjPage] = useState(0)
   const names = useMemo(
-    () => (municipalities?.features ?? []).map((f) => f.properties.name),
-    [municipalities],
+    () => (provinces?.features ?? []).map((f) => f.properties.name),
+    [provinces],
   )
-  const cityCount = useMemo(
-    () => names.filter((n) => CITY_RE.test(n)).length,
-    [names],
-  )
+  // Fine-grained boundaries (the focused province's LGUs when available) drive
+  // the "near" maths; the province set is the national overview fallback.
+  const lguBoundaries = lgus ?? provinces
+  const selectedBoundaries =
+    selected?.level === 'lgu' ? (lgus ?? provinces) : provinces
 
   const nearbySites = useMemo(() => {
     if (!selected) return []
@@ -459,27 +716,27 @@ function LocationIntelPanel({
   }, [selected, mapPins])
 
   const nearbyLgu = useMemo(() => {
-    if (!selected || selected.kind !== 'site' || !municipalities) return null
+    if (!selected || selected.kind !== 'site' || !lguBoundaries) return null
     let best = null
-    for (const feature of municipalities.features) {
+    for (const feature of lguBoundaries.features) {
       if (feature.properties.name === selected.name) continue
       const [lng, lat] = feature.properties.label
       const km = haversineKm([selected.lat, selected.lng], [lat, lng])
       if (!best || km < best.km) best = { name: feature.properties.name, km }
     }
     return best
-  }, [selected, municipalities])
+  }, [selected, lguBoundaries])
 
   const sitesNearbyLgu = useMemo(() => {
-    if (!selected || selected.kind !== 'lgu' || !municipalities) return null
-    const feature = municipalities.features.find(
+    if (!selected || selected.kind !== 'lgu' || !selectedBoundaries) return null
+    const feature = selectedBoundaries.features.find(
       (f) => f.properties.name === selected.name,
     )
     if (!feature) return null
     const [lng, lat] = feature.properties.label
     return mapPins.filter((pin) => haversineKm([lat, lng], pin.position) <= 30)
       .length
-  }, [selected, mapPins, municipalities])
+  }, [selected, mapPins, selectedBoundaries])
 
   useEffect(() => {
     const node = panelRef.current
@@ -526,9 +783,11 @@ function LocationIntelPanel({
   const kindLabel = selected
     ? selected.kind === 'site'
       ? 'Project site'
-      : CITY_RE.test(selected.name)
-        ? 'City'
-        : 'Municipality'
+      : selected.level === 'lgu'
+        ? CITY_RE.test(selected.name)
+          ? 'City'
+          : 'Municipality'
+        : 'Province / HUC'
     : null
 
   return (
@@ -570,12 +829,12 @@ function LocationIntelPanel({
           )}
         </div>
         <p className="mt-1.5 font-serif text-xl font-bold text-white">
-          {selected ? selected.name : 'Cebu Province'}
+          {selected ? selected.name : 'Philippines'}
         </p>
         <p className="mt-0.5 text-[11px] text-white/50">
           {selected
-            ? `${kindLabel} · Central Visayas Region VII`
-            : 'Central Visayas Region VII · Philippines'}
+            ? `${kindLabel} · Republic of the Philippines`
+            : 'All regions · Republic of the Philippines'}
         </p>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {selected ? (
@@ -590,8 +849,8 @@ function LocationIntelPanel({
             </>
           ) : (
             <>
-              <IntelChip>{cityCount} Cities</IntelChip>
-              <IntelChip>Coastal Arch.</IntelChip>
+              <IntelChip>{names.length} Provinces / HUCs</IntelChip>
+              <IntelChip>Archipelago</IntelChip>
               <IntelChip>{mapPins.length} Sites</IntelChip>
             </>
           )}
@@ -616,10 +875,10 @@ function LocationIntelPanel({
           </div>
         ) : (
           <div className="mt-2.5 grid grid-cols-2 gap-2">
-            <MetricCard label="LGUs" value={names.length} />
+            <MetricCard label="Provinces / HUCs" value={names.length} />
             <MetricCard label="Project sites" value={mapPins.length} />
-            <MetricCard label="Cities" value={cityCount} />
-            <MetricCard label="Municipalities" value={names.length - cityCount} />
+            <MetricCard label="Regions" value={17} />
+            <MetricCard label="Data coverage" value="Cebu" />
           </div>
         )}
         <div className="mt-2.5 flex items-center gap-3 text-[10px] text-white/50">
@@ -2187,7 +2446,7 @@ function MapControls() {
   )
 }
 
-function CebuMap() {
+function PhilippinesMap() {
   const {
     activeLocation: spatialLocation,
     clearSpatialData,
@@ -2202,14 +2461,15 @@ function CebuMap() {
     () => typeof window !== 'undefined' && window.innerWidth >= 768,
   )
   const [selected, setSelected] = useState(null)
-  const [zoom, setZoom] = useState(8)
+  const [zoom, setZoom] = useState(6)
   const [highlightEntity, setHighlightEntity] = useState(null)
   const [detailEntity, setDetailEntity] = useState(null)
   const [fullDetails, setFullDetails] = useState(null)
   const [coordGroup, setCoordGroup] = useState(null)
   const [mapPins, setMapPins] = useState([])
   const [lguPinState, setLguPinState] = useState({ name: null, pins: [] })
-  const [municipalities, setMunicipalities] = useState(null)
+  const [provinces, setProvinces] = useState(null)
+  const [cebuLgus, setCebuLgus] = useState(null)
   const [reportSummaries, setReportSummaries] = useState(null)
   const [locState, setLocState] = useState({
     name: null,
@@ -2336,13 +2596,92 @@ function CebuMap() {
 
   useEffect(() => {
     let cancelled = false
-    loadMunicipalities().then((data) => {
-      if (!cancelled) setMunicipalities(data)
+    loadProvinces().then((data) => {
+      if (!cancelled) setProvinces(data)
+    })
+    // Cebu's LGU set is loaded up front: it backs name resolution for the
+    // chat/search deep links (project data is Cebu-only today).
+    loadProvinceLgus('Cebu').then((data) => {
+      if (!cancelled) setCebuLgus(data)
     })
     return () => {
       cancelled = true
     }
   }, [])
+
+  // The focused province drives which LGU outlines are on screen. Resolved
+  // data is cached per province so switching back to an earlier province is
+  // instant and never shows another province's outlines in between.
+  const focusProvince =
+    selected?.level === 'province'
+      ? selected.name
+      : selected?.level === 'lgu'
+        ? selected.province ?? null
+        : null
+  const [lgusCache, setLgusCache] = useState({})
+
+  useEffect(() => {
+    if (!focusProvince) return undefined
+    let cancelled = false
+    loadProvinceLgus(focusProvince).then((data) => {
+      if (cancelled || !data) return
+      setLgusCache((prev) =>
+        prev[focusProvince] ? prev : { ...prev, [focusProvince]: data },
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [focusProvince])
+
+  const activeLgus = useMemo(() => {
+    const data = focusProvince ? lgusCache[focusProvince] : null
+    return data ? { province: focusProvince, data } : null
+  }, [focusProvince, lgusCache])
+
+  // Resolve a requested place name to a boundary feature. Exact matches win
+  // (so "Cebu City" stays a municipality, not the Cebu province), then fuzzy
+  // matches. LGU names are searched in the focused province first, then in the
+  // boot-loaded Cebu set, before falling back to provinces.
+  const matchBoundary = useCallback(
+    (name) => {
+      const target = String(name).trim().toLowerCase()
+      const test = (f, exact) => {
+        const fn = f.properties.name.toLowerCase()
+        return exact
+          ? fn === target
+          : target.includes(fn) || fn.includes(target)
+      }
+      const lguSources = []
+      if (activeLgus?.data) lguSources.push(activeLgus)
+      if (cebuLgus && activeLgus?.province !== 'Cebu') {
+        lguSources.push({ province: 'Cebu', data: cebuLgus })
+      }
+      const provList = provinces?.features ?? []
+      let feature
+      for (const src of lguSources) {
+        feature = src.data.features.find((f) => test(f, true))
+        if (feature) return { feature, level: 'lgu', province: src.province }
+      }
+      feature = provList.find((f) => test(f, true))
+      if (feature) {
+        return {
+          feature,
+          level: 'province',
+          province: feature.properties.name,
+        }
+      }
+      for (const src of lguSources) {
+        feature = src.data.features.find((f) => test(f, false))
+        if (feature) return { feature, level: 'lgu', province: src.province }
+      }
+      feature = provList.find((f) => test(f, false))
+      return feature
+        ? { feature, level: 'province', province: feature.properties.name }
+        : null
+    },
+    [activeLgus, cebuLgus, provinces],
+  )
 
   const lastRequestedLguRef = useRef(null)
 
@@ -2351,26 +2690,32 @@ function CebuMap() {
       const name = event?.detail
       if (!name) return
       lastRequestedLguRef.current = name
-      if (!municipalities) return
-      const target = String(name).trim().toLowerCase()
-      const feature = municipalities.features.find((f) => {
-        const fn = f.properties.name.toLowerCase()
-        return fn === target || target.includes(fn) || fn.includes(target)
-      })
-      if (!feature) return
+      if (!provinces || !cebuLgus) return
+      const match = matchBoundary(name)
+      if (!match) return
+      const { feature, level, province } = match
       const [lng, lat] = feature.properties.label
       setHighlightEntity(null)
-      setSelected({ kind: 'lgu', name: feature.properties.name, lat, lng, feature })
+      setSelected({
+        kind: 'lgu',
+        level,
+        province,
+        name: feature.properties.name,
+        lat,
+        lng,
+        feature,
+        zoom: level === 'lgu' ? 12 : 8,
+      })
       setIntelOpen(true)
     }
     window.addEventListener('projecttrack:select-lgu', onSelectLgu)
-    if (municipalities && lastRequestedLguRef.current) {
+    if (provinces && cebuLgus && lastRequestedLguRef.current) {
       onSelectLgu({ detail: lastRequestedLguRef.current })
       lastRequestedLguRef.current = null
     }
     return () =>
       window.removeEventListener('projecttrack:select-lgu', onSelectLgu)
-  }, [municipalities])
+  }, [provinces, cebuLgus, matchBoundary])
 
   useEffect(() => {
     function onClearMap() {
@@ -2475,7 +2820,7 @@ function CebuMap() {
     clearSpatialData()
   }
 
-  function selectLgu(feature) {
+  function selectLgu(feature, level = 'province') {
     const name = feature.properties.name
     if (selected?.kind === 'lgu' && selected.name === name) {
       setSelected(null)
@@ -2486,10 +2831,16 @@ function CebuMap() {
     setHighlightEntity(null)
     setSelected({
       kind: 'lgu',
+      level,
+      province:
+        level === 'province'
+          ? name
+          : (feature.properties.province ?? selected?.province ?? null),
       name,
       lat,
       lng,
       feature,
+      zoom: level === 'lgu' ? 12 : 8,
     })
     setIntelOpen(true)
     if (
@@ -2501,8 +2852,16 @@ function CebuMap() {
     }
   }
 
-  const showDetail =
-    zoom >= BARANGAY_MIN_ZOOM && selected?.kind === 'lgu'
+  // Barangay polygons exist only for a selected Cebu municipality/city (the
+  // dataset is keyed by Cebu LGU) — never for the whole province.
+  const showDetail = zoom >= BARANGAY_MIN_ZOOM && selected?.level === 'lgu'
+  // The focused province's city/municipality outlines appear the moment it is
+  // clicked, for every province in the country.
+  const lgusData = activeLgus?.data ?? null
+  const showLgus =
+    Boolean(lgusData) &&
+    (selected?.level === 'province' || selected?.level === 'lgu')
+  const showProvinceLabels = selected?.level !== 'lgu'
   const showProjectPins = selected?.kind === 'lgu'
 
   function openProjectDetail(entity) {
@@ -2553,25 +2912,28 @@ function CebuMap() {
   return (
     <section className="w-full">
       <MapContainer
-        bounds={BOUNDS}
-        boundsOptions={{ padding: [8, 8] }}
+        center={[12.9, 121.8]}
+        zoom={6}
         maxBounds={BOUNDS}
         maxBoundsViscosity={1}
-        minZoom={8}
+        minZoom={5}
         maxZoom={16}
         zoomControl={false}
         attributionControl={false}
         scrollWheelZoom
         className="leaflet-container h-[80vh] min-h-96 w-full lg:h-[91vh]"
       >
-        {municipalities && (
+        {provinces && (
           <GeoJSON
-            key={`munis-${selected?.name || spatialLocation || 'none'}`}
-            data={municipalities}
+            key={`provinces-${selected?.name || spatialLocation || 'none'}-${activeLgus?.province || 'none'}`}
+            data={provinces}
             style={(feature) => ({
+              // Keep the focused province emphasised even after drilling into
+              // one of its cities/municipalities (react-leaflet only re-applies
+              // style on remount, hence the key above).
               className:
-                (feature.properties.name === selected?.name &&
-                selected?.kind === 'lgu') ||
+                (activeLgus &&
+                  feature.properties.name === activeLgus.province) ||
                 (spatialLocation &&
                   feature.properties.name.toLowerCase().includes(spatialLocation.toLowerCase()))
                   ? 'land land--selected'
@@ -2581,19 +2943,32 @@ function CebuMap() {
             onEachFeature={(feature, layer) => {
               layer.on('click', (event) => {
                 DomEvent.stopPropagation(event.originalEvent)
-                selectLgu(feature)
+                selectLgu(feature, 'province')
               })
             }}
           />
         )}
-        {municipalities?.features.map((feature) => (
-          <Marker
-            key={feature.properties.name}
-            position={[feature.properties.label[1], feature.properties.label[0]]}
-            icon={labelIcon(feature.properties.name)}
-            interactive={false}
+        {showLgus && (
+          <ProvinceLguLayer
+            data={lgusData}
+            province={activeLgus.province}
+            provinces={provinces}
+            selected={selected}
+            spatialLocation={spatialLocation}
+            onSelect={selectLgu}
           />
-        ))}
+        )}
+        <MapPlaceLabels
+          provinces={provinces}
+          lgus={lgusData}
+          selected={selected}
+          zoom={zoom}
+          includeProvinces={showProvinceLabels && zoom >= LABEL_MIN_ZOOM}
+          includeLgus={zoom >= LGU_LABEL_MIN_ZOOM}
+          hiddenProvince={
+            zoom >= LGU_LABEL_MIN_ZOOM ? (activeLgus?.province ?? null) : null
+          }
+        />
         <MapAutoResize />
         <MapLabels />
         <div className="map-controls-overlay absolute right-3 top-3 z-[1000]">
@@ -2611,7 +2986,7 @@ function CebuMap() {
           }}
         />
         <ZoomWatcher onZoom={onZoom} />
-        <BarangayLayer target={selected} visible={showDetail} zoom={zoom} />
+        <BarangayLayer target={selected} visible={showDetail} />
         
         {isSpatialActive
           ? displaySpatialDots.map((dot) => {
@@ -2714,7 +3089,8 @@ function CebuMap() {
             locProjects={locProjects}
             locError={locError}
             mapPins={mapPins}
-            municipalities={municipalities}
+            provinces={provinces}
+            lgus={lgusData}
           />
         ) : (
           <button
@@ -2758,4 +3134,4 @@ function CebuMap() {
   )
 }
 
-export default CebuMap
+export default PhilippinesMap
